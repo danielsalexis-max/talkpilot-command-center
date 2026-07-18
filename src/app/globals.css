@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ambient Clarity design system — matches iOS Plus & macOS TalkPilot */
+:root {
+  --color-accent:        #4F46E5;   /* electricBlue — primary indigo */
+  --color-accent-light:  #6366f1;   /* lighter indigo hover */
+  --color-accent-subtle: #EEF2FF;   /* indigo-50 — accent tint */
+  --color-bg:            #F8F9FD;   /* canvas — PlusColor.midnightNavy */
+  --color-surface:       #FFFFFF;   /* ground/card — PlusColor.deepNavy */
+  --color-border:        #E5E7EB;   /* gray-200 */
+  --color-text:          #111827;   /* gray-900 — PlusColor.softWhite */
+  --color-text-secondary:#4B5563;   /* gray-600 — PlusColor.textSecondary */
+  --color-muted:         #9CA3AF;   /* gray-400 */
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Score rings ───────────────────────────────────────────────────── */
+.score-ring {
+  @apply inline-flex items-center justify-center rounded-full font-semibold text-sm;
+  width: 48px;
+  height: 48px;
+}
+
+.score-excellent  { @apply bg-emerald-100 text-emerald-700; }
+.score-good       { @apply bg-indigo-100  text-indigo-700;  }
+.score-average    { @apply bg-amber-100   text-amber-700;   }
+.score-poor       { @apply bg-red-100     text-red-700;     }
+
+/* ── Grade pills ───────────────────────────────────────────────────── */
+.grade-excellent  { @apply text-emerald-600; }
+.grade-adequate   { @apply text-indigo-600;  }
+.grade-off-script { @apply text-amber-600;   }
+.grade-missed     { @apply text-red-600;     }
+
+/* ── Verdict pills ─────────────────────────────────────────────────── */
+.verdict-verified     { @apply text-emerald-600; }
+.verdict-unverifiable { @apply text-gray-500;    }
+.verdict-contradicts  { @apply text-red-600;     }
