@@ -33,7 +33,7 @@ interface ExtractedObjection {
     objection: string; response_guidance: string; severity: string; variants: string[]
 }
 
-type AdminTab = "settings" | "knowledge" | "objections" | "playbooks" | "practice" | "members" | "dna"
+type AdminTab = "settings" | "knowledge" | "objections" | "playbooks" | "practice" | "members" | "billing" | "dna"
 type DNAStep = "collect" | "analyzing" | "review"
 type DNAReviewTab = "tone" | "phrases" | "objections" | "flow"
 
@@ -1899,6 +1899,191 @@ function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgInfo; on
     )
 }
 
+// ─── Billing Tab ──────────────────────────────────────────────────────────────
+
+interface BillingInfo {
+    org_name: string
+    plan: string
+    seats_purchased: number
+    seats_members: number
+    seats_pending: number
+    has_stripe: boolean
+    stripe: {
+        status: string
+        quantity: number
+        unit_amount: number | null
+        currency: string
+        interval: string
+        current_period_end: number
+        cancel_at_period_end: boolean
+    } | null
+}
+
+function BillingTab({ orgId }: { orgId: string }) {
+    const [info, setInfo]         = useState<BillingInfo | null>(null)
+    const [loading, setLoading]   = useState(true)
+    const [seatDraft, setSeatDraft] = useState<number>(0)
+    const [saving, setSaving]     = useState(false)
+    const [portalBusy, setPortalBusy] = useState(false)
+    const [msg, setMsg]           = useState<string | null>(null)
+    const [isErr, setIsErr]       = useState(false)
+
+    const call = useCallback(async (action: string, extra: Record<string, unknown> = {}) => {
+        const { data: { session } } = await supabase.auth.getSession()
+        const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/org-billing`, {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${session?.access_token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ action, org_id: orgId, ...extra }),
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(errStr(json.error) || res.statusText)
+        return json
+    }, [orgId])
+
+    const load = useCallback(async () => {
+        try {
+            const data = await call("info") as BillingInfo
+            setInfo(data)
+            setSeatDraft(data.seats_purchased)
+        } catch (e) {
+            setMsg(errStr(e)); setIsErr(true)
+        } finally {
+            setLoading(false)
+        }
+    }, [call])
+
+    useEffect(() => { load() }, [load])
+
+    async function updateSeats() {
+        if (!info || seatDraft === info.seats_purchased) return
+        setSaving(true); setMsg(null)
+        try {
+            await call("set_seats", { seats: seatDraft })
+            setMsg(seatDraft > info.seats_purchased
+                ? `Updated to ${seatDraft} seats — the difference is prorated onto your next invoice.`
+                : `Updated to ${seatDraft} seats — the credit is prorated onto your next invoice.`)
+            setIsErr(false)
+            await load()
+        } catch (e) {
+            setMsg(errStr(e)); setIsErr(true)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function openPortal() {
+        setPortalBusy(true); setMsg(null)
+        try {
+            const { url } = await call("portal") as { url: string }
+            window.open(url, "_blank", "noopener")
+        } catch (e) {
+            setMsg(errStr(e)); setIsErr(true)
+        } finally {
+            setPortalBusy(false)
+        }
+    }
+
+    if (loading) return <div className="text-gray-500 text-sm">Loading billing…</div>
+    if (!info)   return <div className="text-red-600 text-sm">{msg ?? "Couldn't load billing."}</div>
+
+    const used   = info.seats_members + info.seats_pending
+    const total  = Math.max(info.seats_purchased, used, 1)
+    const memberPct  = Math.min(100, (info.seats_members / total) * 100)
+    const pendingPct = Math.min(100 - memberPct, (info.seats_pending / total) * 100)
+    const perSeat = info.stripe?.unit_amount != null
+        ? `${(info.stripe.unit_amount / 100).toLocaleString(undefined, { style: "currency", currency: info.stripe.currency.toUpperCase() })}/seat/${info.stripe.interval}`
+        : null
+    const renewal = info.stripe?.current_period_end
+        ? new Date(info.stripe.current_period_end * 1000).toLocaleDateString(undefined, { dateStyle: "long" })
+        : null
+
+    return (
+        <div className="space-y-6">
+            {/* Seats */}
+            <div className={CARD}>
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h3 className="text-sm font-semibold text-gray-900">Seats</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                            {info.seats_members} member{info.seats_members !== 1 ? "s" : ""}
+                            {info.seats_pending > 0 && <> + {info.seats_pending} pending invite{info.seats_pending !== 1 ? "s" : ""}</>}
+                            {" of "}{info.seats_purchased} seat{info.seats_purchased !== 1 ? "s" : ""}
+                        </p>
+                    </div>
+                    <StatusBadge label={`${info.plan} plan`} color="indigo" />
+                </div>
+
+                <div className="mt-4 h-2.5 rounded-full bg-gray-100 overflow-hidden flex">
+                    <div className="bg-[var(--color-accent)] h-full" style={{ width: `${memberPct}%` }} />
+                    <div className="bg-amber-400 h-full" style={{ width: `${pendingPct}%` }} />
+                </div>
+                {used >= info.seats_purchased && (
+                    <p className="text-xs text-amber-700 mt-2">
+                        All seats are in use — new invites are blocked until you add seats.
+                    </p>
+                )}
+
+                {info.has_stripe ? (
+                    <div className="mt-5 pt-4 border-t border-[var(--color-border)] flex flex-wrap items-end gap-3">
+                        <div className="space-y-1">
+                            <label className="text-xs text-gray-500 font-medium">Seats</label>
+                            <div className="flex items-center gap-1">
+                                <button className={BTN_GHOST} onClick={() => setSeatDraft(s => Math.max(info.seats_members, s - 1))} disabled={saving || seatDraft <= info.seats_members}>−</button>
+                                <input
+                                    type="number"
+                                    value={seatDraft}
+                                    min={info.seats_members}
+                                    max={500}
+                                    onChange={e => setSeatDraft(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
+                                    className="w-20 text-center bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-2 py-2 text-sm text-gray-900 focus:outline-none focus:border-[var(--color-accent)]"
+                                />
+                                <button className={BTN_GHOST} onClick={() => setSeatDraft(s => Math.min(500, s + 1))} disabled={saving || seatDraft >= 500}>+</button>
+                            </div>
+                        </div>
+                        <button className={BTN_PRIMARY} onClick={updateSeats} disabled={saving || seatDraft === info.seats_purchased}>
+                            {saving ? "Updating…" : seatDraft > info.seats_purchased ? `Add ${seatDraft - info.seats_purchased} seat${seatDraft - info.seats_purchased !== 1 ? "s" : ""}` : seatDraft < info.seats_purchased ? `Reduce to ${seatDraft}` : "Update seats"}
+                        </button>
+                        {perSeat && <span className="text-xs text-gray-500 pb-2.5">{perSeat} · changes are prorated automatically</span>}
+                    </div>
+                ) : (
+                    <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
+                        <p className="text-sm text-gray-600">
+                            This workspace is billed directly by TalkPilot (invoice / ACH).
+                            To add or remove seats, email{" "}
+                            <a className="text-[var(--color-accent)] hover:underline" href="mailto:alexis@talkpilot.co?subject=Seat change request">alexis@talkpilot.co</a>
+                            {" "}— changes usually land the same day.
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {/* Subscription */}
+            {info.has_stripe && info.stripe && (
+                <div className={CARD}>
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h3 className="text-sm font-semibold text-gray-900">Subscription</h3>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                                Status: <span className="capitalize">{info.stripe.status}</span>
+                                {renewal && <> · renews {renewal}</>}
+                                {info.stripe.cancel_at_period_end && <> · <span className="text-red-600">cancels at period end</span></>}
+                            </p>
+                        </div>
+                        <button className={BTN_GHOST} onClick={openPortal} disabled={portalBusy}>
+                            {portalBusy ? "Opening…" : "Manage billing ↗"}
+                        </button>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-3">
+                        Payment method, invoices, and cancellation are handled in the secure Stripe portal.
+                    </p>
+                </div>
+            )}
+
+            {msg && <p className={`text-sm ${isErr ? "text-red-600" : "text-emerald-600"}`}>{msg}</p>}
+        </div>
+    )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -1927,6 +2112,7 @@ export default function AdminPage() {
         { key: "playbooks",  label: "Playbooks"  },
         { key: "practice",   label: "Practice"   },
         { key: "members",    label: "Members"    },
+        { key: "billing",    label: "Billing"    },
         { key: "dna",        label: "Team DNA"   },
     ]
 
@@ -1962,6 +2148,7 @@ export default function AdminPage() {
             {tab === "playbooks"  && <PlaybooksTab orgId={orgId} />}
             {tab === "practice"   && <PracticeTab orgId={orgId} />}
             {tab === "members"    && <MembersTab orgId={orgId} org={org} onNavigate={setTab} />}
+            {tab === "billing"    && <BillingTab orgId={orgId} />}
             {tab === "dna"        && <TeamDNATab orgId={orgId} org={org} onApplied={loadOrg} />}
         </div>
     )
