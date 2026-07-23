@@ -57,8 +57,8 @@ export default function ScorecardPage() {
         }
     }
 
-    if (loading) return <div className="text-slate-400 text-sm">Loading…</div>
-    if (!card)   return <div className="text-red-400 text-sm">Scorecard not found or access denied.</div>
+    if (loading) return <div className="text-gray-500 text-sm">Loading…</div>
+    if (!card)   return <div className="text-red-600 text-sm">Scorecard not found or access denied.</div>
 
     const tabs = [
         { key: "overview",   label: "Overview"   },
@@ -74,24 +74,24 @@ export default function ScorecardPage() {
     return (
         <div className="space-y-6">
             {/* Breadcrumb */}
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-                <Link href="/"    className="hover:text-white transition-colors">Overview</Link>
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Link href="/"    className="hover:text-gray-900 transition-colors">Overview</Link>
                 <span>/</span>
-                <Link href="/team" className="hover:text-white transition-colors">Team</Link>
+                <Link href="/team" className="hover:text-gray-900 transition-colors">Team</Link>
                 <span>/</span>
-                <span className="text-slate-300">Scorecard</span>
+                <span className="text-gray-700">Scorecard</span>
             </div>
 
             {/* Header */}
             <div className="flex items-start justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold text-white">
+                    <h1 className="text-2xl font-semibold text-gray-900">
                         {card.started_at
                             ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" })
                             : "Session Scorecard"
                         }
                     </h1>
-                    <p className="text-sm text-slate-500 mt-1">
+                    <p className="text-sm text-gray-500 mt-1">
                         {card.duration_minutes ? `${card.duration_minutes} min` : "—"}
                         {card.talk_ratio != null ? ` · Rep spoke ${Math.round(card.talk_ratio * 100)}%` : ""}
                         {" · "}{card.session_source === "plus_conversations" ? "iOS" : "macOS"}
@@ -110,13 +110,13 @@ export default function ScorecardPage() {
 
             {/* Guardrail alert */}
             {breaches.length > 0 && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 space-y-3">
-                    <h3 className="text-sm font-medium text-red-400">⚠ Guardrail breaches ({breaches.length})</h3>
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+                    <h3 className="text-sm font-medium text-red-700">⚠ Guardrail breaches ({breaches.length})</h3>
                     {breaches.map((b, i) => (
                         <div key={i} className="space-y-1">
-                            <p className="text-sm text-white">{b.rule}</p>
-                            <p className="text-xs text-slate-400 italic">"{b.transcript_quote}"</p>
-                            <span className={`text-xs px-2 py-0.5 rounded border ${b.severity === "critical" ? "border-red-500/50 text-red-400 bg-red-500/10" : "border-yellow-500/50 text-yellow-400 bg-yellow-500/10"}`}>
+                            <p className="text-sm text-gray-900">{b.rule}</p>
+                            <p className="text-xs text-gray-500 italic">&quot;{b.transcript_quote}&quot;</p>
+                            <span className={`text-xs px-2 py-0.5 rounded border ${b.severity === "critical" ? "border-red-200 text-red-700 bg-red-50" : "border-amber-200 text-amber-700 bg-amber-50"}`}>
                                 {b.severity}
                             </span>
                         </div>
@@ -132,8 +132,8 @@ export default function ScorecardPage() {
                         onClick={() => setActiveTab(t.key)}
                         className={`px-4 py-2 text-sm border-b-2 transition-colors -mb-px ${
                             activeTab === t.key
-                                ? "border-[var(--color-accent)] text-white"
-                                : "border-transparent text-slate-400 hover:text-white"
+                                ? "border-[var(--color-accent)] text-[var(--color-accent)] font-medium"
+                                : "border-transparent text-gray-500 hover:text-gray-900"
                         }`}
                     >
                         {t.label}
@@ -147,25 +147,25 @@ export default function ScorecardPage() {
                     {/* Stage adherence */}
                     {stageKeys.length > 0 && (
                         <div>
-                            <h2 className="text-sm font-medium text-white mb-3">Stage adherence</h2>
+                            <h2 className="text-sm font-medium text-gray-900 mb-3">Stage adherence</h2>
                             <div className="space-y-2">
                                 {stageKeys.map(key => {
                                     const stage = card.adherence[key]
                                     return (
                                         <div key={key} className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)] p-4">
                                             <div className="flex items-start justify-between">
-                                                <span className="text-sm font-medium text-white capitalize">{key.replace(/_/g, " ")}</span>
-                                                <span className={`text-xs px-2 py-0.5 rounded ${stage.completed ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
+                                                <span className="text-sm font-medium text-gray-900 capitalize">{key.replace(/_/g, " ")}</span>
+                                                <span className={`text-xs px-2 py-0.5 rounded border ${stage.completed ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
                                                     {stage.completed ? "Complete" : "Incomplete"}
                                                 </span>
                                             </div>
-                                            {stage.evidence && <p className="text-xs text-slate-400 mt-1 italic">"{stage.evidence}"</p>}
+                                            {stage.evidence && <p className="text-xs text-gray-500 mt-1 italic">&quot;{stage.evidence}&quot;</p>}
                                             {stage.missed?.length > 0 && (
                                                 <div className="mt-2">
-                                                    <p className="text-xs text-slate-500 mb-1">Missing:</p>
+                                                    <p className="text-xs text-gray-500 mb-1">Missing:</p>
                                                     <ul className="space-y-0.5">
                                                         {stage.missed.map((m, i) => (
-                                                            <li key={i} className="text-xs text-yellow-400 flex items-start gap-1">
+                                                            <li key={i} className="text-xs text-amber-700 flex items-start gap-1">
                                                                 <span>·</span><span>{m}</span>
                                                             </li>
                                                         ))}
@@ -182,14 +182,14 @@ export default function ScorecardPage() {
                     {/* Highlights */}
                     {highlights.length > 0 && (
                         <div>
-                            <h2 className="text-sm font-medium text-white mb-3">Moments</h2>
+                            <h2 className="text-sm font-medium text-gray-900 mb-3">Moments</h2>
                             <div className="space-y-1.5">
                                 {highlights.map((h, i) => (
                                     <div key={i} className="flex items-start gap-3 text-sm">
-                                        <span className={`text-lg leading-none mt-0.5 ${h.kind === "best" ? "text-emerald-400" : h.kind === "worst" ? "text-red-400" : "text-yellow-400"}`}>
+                                        <span className={`text-lg leading-none mt-0.5 ${h.kind === "best" ? "text-emerald-600" : h.kind === "worst" ? "text-red-600" : "text-amber-500"}`}>
                                             {h.kind === "best" ? "★" : h.kind === "worst" ? "✗" : "⚑"}
                                         </span>
-                                        <span className="text-slate-300">{h.label}</span>
+                                        <span className="text-gray-700">{h.label}</span>
                                     </div>
                                 ))}
                             </div>
@@ -199,10 +199,10 @@ export default function ScorecardPage() {
                     {/* Growth areas */}
                     {card.growth_areas?.length > 0 && (
                         <div>
-                            <h2 className="text-sm font-medium text-white mb-2">Growth areas</h2>
+                            <h2 className="text-sm font-medium text-gray-900 mb-2">Growth areas</h2>
                             <ul className="space-y-1">
                                 {card.growth_areas.map((g, i) => (
-                                    <li key={i} className="text-sm text-slate-400 flex items-start gap-2">
+                                    <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
                                         <span className="text-[var(--color-accent)] mt-0.5">→</span>{g}
                                     </li>
                                 ))}
@@ -214,15 +214,15 @@ export default function ScorecardPage() {
 
             {activeTab === "objections" && (
                 <div className="space-y-3">
-                    {objections.length === 0 && <p className="text-sm text-slate-500">No objections recorded (or visibility tier restricts access).</p>}
+                    {objections.length === 0 && <p className="text-sm text-gray-500">No objections recorded (or visibility tier restricts access).</p>}
                     {objections.map(o => (
                         <div key={o.id} className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)] p-4 space-y-2">
                             <div className="flex items-start justify-between">
-                                <p className="text-sm font-medium text-white">"{o.objection_text}"</p>
+                                <p className="text-sm font-medium text-gray-900">&quot;{o.objection_text}&quot;</p>
                                 <GradePill grade={o.grade} />
                             </div>
-                            {o.response_excerpt && <p className="text-xs text-slate-400 italic">Rep: "{o.response_excerpt}"</p>}
-                            {o.grade_rationale && <p className="text-xs text-slate-500">{o.grade_rationale}</p>}
+                            {o.response_excerpt && <p className="text-xs text-gray-500 italic">Rep: &quot;{o.response_excerpt}&quot;</p>}
+                            {o.grade_rationale && <p className="text-xs text-gray-500">{o.grade_rationale}</p>}
                         </div>
                     ))}
                 </div>
@@ -230,14 +230,14 @@ export default function ScorecardPage() {
 
             {activeTab === "claims" && (
                 <div className="space-y-2">
-                    {claims.length === 0 && <p className="text-sm text-slate-500">No claims recorded (or visibility tier restricts access).</p>}
+                    {claims.length === 0 && <p className="text-sm text-gray-500">No claims recorded (or visibility tier restricts access).</p>}
                     {claims.map(c => (
                         <div key={c.id} className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)] p-4 space-y-2">
                             <div className="flex items-start justify-between gap-3">
-                                <p className="text-sm text-white">{c.claim}</p>
+                                <p className="text-sm text-gray-900">{c.claim}</p>
                                 <VerdictPill verdict={c.verdict} />
                             </div>
-                            {c.kb_excerpt && <p className="text-xs text-slate-400 italic">KB: "{c.kb_excerpt}"</p>}
+                            {c.kb_excerpt && <p className="text-xs text-gray-500 italic">KB: &quot;{c.kb_excerpt}&quot;</p>}
                         </div>
                     ))}
                 </div>
@@ -245,13 +245,13 @@ export default function ScorecardPage() {
 
             {activeTab === "coach" && (
                 <div className="space-y-4">
-                    <p className="text-sm text-slate-500">Leave a coaching note on this session. The rep will see it in their app.</p>
+                    <p className="text-sm text-gray-500">Leave a coaching note on this session. The rep will see it in their app.</p>
                     <textarea
                         value={comment}
                         onChange={e => setComment(e.target.value)}
                         placeholder="Add coaching feedback…"
                         rows={4}
-                        className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-[var(--color-accent)] resize-none"
+                        className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-[var(--color-accent)] resize-none"
                     />
                     <button
                         onClick={postComment}
