@@ -82,9 +82,9 @@ export default function TeamPage() {
     const ColHeader = ({ field, label }: { field: keyof TeamStats; label: string }) => (
         <button
             onClick={() => { if (sortKey === field) setSortDesc(!sortDesc); else { setSortKey(field); setSortDesc(true) } }}
-            className={`text-xs font-medium text-right transition-colors ${sortKey === field ? "text-[var(--color-accent)]" : "text-gray-400 hover:text-gray-700"}`}
+            className={`text-xs font-medium text-center whitespace-nowrap justify-self-center transition-colors ${sortKey === field ? "text-[var(--color-accent)]" : "text-gray-400 hover:text-gray-700"}`}
         >
-            {label} {sortKey === field ? (sortDesc ? "↓" : "↑") : ""}
+            {label}{sortKey === field ? (sortDesc ? " ↓" : " ↑") : ""}
         </button>
     )
 
@@ -98,7 +98,7 @@ export default function TeamPage() {
             </div>
 
             <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] overflow-hidden shadow-sm">
-                <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto] items-center gap-4 px-4 py-2.5 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
+                <div className="grid grid-cols-[minmax(0,1fr)_repeat(5,76px)_16px] items-center gap-2 px-4 py-2.5 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
                     <span className="text-xs font-medium text-gray-500">Rep</span>
                     <ColHeader field="session_count" label="Sessions"   />
                     <ColHeader field="avg_overall"   label="Overall"    />
@@ -114,7 +114,7 @@ export default function TeamPage() {
                     <Link
                         key={m.user_id}
                         href={`/team/${m.user_id}`}
-                        className="grid grid-cols-[1fr_auto_auto_auto_auto_auto_auto] items-center gap-4 px-4 py-3 border-b border-[var(--color-border)] hover:bg-gray-50 transition-colors last:border-0"
+                        className="grid grid-cols-[minmax(0,1fr)_repeat(5,76px)_16px] items-center gap-2 px-4 py-3 border-b border-[var(--color-border)] hover:bg-gray-50 transition-colors last:border-0"
                     >
                         <div className="flex flex-col min-w-0">
                             <span className="text-sm text-gray-900 font-medium truncate">
@@ -122,12 +122,12 @@ export default function TeamPage() {
                             </span>
                             {m.team_name && <span className="text-xs text-gray-400">{m.team_name}</span>}
                         </div>
-                        <span className="text-sm text-gray-500 text-right tabular-nums">{m.session_count}</span>
-                        <ScoreRing score={m.avg_overall}   size="sm" />
-                        <ScoreRing score={m.avg_adherence} size="sm" />
-                        <ScoreRing score={m.avg_objection} size="sm" />
-                        <ScoreRing score={m.avg_accuracy}  size="sm" />
-                        <svg className="w-4 h-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <span className="text-sm text-gray-500 text-center tabular-nums justify-self-center">{m.session_count}</span>
+                        <div className="justify-self-center"><ScoreRing score={m.avg_overall}   size="sm" /></div>
+                        <div className="justify-self-center"><ScoreRing score={m.avg_adherence} size="sm" /></div>
+                        <div className="justify-self-center"><ScoreRing score={m.avg_objection} size="sm" /></div>
+                        <div className="justify-self-center"><ScoreRing score={m.avg_accuracy}  size="sm" /></div>
+                        <svg className="w-4 h-4 text-gray-300 justify-self-center" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                     </Link>

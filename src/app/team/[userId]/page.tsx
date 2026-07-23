@@ -53,15 +53,16 @@ export default function RepPage() {
                         href={`/scorecard/${card.id}`}
                         className="flex items-center justify-between bg-[var(--color-surface)] hover:bg-gray-50 transition-colors rounded-lg border border-[var(--color-border)] px-4 py-3"
                     >
-                        <div className="flex flex-col">
-                            <span className="text-sm text-gray-900">
-                                {card.started_at
-                                    ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
-                                    : "Unknown time"
-                                }
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-sm font-medium text-gray-900 truncate">
+                                {card.session_title
+                                    ?? (card.started_at
+                                        ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+                                        : "Session")}
                             </span>
                             <span className="text-xs text-gray-500">
-                                {card.duration_minutes ? `${card.duration_minutes} min` : "—"}
+                                {card.started_at ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Unknown time"}
+                                {card.duration_minutes ? ` · ${card.duration_minutes} min` : ""}
                                 {card.talk_ratio != null ? ` · ${Math.round(card.talk_ratio * 100)}% talk ratio` : ""}
                                 {card.guardrail_breaches?.length ? ` · ⚠ ${card.guardrail_breaches.length} guardrail breach${card.guardrail_breaches.length > 1 ? "es" : ""}` : ""}
                             </span>

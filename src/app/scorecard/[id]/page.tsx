@@ -17,7 +17,9 @@ export default function ScorecardPage() {
     const [comment, setComment]       = useState("")
     const [submitting, setSubmitting] = useState(false)
     const [loading, setLoading]       = useState(true)
-    const [activeTab, setActiveTab]   = useState<"overview" | "objections" | "claims" | "coach">("overview")
+    const [activeTab, setActiveTab]   = useState<"overview" | "objections" | "claims" | "transcript" | "coach">("overview")
+    const [transcript, setTranscript] = useState<string | null>(null)
+    const [transcriptState, setTranscriptState] = useState<"idle" | "loading" | "loaded">("idle")
 
     useEffect(() => { if (id) load() }, [id])
 
@@ -39,6 +41,19 @@ export default function ScorecardPage() {
         } finally {
             setLoading(false)
         }
+    }
+
+    async function loadTranscript() {
+        if (transcriptState !== "idle") return
+        setTranscriptState("loading")
+        const { data } = await supabase.rpc("get_scorecard_transcript", { p_scorecard_id: id })
+        setTranscript(typeof data === "string" ? data : null)
+        setTranscriptState("loaded")
+    }
+
+    function openTab(key: typeof activeTab) {
+        setActiveTab(key)
+        if (key === "transcript") loadTranscript()
     }
 
     async function postComment() {
@@ -64,6 +79,7 @@ export default function ScorecardPage() {
         { key: "overview",   label: "Overview"   },
         { key: "objections", label: `Objections (${objections.length})` },
         { key: "claims",     label: `Claims (${claims.length})`         },
+        { key: "transcript", label: "Transcript" },
         { key: "coach",      label: "Coach"      },
     ] as const
 
@@ -86,12 +102,13 @@ export default function ScorecardPage() {
             <div className="flex items-start justify-between">
                 <div>
                     <h1 className="text-2xl font-semibold text-gray-900">
-                        {card.started_at
-                            ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" })
-                            : "Session Scorecard"
-                        }
+                        {card.session_title
+                            ?? (card.started_at
+                                ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" })
+                                : "Session Scorecard")}
                     </h1>
                     <p className="text-sm text-gray-500 mt-1">
+                        {card.started_at ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "long", timeStyle: "short" }) + " · " : ""}
                         {card.duration_minutes ? `${card.duration_minutes} min` : "—"}
                         {card.talk_ratio != null ? ` · Rep spoke ${Math.round(card.talk_ratio * 100)}%` : ""}
                         {" · "}{card.session_source === "plus_conversations" ? "iOS" : "macOS"}
@@ -129,7 +146,7 @@ export default function ScorecardPage() {
                 {tabs.map(t => (
                     <button
                         key={t.key}
-                        onClick={() => setActiveTab(t.key)}
+                        onClick={() => openTab(t.key)}
                         className={`px-4 py-2 text-sm border-b-2 transition-colors -mb-px ${
                             activeTab === t.key
                                 ? "border-[var(--color-accent)] text-[var(--color-accent)] font-medium"
@@ -243,6 +260,10 @@ export default function ScorecardPage() {
                 </div>
             )}
 
+            {activeTab === "transcript" && (
+                <TranscriptView state={transcriptState} transcript={transcript} />
+            )}
+
             {activeTab === "coach" && (
                 <div className="space-y-4">
                     <p className="text-sm text-gray-500">Leave a coaching note on this session. The rep will see it in their app.</p>
@@ -262,6 +283,55 @@ export default function ScorecardPage() {
                     </button>
                 </div>
             )}
+        </div>
+    )
+}
+
+function TranscriptView({ state, transcript }: { state: "idle" | "loading" | "loaded"; transcript: string | null }) {
+    if (state === "loading") return <p className="text-sm text-gray-500">Loading transcript…</p>
+    if (!transcript) {
+        return (
+            <p className="text-sm text-gray-500">
+                Transcript isn&apos;t available for this session, or your org&apos;s visibility tier
+                (Settings → Transcript visibility) restricts full transcripts to managers.
+            </p>
+        )
+    }
+
+    // iOS sessions store a JSON array of {speaker,text}; macOS stores plain text.
+    let turns: Array<{ speaker?: string; text?: string }> | null = null
+    try {
+        const parsed = JSON.parse(transcript)
+        if (Array.isArray(parsed)) turns = parsed
+    } catch { /* plain text */ }
+
+    if (!turns) {
+        return (
+            <pre className="text-sm text-gray-800 whitespace-pre-wrap bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 font-sans">
+                {transcript}
+            </pre>
+        )
+    }
+
+    return (
+        <div className="space-y-3">
+            {turns.map((t, i) => {
+                const isSelf = t.speaker === "self"
+                return (
+                    <div key={i} className={`flex ${isSelf ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[75%] rounded-2xl px-4 py-2 ${
+                            isSelf
+                                ? "bg-[var(--color-accent)] text-white"
+                                : "bg-[var(--color-surface)] border border-[var(--color-border)] text-gray-900"
+                        }`}>
+                            <div className={`text-[11px] mb-0.5 ${isSelf ? "text-white/70" : "text-gray-400"}`}>
+                                {isSelf ? "Rep" : "Other"}
+                            </div>
+                            <div className="text-sm">{t.text}</div>
+                        </div>
+                    </div>
+                )
+            })}
         </div>
     )
 }

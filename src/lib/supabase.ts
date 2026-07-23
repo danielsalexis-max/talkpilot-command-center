@@ -29,6 +29,7 @@ export interface Scorecard {
     model_version: string | null
     status: "pending" | "scored" | "failed"
     created_at: string
+    session_title: string | null
     // joined
     user_email?: string
     user_name?: string
