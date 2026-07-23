@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { supabase } from "@/lib/supabase"
+import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,11 @@ interface PbStage  { name: string; description: string; required_items: string[]
 interface PbRow    { id: string; name: string; methodology: string | null; status: string; version: number; stages: PbStage[]; created_at: string }
 interface MemberRow { user_id: string; email: string | null; role: string; status: string; joined_at: string }
 interface InviteRow { id: string; email: string; role: string; accepted_at: string | null; expires_at: string }
+interface TeamRow  { id: string; name: string }
+interface PracticeAssignmentRow {
+    id: string; title: string; note: string | null; due_at: string | null
+    assignee_user_id: string | null; assignee_team_id: string | null; created_at: string
+}
 
 interface StageForm {
     name: string; description: string; requiredItems: string
@@ -26,7 +32,7 @@ interface ExtractedObjection {
     objection: string; response_guidance: string; severity: string; variants: string[]
 }
 
-type AdminTab = "settings" | "knowledge" | "objections" | "playbooks" | "members" | "dna"
+type AdminTab = "settings" | "knowledge" | "objections" | "playbooks" | "practice" | "members" | "dna"
 type DNAStep = "collect" | "analyzing" | "review"
 type DNAReviewTab = "tone" | "phrases" | "objections" | "flow"
 
@@ -973,9 +979,192 @@ function PlaybooksTab({ orgId }: { orgId: string }) {
 
 // ─── Members Tab ──────────────────────────────────────────────────────────────
 
-function MembersTab({ orgId }: { orgId: string }) {
+interface Readiness { activePlaybooks: number; objections: number; knowledge: number }
+
+function PracticeTab({ orgId }: { orgId: string }) {
+    const [assignments, setAssignments] = useState<PracticeAssignmentRow[]>([])
+    const [members, setMembers]         = useState<MemberRow[]>([])
+    const [teams, setTeams]              = useState<TeamRow[]>([])
+    const [loading, setLoading]         = useState(true)
+
+    const [scenarioId, setScenarioId]   = useState(STOCK_PRACTICE_SCENARIOS[0].id)
+    const [assigneeKind, setAssigneeKind] = useState<"member" | "team">("member")
+    const [assigneeId, setAssigneeId]   = useState("")
+    const [note, setNote]               = useState("")
+    const [dueDate, setDueDate]         = useState("")
+    const [assigning, setAssigning]     = useState(false)
+    const [msg, setMsg]                 = useState<string | null>(null)
+    const [isErr, setIsErr]             = useState(false)
+
+    const load = useCallback(async () => {
+        const [assignRes, memberRes, teamRes] = await Promise.all([
+            supabase.from("org_practice_assignments")
+                .select("id, title, note, due_at, assignee_user_id, assignee_team_id, created_at")
+                .eq("org_id", orgId).eq("active", true)
+                .order("created_at", { ascending: false }).limit(30),
+            supabase.rpc("get_org_members_with_email", { p_org: orgId }).then(r => {
+                if (r.error) {
+                    return supabase.from("org_members")
+                        .select("user_id, role, status, joined_at")
+                        .eq("org_id", orgId).eq("status", "active")
+                        .then(r2 => ({ data: (r2.data ?? []).map(m => ({ ...m, email: null })) }))
+                }
+                return r
+            }),
+            supabase.from("org_teams").select("id, name").eq("org_id", orgId).order("name"),
+        ])
+        setAssignments((assignRes.data ?? []) as PracticeAssignmentRow[])
+        setMembers((memberRes.data ?? []) as MemberRow[])
+        setTeams((teamRes.data ?? []) as TeamRow[])
+        setLoading(false)
+    }, [orgId])
+
+    useEffect(() => { load() }, [load])
+
+    async function assign() {
+        if (!assigneeId) { setMsg("Pick a rep or a team."); setIsErr(true); return }
+        const scenario = STOCK_PRACTICE_SCENARIOS.find(s => s.id === scenarioId)
+        if (!scenario) return
+
+        setAssigning(true); setMsg(null)
+        const { data: { user } } = await supabase.auth.getUser()
+        const { error } = await supabase.from("org_practice_assignments").insert({
+            org_id: orgId,
+            scenario_source: "stock",
+            scenario_id: scenario.id,
+            title: scenario.title,
+            note: note.trim() || null,
+            due_at: dueDate ? new Date(dueDate).toISOString() : null,
+            assignee_user_id: assigneeKind === "member" ? assigneeId : null,
+            assignee_team_id: assigneeKind === "team" ? assigneeId : null,
+            assigned_by: user?.id,
+        })
+        setAssigning(false)
+        if (error) { setMsg(`Error: ${error.message}`); setIsErr(true) }
+        else {
+            setMsg(`Assigned "${scenario.title}".`); setIsErr(false)
+            setNote(""); setDueDate(""); setAssigneeId("")
+            await load()
+        }
+    }
+
+    async function unassign(id: string) {
+        await supabase.from("org_practice_assignments").update({ active: false }).eq("id", id)
+        setAssignments(prev => prev.filter(a => a.id !== id))
+    }
+
+    function assigneeLabel(a: PracticeAssignmentRow): string {
+        if (a.assignee_user_id) {
+            const m = members.find(m => m.user_id === a.assignee_user_id)
+            return m?.email ?? "A rep"
+        }
+        if (a.assignee_team_id) {
+            const t = teams.find(t => t.id === a.assignee_team_id)
+            return t ? `Team: ${t.name}` : "A team"
+        }
+        return "—"
+    }
+
+    if (loading) return <div className="text-gray-500 text-sm">Loading…</div>
+
+    return (
+        <div className="space-y-6">
+            <div className={CARD}>
+                <h3 className="text-sm font-semibold text-gray-900">Assign a practice</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                    The rep runs it against an AI character in the TalkPilot app and gets a graded scorecard — the grade rolls up here automatically.
+                </p>
+
+                <div className="mt-5 space-y-4">
+                    <div className="space-y-1">
+                        <label className="text-xs text-gray-500 font-medium">Scenario</label>
+                        <select className={INPUT} value={scenarioId} onChange={e => setScenarioId(e.target.value)}>
+                            {STOCK_PRACTICE_SCENARIOS.map(s => (
+                                <option key={s.id} value={s.id}>{s.title} · {s.category} · {s.difficulty}</option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-gray-400 mt-1">
+                            {STOCK_PRACTICE_SCENARIOS.find(s => s.id === scenarioId)?.objective}
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                            <label className="text-xs text-gray-500 font-medium">Assign to</label>
+                            <select className={INPUT} value={assigneeKind}
+                                onChange={e => { setAssigneeKind(e.target.value as "member" | "team"); setAssigneeId("") }}>
+                                <option value="member">A person</option>
+                                <option value="team">A team</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs text-gray-500 font-medium">
+                                {assigneeKind === "member" ? "Rep" : "Team"}
+                            </label>
+                            <select className={INPUT} value={assigneeId} onChange={e => setAssigneeId(e.target.value)}>
+                                <option value="">Select…</option>
+                                {assigneeKind === "member"
+                                    ? members.map(m => <option key={m.user_id} value={m.user_id}>{m.email ?? m.user_id}</option>)
+                                    : teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)
+                                }
+                            </select>
+                            {assigneeKind === "team" && teams.length === 0 && (
+                                <p className="text-xs text-gray-400 mt-1">No teams yet — assign to a person instead.</p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                            <label className="text-xs text-gray-500 font-medium">Coach&apos;s note (optional)</label>
+                            <input className={INPUT} placeholder="Focus on holding price, not discounting" value={note} onChange={e => setNote(e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs text-gray-500 font-medium">Due date (optional)</label>
+                            <input type="date" className={INPUT} value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                        </div>
+                    </div>
+
+                    {msg && <p className={`text-xs ${isErr ? "text-red-600" : "text-emerald-600"}`}>{msg}</p>}
+
+                    <div className="flex justify-end">
+                        <button className={BTN_PRIMARY} onClick={assign} disabled={assigning || !assigneeId}>
+                            {assigning ? "Assigning…" : "Assign"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div className={CARD}>
+                <h3 className="text-sm font-semibold text-gray-900">Recent assignments</h3>
+                {assignments.length === 0 ? (
+                    <p className="text-xs text-gray-500 mt-2">No practices assigned yet.</p>
+                ) : (
+                    <div className="mt-3 space-y-2">
+                        {assignments.map(a => (
+                            <div key={a.id} className={ROW}>
+                                <div className="min-w-0">
+                                    <p className="text-sm text-gray-900 truncate">{a.title}</p>
+                                    <p className="text-xs text-gray-500">
+                                        {assigneeLabel(a)}
+                                        {a.due_at && ` · Due ${new Date(a.due_at).toLocaleDateString()}`}
+                                        {a.note && ` · "${a.note}"`}
+                                    </p>
+                                </div>
+                                <button className={BTN_GHOST + " flex-shrink-0"} onClick={() => unassign(a.id)}>Remove</button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
+function MembersTab({ orgId, org, onNavigate }: { orgId: string; org: OrgInfo; onNavigate: (t: AdminTab) => void }) {
     const [members, setMembers]         = useState<MemberRow[]>([])
     const [invites, setInvites]         = useState<InviteRow[]>([])
+    const [readiness, setReadiness]     = useState<Readiness | null>(null)
     const [loading, setLoading]         = useState(true)
     const [inviteEmail, setInviteEmail] = useState("")
     const [inviteRole, setInviteRole]   = useState("member")
@@ -984,7 +1173,7 @@ function MembersTab({ orgId }: { orgId: string }) {
     const [isErr, setIsErr]             = useState(false)
 
     const load = useCallback(async () => {
-        const [memberRes, inviteRes] = await Promise.all([
+        const [memberRes, inviteRes, pbRes, objRes, kbRes] = await Promise.all([
             supabase.rpc("get_org_members_with_email", { p_org: orgId }).then(r => {
                 if (r.error) {
                     return supabase.from("org_members")
@@ -996,17 +1185,39 @@ function MembersTab({ orgId }: { orgId: string }) {
             }),
             supabase.from("org_invites")
                 .select("id, email, role, accepted_at, expires_at")
-                .eq("org_id", orgId).order("created_at", { ascending: false }).limit(30)
+                .eq("org_id", orgId).order("created_at", { ascending: false }).limit(30),
+            supabase.from("org_playbooks").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "active"),
+            supabase.from("org_objections").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("active", true),
+            supabase.from("org_knowledge").select("id", { count: "exact", head: true }).eq("org_id", orgId),
         ])
         setMembers((memberRes.data ?? []) as MemberRow[])
         setInvites((inviteRes.data ?? []) as InviteRow[])
+        setReadiness({
+            activePlaybooks: pbRes.count ?? 0,
+            objections:      objRes.count ?? 0,
+            knowledge:       kbRes.count ?? 0,
+        })
         setLoading(false)
     }, [orgId])
+
+    // ── Onboarding gate: an org must have its coaching foundation in place before
+    //    reps can be invited, otherwise they'd sign in to an unconfigured product.
+    const voiceSet = !!org.voice_profile?.tone?.trim()
+    const checks: { key: string; label: string; done: boolean; required: boolean; tab: AdminTab; hint: string }[] = [
+        { key: "playbook",   label: "Activate a playbook",             done: (readiness?.activePlaybooks ?? 0) >= 1, required: true,  tab: "playbooks",  hint: "Reps are guided in real-time by the active playbook and scored against it." },
+        { key: "objections", label: "Add at least 3 objections",       done: (readiness?.objections ?? 0) >= 3,      required: true,  tab: "objections", hint: "So the AI can coach reps through pushback the moment it happens." },
+        { key: "voice",      label: "Configure company voice & tone",   done: voiceSet,                               required: false, tab: "settings",   hint: "Keeps every rep on-brand in live suggestions." },
+        { key: "knowledge",  label: "Upload a knowledge document",      done: (readiness?.knowledge ?? 0) >= 1,       required: false, tab: "knowledge",  hint: "Grounds AI answers in your real product, pricing and case studies." },
+    ]
+    const requiredMet = checks.filter(c => c.required).every(c => c.done)
 
     useEffect(() => { load() }, [load])
 
     async function sendInvite() {
         if (!inviteEmail.trim()) return
+        if (!requiredMet) {
+            setMsg("Complete the required setup steps below before inviting reps."); setIsErr(true); return
+        }
         setInviting(true); setMsg(null)
         const { data: { session } } = await supabase.auth.getSession()
         const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/invite-member`, {
@@ -1036,28 +1247,76 @@ function MembersTab({ orgId }: { orgId: string }) {
     const roleColor = (r: string): "indigo"|"yellow"|"slate" =>
         ({ owner: "indigo", admin: "indigo", manager: "yellow" }[r] ?? "slate") as "indigo"|"yellow"|"slate"
 
+    const requiredChecks = checks.filter(c => c.required)
+    const requiredDone   = requiredChecks.filter(c => c.done).length
+
     return (
         <div className="space-y-6">
+            {/* Onboarding readiness — gates inviting until the org is set up */}
+            <div className={CARD + " space-y-4"}>
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h3 className="text-sm font-semibold text-gray-900">Before you invite your team</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                            Set up your coaching foundation first — reps get a broken experience if they sign in to an empty org.
+                        </p>
+                    </div>
+                    {readiness && (
+                        requiredMet
+                            ? <StatusBadge label="Ready to invite" color="green" />
+                            : <StatusBadge label={`${requiredDone}/${requiredChecks.length} required`} color="yellow" />
+                    )}
+                </div>
+                <div className="space-y-2">
+                    {checks.map(c => (
+                        <div key={c.key} className="flex items-start gap-3">
+                            <span className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                c.done ? "bg-emerald-500 text-white" : c.required ? "bg-amber-100 text-amber-600 border border-amber-300" : "bg-gray-100 text-gray-400 border border-gray-300"
+                            }`}>
+                                {c.done ? "✓" : ""}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                    <span className={`text-sm ${c.done ? "text-gray-400 line-through" : "text-gray-900 font-medium"}`}>{c.label}</span>
+                                    {c.required
+                                        ? <span className="text-[10px] uppercase tracking-wide text-amber-600 font-semibold">Required</span>
+                                        : <span className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Recommended</span>}
+                                </div>
+                                {!c.done && <p className="text-xs text-gray-500 mt-0.5">{c.hint}</p>}
+                            </div>
+                            {!c.done && (
+                                <button className={BTN_GHOST + " flex-shrink-0"} onClick={() => onNavigate(c.tab)}>Set up →</button>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
             <div className={CARD + " space-y-3"}>
-                <h3 className="text-sm font-semibold text-gray-900">Invite member</h3>
+                <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-gray-900">Invite member</h3>
+                    {!requiredMet && <span className="text-xs text-amber-600">🔒 Locked until required setup is complete</span>}
+                </div>
                 <div className="flex gap-2">
                     <input
                         type="email"
                         placeholder="colleague@company.com"
                         value={inviteEmail}
                         onChange={e => setInviteEmail(e.target.value)}
-                        className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                        disabled={!requiredMet}
+                        className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-[var(--color-accent)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <select
                         value={inviteRole}
                         onChange={e => setInviteRole(e.target.value)}
-                        className="w-32 flex-shrink-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                        disabled={!requiredMet}
+                        className="w-32 flex-shrink-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-[var(--color-accent)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <option value="member">Member</option>
                         <option value="manager">Manager</option>
                         <option value="admin">Admin</option>
                     </select>
-                    <button className={BTN_PRIMARY + " flex-shrink-0"} onClick={sendInvite} disabled={inviting || !inviteEmail.trim()}>
+                    <button className={BTN_PRIMARY + " flex-shrink-0"} onClick={sendInvite} disabled={inviting || !inviteEmail.trim() || !requiredMet}>
                         {inviting ? "Sending…" : "Send invite"}
                     </button>
                 </div>
@@ -1641,6 +1900,7 @@ export default function AdminPage() {
         { key: "knowledge",  label: "Knowledge"  },
         { key: "objections", label: "Objections" },
         { key: "playbooks",  label: "Playbooks"  },
+        { key: "practice",   label: "Practice"   },
         { key: "members",    label: "Members"    },
         { key: "dna",        label: "Team DNA"   },
     ]
@@ -1675,7 +1935,8 @@ export default function AdminPage() {
             {tab === "knowledge"  && <KnowledgeTab orgId={orgId} />}
             {tab === "objections" && <ObjectionsTab orgId={orgId} />}
             {tab === "playbooks"  && <PlaybooksTab orgId={orgId} />}
-            {tab === "members"    && <MembersTab orgId={orgId} />}
+            {tab === "practice"   && <PracticeTab orgId={orgId} />}
+            {tab === "members"    && <MembersTab orgId={orgId} org={org} onNavigate={setTab} />}
             {tab === "dna"        && <TeamDNATab orgId={orgId} org={org} onApplied={loadOrg} />}
         </div>
     )
