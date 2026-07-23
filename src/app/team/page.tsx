@@ -24,6 +24,14 @@ export default function TeamPage() {
                 .eq("org_id", ctx.org_id)
                 .eq("status", "active")
 
+            // Names/emails can't be read from user_profiles directly (RLS locks
+            // them to the owner) — resolve them via the SECURITY DEFINER RPC.
+            const { data: dir } = await supabase.rpc("get_org_members_with_email", { p_org: ctx.org_id })
+            const identityById = new Map<string, { email?: string; full_name?: string }>()
+            for (const d of (dir ?? []) as Array<{ user_id: string; email?: string; full_name?: string }>) {
+                identityById.set(d.user_id, { email: d.email ?? undefined, full_name: d.full_name ?? undefined })
+            }
+
             const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
             const { data: cards } = await supabase
                 .from("session_scorecards")
@@ -45,9 +53,11 @@ export default function TeamPage() {
 
             const stats: TeamStats[] = (memberRows ?? []).map(m => {
                 const userCards = byUser[m.user_id] ?? []
+                const identity = identityById.get(m.user_id)
                 return {
                     user_id: m.user_id,
-                    user_email: m.user_id,
+                    user_name: identity?.full_name,
+                    user_email: identity?.email,
                     team_name: (m.org_teams as { name?: string } | null)?.name,
                     session_count: userCards.length,
                     avg_overall:   avg(userCards, "overall_score"),
