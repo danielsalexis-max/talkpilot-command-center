@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { supabase } from "@/lib/supabase"
+import { SearchBox } from "@/components/SearchBox"
 import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -328,6 +329,7 @@ function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }) {
 
 function KnowledgeTab({ orgId }: { orgId: string }) {
     const [docs, setDocs]           = useState<KbRow[]>([])
+    const [query, setQuery]         = useState("")
     const [loading, setLoading]     = useState(true)
     const [title, setTitle]         = useState("")
     const [kind, setKind]           = useState("product")
@@ -443,10 +445,16 @@ function KnowledgeTab({ orgId }: { orgId: string }) {
             </div>
 
             <div>
-                <SectionHeader title={`Knowledge base (${docs.length})`} />
+                <div className="flex items-center justify-between gap-4 mb-3">
+                    <SectionHeader title={`Knowledge base (${docs.length})`} />
+                    {docs.length > 4 && <SearchBox value={query} onChange={setQuery} placeholder="Search documents…" className="w-56" />}
+                </div>
                 {loading && <p className="text-sm text-gray-500">Loading…</p>}
                 <div className="space-y-2">
-                    {docs.map(d => (
+                    {docs.filter(d => {
+                        const s = query.trim().toLowerCase()
+                        return !s || d.title.toLowerCase().includes(s) || (d.summary ?? "").toLowerCase().includes(s) || d.kind.toLowerCase().includes(s)
+                    }).map(d => (
                         <div key={d.id} className={ROW}>
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm text-gray-900 font-medium">{d.title}</p>
@@ -470,6 +478,7 @@ function KnowledgeTab({ orgId }: { orgId: string }) {
 
 function ObjectionsTab({ orgId }: { orgId: string }) {
     const [objs, setObjs]                     = useState<ObjRow[]>([])
+    const [query, setQuery]                   = useState("")
     const [loading, setLoading]               = useState(true)
     const [objText, setObjText]               = useState("")
     const [guidance, setGuidance]             = useState("")
@@ -695,10 +704,16 @@ function ObjectionsTab({ orgId }: { orgId: string }) {
             </div>
 
             <div>
-                <SectionHeader title={`Objection library (${objs.length})`} />
+                <div className="flex items-center justify-between gap-4 mb-3">
+                    <SectionHeader title={`Objection library (${objs.length})`} />
+                    {objs.length > 4 && <SearchBox value={query} onChange={setQuery} placeholder="Search objections…" className="w-56" />}
+                </div>
                 {loading && <p className="text-sm text-gray-500">Loading…</p>}
                 <div className="space-y-2">
-                    {objs.map(o => (
+                    {objs.filter(o => {
+                        const s = query.trim().toLowerCase()
+                        return !s || o.objection.toLowerCase().includes(s) || (o.response_guidance ?? "").toLowerCase().includes(s) || (o.variants ?? []).some(v => v.toLowerCase().includes(s))
+                    }).map(o => (
                         <div key={o.id} className={ROW + " items-start"}>
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
@@ -1163,6 +1178,7 @@ function PracticeTab({ orgId }: { orgId: string }) {
 
 function MembersTab({ orgId, org, onNavigate }: { orgId: string; org: OrgInfo; onNavigate: (t: AdminTab) => void }) {
     const [members, setMembers]         = useState<MemberRow[]>([])
+    const [query, setQuery]             = useState("")
     const [invites, setInvites]         = useState<InviteRow[]>([])
     const [readiness, setReadiness]     = useState<Readiness | null>(null)
     const [loading, setLoading]         = useState(true)
@@ -1324,14 +1340,21 @@ function MembersTab({ orgId, org, onNavigate }: { orgId: string; org: OrgInfo; o
             </div>
 
             <div>
-                <SectionHeader title={`Active members (${members.length})`} />
+                <div className="flex items-center justify-between gap-4 mb-3">
+                    <SectionHeader title={`Active members (${members.length})`} />
+                    {members.length > 5 && <SearchBox value={query} onChange={setQuery} placeholder="Search members…" className="w-56" />}
+                </div>
                 {loading && <p className="text-sm text-gray-500">Loading…</p>}
+                {(() => {
+                    const s = query.trim().toLowerCase()
+                    const shown = s ? members.filter(m => (m.email ?? "").toLowerCase().includes(s) || m.role.toLowerCase().includes(s) || m.user_id.toLowerCase().includes(s)) : members
+                    return (
                 <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] overflow-hidden shadow-sm">
-                    {members.length === 0 && !loading && (
-                        <div className="px-4 py-6 text-sm text-gray-500">No members yet.</div>
+                    {shown.length === 0 && !loading && (
+                        <div className="px-4 py-6 text-sm text-gray-500">{s ? `No members match “${query}”.` : "No members yet."}</div>
                     )}
-                    {members.map((m, i) => (
-                        <div key={m.user_id} className={`flex items-center justify-between px-4 py-3 gap-4 ${i < members.length - 1 ? "border-b border-[var(--color-border)]" : ""}`}>
+                    {shown.map((m, i) => (
+                        <div key={m.user_id} className={`flex items-center justify-between px-4 py-3 gap-4 ${i < shown.length - 1 ? "border-b border-[var(--color-border)]" : ""}`}>
                             <div>
                                 <p className="text-sm text-gray-900 font-medium">{m.email ?? m.user_id.slice(0, 8) + "…"}</p>
                                 <p className="text-xs text-gray-400">Joined {new Date(m.joined_at).toLocaleDateString()}</p>
@@ -1353,6 +1376,8 @@ function MembersTab({ orgId, org, onNavigate }: { orgId: string; org: OrgInfo; o
                         </div>
                     ))}
                 </div>
+                    )
+                })()}
             </div>
 
             {invites.length > 0 && (

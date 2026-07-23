@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase, type TeamStats } from "@/lib/supabase"
 import { ScoreRing } from "@/components/ScoreRing"
+import { SearchBox } from "@/components/SearchBox"
 import Link from "next/link"
 
 export default function TeamPage() {
@@ -10,6 +11,7 @@ export default function TeamPage() {
     const [loading, setLoading]   = useState(true)
     const [sortKey, setSortKey]   = useState<keyof TeamStats>("avg_overall")
     const [sortDesc, setSortDesc] = useState(true)
+    const [query, setQuery]       = useState("")
 
     useEffect(() => { load() }, [])
 
@@ -73,7 +75,15 @@ export default function TeamPage() {
         }
     }
 
-    const sorted = [...members].sort((a, b) => {
+    const q = query.trim().toLowerCase()
+    const filtered = q
+        ? members.filter(m =>
+            (m.user_name ?? "").toLowerCase().includes(q) ||
+            (m.user_email ?? "").toLowerCase().includes(q) ||
+            (m.team_name ?? "").toLowerCase().includes(q) ||
+            m.user_id.toLowerCase().includes(q))
+        : members
+    const sorted = [...filtered].sort((a, b) => {
         const av = a[sortKey] as number | null ?? -1
         const bv = b[sortKey] as number | null ?? -1
         return sortDesc ? bv - av : av - bv
@@ -92,9 +102,12 @@ export default function TeamPage() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-semibold text-gray-900">Team</h1>
-                <p className="text-sm text-gray-500 mt-1">30-day performance averages. Click a rep to see their full scorecard history.</p>
+            <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-semibold text-gray-900">Team</h1>
+                    <p className="text-sm text-gray-500 mt-1">30-day performance averages. Click a rep to see their full scorecard history.</p>
+                </div>
+                <SearchBox value={query} onChange={setQuery} placeholder="Search reps…" />
             </div>
 
             <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] overflow-hidden shadow-sm">
@@ -108,7 +121,9 @@ export default function TeamPage() {
                     <span />
                 </div>
                 {sorted.length === 0 && (
-                    <div className="px-4 py-8 text-sm text-gray-500 text-center">No active members with scored sessions.</div>
+                    <div className="px-4 py-8 text-sm text-gray-500 text-center">
+                        {q ? `No reps match “${query}”.` : "No active members with scored sessions."}
+                    </div>
                 )}
                 {sorted.map(m => (
                     <Link

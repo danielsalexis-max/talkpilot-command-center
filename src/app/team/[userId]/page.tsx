@@ -4,11 +4,13 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { supabase, type Scorecard } from "@/lib/supabase"
 import { ScoreBadge } from "@/components/ScoreRing"
+import { SearchBox } from "@/components/SearchBox"
 import Link from "next/link"
 
 export default function RepPage() {
     const { userId } = useParams<{ userId: string }>()
     const [cards, setCards]   = useState<Scorecard[]>([])
+    const [query, setQuery]   = useState("")
     const [loading, setLoading] = useState(true)
 
     useEffect(() => { if (userId) load() }, [userId])
@@ -35,19 +37,27 @@ export default function RepPage() {
 
     if (loading) return <div className="text-gray-500 text-sm">Loading…</div>
 
+    const s = query.trim().toLowerCase()
+    const shown = s
+        ? cards.filter(c => (c.session_title ?? "").toLowerCase().includes(s))
+        : cards
+
     return (
         <div className="space-y-6">
-            <div className="flex items-center gap-3">
-                <Link href="/team" className="text-gray-500 hover:text-gray-900 text-sm transition-colors">← Team</Link>
-                <h1 className="text-2xl font-semibold text-gray-900">Rep History</h1>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                    <Link href="/team" className="text-gray-500 hover:text-gray-900 text-sm transition-colors">← Team</Link>
+                    <h1 className="text-2xl font-semibold text-gray-900">Rep History</h1>
+                </div>
+                {cards.length > 5 && <SearchBox value={query} onChange={setQuery} placeholder="Search sessions…" className="w-56" />}
             </div>
 
-            {cards.length === 0 && (
-                <p className="text-sm text-gray-500">No scored sessions found for this rep.</p>
+            {shown.length === 0 && (
+                <p className="text-sm text-gray-500">{s ? `No sessions match “${query}”.` : "No scored sessions found for this rep."}</p>
             )}
 
             <div className="space-y-2">
-                {cards.map(card => (
+                {shown.map(card => (
                     <Link
                         key={card.id}
                         href={`/scorecard/${card.id}`}
