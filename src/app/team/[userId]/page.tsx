@@ -2,10 +2,34 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { supabase, type Scorecard } from "@/lib/supabase"
+import { supabase, askClaude, type Scorecard } from "@/lib/supabase"
 import { ScoreBadge } from "@/components/ScoreRing"
 import { SearchBox } from "@/components/SearchBox"
+import { AskPanel } from "@/components/AskPanel"
 import Link from "next/link"
+
+function buildRepContext(cards: Scorecard[]): string {
+    const lines = cards.map(c => {
+        const date = c.started_at ? new Date(c.started_at).toLocaleDateString() : "?"
+        const scores = `overall ${c.overall_score ?? "–"}, adherence ${c.adherence_score ?? "–"}, objections ${c.objection_score ?? "–"}, accuracy ${c.accuracy_score ?? "–"}`
+        const growth = (c.growth_areas ?? []).join("; ")
+        const breaches = (c.guardrail_breaches ?? []).map(b => b.rule).join("; ")
+        return `- ${date} · ${c.session_title ?? "Session"} — ${scores}` +
+            (growth ? ` · growth areas: ${growth}` : "") +
+            (breaches ? ` · guardrail breaches: ${breaches}` : "")
+    }).join("\n")
+    return "You are a sales coach analyzing ONE rep's recent scored calls. Identify recurring patterns — " +
+        "what they consistently do well and where they keep slipping. Ground every claim in the data below and " +
+        "cite specific dates/call titles. Be concise, direct, and actionable. If the data doesn't support an " +
+        "answer, say so.\n\nSCORES ARE 0–100. REP'S RECENT SCORED CALLS (newest first):\n" + lines
+}
+
+const REP_SUGGESTIONS = [
+    "What does this rep keep getting wrong?",
+    "What are they consistently good at?",
+    "What one thing should they focus on next week?",
+    "Any recurring guardrail risks?",
+]
 
 export default function RepPage() {
     const { userId } = useParams<{ userId: string }>()
@@ -51,6 +75,15 @@ export default function RepPage() {
                 </div>
                 {cards.length > 5 && <SearchBox value={query} onChange={setQuery} placeholder="Search sessions…" className="w-56" />}
             </div>
+
+            {cards.length > 0 && (
+                <AskPanel
+                    heading="Ask about this rep"
+                    placeholder="Ask about this rep's patterns across their calls…"
+                    suggestions={REP_SUGGESTIONS}
+                    onAsk={(q, h) => askClaude(buildRepContext(cards), q, h)}
+                />
+            )}
 
             {shown.length === 0 && (
                 <p className="text-sm text-gray-500">{s ? `No sessions match “${query}”.` : "No scored sessions found for this rep."}</p>

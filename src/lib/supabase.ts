@@ -6,13 +6,14 @@ const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 // Browser singleton — all dashboard reads go through RLS (user JWT, no service role)
 export const supabase = createBrowserClient(supabaseUrl, supabaseAnon)
 
-// ── Transcript Q&A (Haiku via claude-proxy) ──────────────────────────────────
-// The transcript is already loaded client-side (RLS-gated via
-// get_scorecard_transcript), so passing it to Haiku exposes nothing new.
+// ── Ask (Haiku via claude-proxy) ─────────────────────────────────────────────
+// The context passed here is always data the manager can already see on the
+// page (RLS-gated), so sending it to Haiku exposes nothing new.
 export type ChatTurn = { role: "user" | "assistant"; content: string }
 
-export async function askAboutTranscript(
-    transcriptText: string,
+/** Low-level: the caller supplies the full system prompt (persona + context). */
+export async function askClaude(
+    system: string,
     question: string,
     history: ChatTurn[] = [],
 ): Promise<string> {
@@ -25,17 +26,22 @@ export async function askAboutTranscript(
         },
         body: JSON.stringify({
             model: "claude-haiku-4-5-20251001",
-            max_tokens: 700,
-            system:
-                "You are a sharp sales-coaching analyst answering a manager's questions about ONE call transcript. " +
-                "Answer only from the transcript below — if the answer isn't in it, say so plainly. Be concise and specific, " +
-                "quote short snippets when helpful, and don't invent details.\n\nTRANSCRIPT:\n" + transcriptText,
+            max_tokens: 800,
+            system,
             messages: [...history, { role: "user", content: question }],
         }),
     })
     if (!res.ok) throw new Error(`Assistant error: ${res.status}`)
     const data = await res.json()
     return data?.content?.[0]?.text?.trim() || "(no answer)"
+}
+
+export function askAboutTranscript(transcriptText: string, question: string, history: ChatTurn[] = []) {
+    const system =
+        "You are a sharp sales-coaching analyst answering a manager's questions about ONE call transcript. " +
+        "Answer only from the transcript below — if the answer isn't in it, say so plainly. Be concise and specific, " +
+        "quote short snippets when helpful, and don't invent details.\n\nTRANSCRIPT:\n" + transcriptText
+    return askClaude(system, question, history)
 }
 
 // ── Scorecard types ──────────────────────────────────────────────────────────
