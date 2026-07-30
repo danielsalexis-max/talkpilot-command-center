@@ -115,9 +115,9 @@ export default function InsightsPage() {
             {totalClaims > 0 && (
                 <div>
                     <h2 className="text-sm font-semibold text-gray-900 mb-3">Factual accuracy — 30 days ({totalClaims} claims)</h2>
-                    <div className="flex gap-3">
+                    <div className="flex flex-wrap gap-3">
                         {claimSummary.map(c => (
-                            <div key={c.verdict} className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 flex flex-col items-center gap-2 min-w-[120px] shadow-sm">
+                            <div key={c.verdict} className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 flex flex-col items-center gap-2 min-w-[100px] flex-1 sm:flex-none sm:min-w-[120px] shadow-sm">
                                 <span className="text-2xl font-semibold text-gray-900">
                                     {Math.round((c.count / totalClaims) * 100)}%
                                 </span>

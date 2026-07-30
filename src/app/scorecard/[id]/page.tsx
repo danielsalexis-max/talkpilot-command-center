@@ -119,7 +119,7 @@ export default function ScorecardPage() {
             </div>
 
             {/* Score tiles */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                 <ScoreCard label="Overall"    score={card.overall_score}   />
                 <ScoreCard label="Adherence"  score={card.adherence_score} />
                 <ScoreCard label="Objections" score={card.objection_score} />
@@ -143,12 +143,12 @@ export default function ScorecardPage() {
             )}
 
             {/* Tabs */}
-            <div className="border-b border-[var(--color-border)] flex gap-1">
+            <div className="border-b border-[var(--color-border)] flex gap-1 overflow-x-auto">
                 {tabs.map(t => (
                     <button
                         key={t.key}
                         onClick={() => openTab(t.key)}
-                        className={`px-4 py-2 text-sm border-b-2 transition-colors -mb-px ${
+                        className={`px-4 py-2 text-sm border-b-2 transition-colors -mb-px whitespace-nowrap shrink-0 ${
                             activeTab === t.key
                                 ? "border-[var(--color-accent)] text-[var(--color-accent)] font-medium"
                                 : "border-transparent text-gray-500 hover:text-gray-900"

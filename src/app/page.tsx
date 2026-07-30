@@ -95,7 +95,7 @@ export default function OverviewPage() {
 
     return (
         <div className="space-y-8">
-            <div className="flex items-start justify-between">
+            <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <h1 className="text-2xl font-semibold text-gray-900">{org?.name}</h1>
                     <p className="text-sm text-gray-500 mt-1 capitalize">
@@ -108,7 +108,7 @@ export default function OverviewPage() {
             </div>
 
             {/* Score tiles */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                 {[
                     { label: "Overall",    key: "overall"   },
                     { label: "Adherence",  key: "adherence" },
@@ -158,10 +158,10 @@ export default function OverviewPage() {
                         <Link
                             key={card.id}
                             href={`/scorecard/${card.id}`}
-                            className="flex items-center justify-between bg-[var(--color-surface)] hover:bg-gray-50 transition-colors rounded-xl border border-[var(--color-border)] px-4 py-3 shadow-sm"
+                            className="flex flex-wrap items-center justify-between gap-3 bg-[var(--color-surface)] hover:bg-gray-50 transition-colors rounded-xl border border-[var(--color-border)] px-4 py-3 shadow-sm"
                         >
-                            <div className="flex flex-col">
-                                <span className="text-sm text-gray-900 font-medium">
+                            <div className="flex flex-col min-w-0">
+                                <span className="text-sm text-gray-900 font-medium truncate">
                                     {card.started_at
                                         ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
                                         : "Unknown time"}
@@ -170,9 +170,9 @@ export default function OverviewPage() {
                                     {card.duration_minutes ? `${card.duration_minutes} min` : "—"} · {card.session_source === "plus_conversations" ? "iOS" : "macOS"}
                                 </span>
                             </div>
-                            <div className="flex items-center gap-6">
+                            <div className="flex items-center gap-6 shrink-0">
                                 <ScoreBadge label="Overall" score={card.overall_score} />
-                                <svg className="w-4 h-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className="w-4 h-4 text-gray-300 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                 </svg>
                             </div>

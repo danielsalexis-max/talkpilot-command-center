@@ -120,16 +120,21 @@ export default function TeamPage() {
         return sortDesc ? bv - av : av - bv
     })
 
-    const ColHeader = ({ field, label }: { field: keyof TeamStats; label: string }) => (
+    const ColHeader = ({ field, label, className = "" }: { field: keyof TeamStats; label: string; className?: string }) => (
         <button
             onClick={() => { if (sortKey === field) setSortDesc(!sortDesc); else { setSortKey(field); setSortDesc(true) } }}
-            className={`text-xs font-medium text-center whitespace-nowrap justify-self-center transition-colors ${sortKey === field ? "text-[var(--color-accent)]" : "text-gray-400 hover:text-gray-700"}`}
+            className={`text-xs font-medium text-center whitespace-nowrap justify-self-center transition-colors ${className} ${sortKey === field ? "text-[var(--color-accent)]" : "text-gray-400 hover:text-gray-700"}`}
         >
             {label}{sortKey === field ? (sortDesc ? " ↓" : " ↑") : ""}
         </button>
     )
 
     if (loading) return <div className="text-gray-400 text-sm">Loading…</div>
+
+    // Rep + Sessions + Overall always show; Adherence/Objections/Accuracy are
+    // reachable on a rep's own page, so they're progressively revealed as
+    // room allows rather than forcing horizontal scroll on phones.
+    const gridCols = "grid-cols-[minmax(0,1fr)_56px_56px_16px] sm:grid-cols-[minmax(0,1fr)_64px_64px_64px_16px] md:grid-cols-[minmax(0,1fr)_repeat(5,64px)_16px] lg:grid-cols-[minmax(0,1fr)_repeat(5,76px)_16px]"
 
     return (
         <div className="space-y-6">
@@ -150,14 +155,14 @@ export default function TeamPage() {
                 />
             )}
 
-            <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] overflow-hidden shadow-sm">
-                <div className="grid grid-cols-[minmax(0,1fr)_repeat(5,76px)_16px] items-center gap-2 px-4 py-2.5 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
+            <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] overflow-hidden shadow-sm overflow-x-auto">
+                <div className={`grid ${gridCols} items-center gap-2 px-4 py-2.5 border-b border-[var(--color-border)] bg-[var(--color-bg)] min-w-[360px]`}>
                     <span className="text-xs font-medium text-gray-500">Rep</span>
                     <ColHeader field="session_count" label="Sessions"   />
                     <ColHeader field="avg_overall"   label="Overall"    />
-                    <ColHeader field="avg_adherence" label="Adherence"  />
-                    <ColHeader field="avg_objection" label="Objections" />
-                    <ColHeader field="avg_accuracy"  label="Accuracy"   />
+                    <ColHeader field="avg_adherence" label="Adherence"  className="hidden sm:block" />
+                    <ColHeader field="avg_objection" label="Objections" className="hidden md:block" />
+                    <ColHeader field="avg_accuracy"  label="Accuracy"   className="hidden md:block" />
                     <span />
                 </div>
                 {sorted.length === 0 && (
@@ -169,7 +174,7 @@ export default function TeamPage() {
                     <Link
                         key={m.user_id}
                         href={`/team/${m.user_id}`}
-                        className="grid grid-cols-[minmax(0,1fr)_repeat(5,76px)_16px] items-center gap-2 px-4 py-3 border-b border-[var(--color-border)] hover:bg-gray-50 transition-colors last:border-0"
+                        className={`grid ${gridCols} items-center gap-2 px-4 py-3 border-b border-[var(--color-border)] hover:bg-gray-50 transition-colors last:border-0 min-w-[360px]`}
                     >
                         <div className="flex flex-col min-w-0">
                             <span className="text-sm text-gray-900 font-medium truncate">
@@ -179,9 +184,9 @@ export default function TeamPage() {
                         </div>
                         <span className="text-sm text-gray-500 text-center tabular-nums justify-self-center">{m.session_count}</span>
                         <div className="justify-self-center"><ScoreRing score={m.avg_overall}   size="sm" /></div>
-                        <div className="justify-self-center"><ScoreRing score={m.avg_adherence} size="sm" /></div>
-                        <div className="justify-self-center"><ScoreRing score={m.avg_objection} size="sm" /></div>
-                        <div className="justify-self-center"><ScoreRing score={m.avg_accuracy}  size="sm" /></div>
+                        <div className="hidden sm:block justify-self-center"><ScoreRing score={m.avg_adherence} size="sm" /></div>
+                        <div className="hidden md:block justify-self-center"><ScoreRing score={m.avg_objection} size="sm" /></div>
+                        <div className="hidden md:block justify-self-center"><ScoreRing score={m.avg_accuracy}  size="sm" /></div>
                         <svg className="w-4 h-4 text-gray-300 justify-self-center" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>

@@ -264,7 +264,7 @@ function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }) {
                 </div>
 
                 {/* Phrases */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Banned */}
                     <div className="space-y-2">
                         <label className="text-xs text-gray-500 font-medium">Banned phrases</label>
@@ -415,7 +415,7 @@ function KnowledgeTab({ orgId }: { orgId: string }) {
                     </h3>
                     {content && <p className="text-xs text-emerald-600 mt-0.5">File loaded — fill in the title and type, then save.</p>}
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="col-span-2 space-y-1">
                         <label className="text-xs text-gray-500 font-medium">Title</label>
                         <input className={INPUT} placeholder="Q3 Pricing Sheet" value={title} onChange={e => setTitle(e.target.value)} />
@@ -672,7 +672,7 @@ function ObjectionsTab({ orgId }: { orgId: string }) {
                     <textarea className={TEXTAREA} rows={3} placeholder="Acknowledge the concern, pivot to ROI. Ask: what would achieving X be worth to you?"
                         value={guidance} onChange={e => setGuidance(e.target.value)} />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                         <label className="text-xs text-gray-500 font-medium">Severity</label>
                         <select className={INPUT} value={severity} onChange={e => setSeverity(e.target.value)}>
@@ -876,7 +876,7 @@ function PlaybooksTab({ orgId }: { orgId: string }) {
 
                 {creating && (
                     <div className="mt-5 space-y-5 pt-5 border-t border-[var(--color-border)]">
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div className="col-span-2 space-y-1">
                                 <label className="text-xs text-gray-500 font-medium">Playbook name</label>
                                 <input className={INPUT} placeholder="Enterprise SaaS Sales Flow" value={pbName} onChange={e => setPbName(e.target.value)} />
@@ -906,7 +906,7 @@ function PlaybooksTab({ orgId }: { orgId: string }) {
                                         <span className="text-xs font-semibold text-[var(--color-accent)]">Stage {si + 1}</span>
                                         {stages.length > 1 && <button className={BTN_DANGER} onClick={() => removeStage(si)}>Remove</button>}
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div className="space-y-1">
                                             <label className="text-xs text-gray-500 font-medium">Stage name</label>
                                             <input className={INPUT} placeholder="Discovery" value={stage.name} onChange={e => updateStage(si, { name: e.target.value })} />
@@ -1104,7 +1104,7 @@ function PracticeTab({ orgId }: { orgId: string }) {
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1">
                             <label className="text-xs text-gray-500 font-medium">Assign to</label>
                             <select className={INPUT} value={assigneeKind}
@@ -1130,7 +1130,7 @@ function PracticeTab({ orgId }: { orgId: string }) {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1">
                             <label className="text-xs text-gray-500 font-medium">Coach&apos;s note (optional)</label>
                             <input className={INPUT} placeholder="Focus on holding price, not discounting" value={note} onChange={e => setNote(e.target.value)} />

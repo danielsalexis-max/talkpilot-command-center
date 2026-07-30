@@ -94,7 +94,7 @@ export default function RepPage() {
                     <Link
                         key={card.id}
                         href={`/scorecard/${card.id}`}
-                        className="flex items-center justify-between bg-[var(--color-surface)] hover:bg-gray-50 transition-colors rounded-lg border border-[var(--color-border)] px-4 py-3"
+                        className="flex flex-wrap items-center justify-between gap-3 bg-[var(--color-surface)] hover:bg-gray-50 transition-colors rounded-lg border border-[var(--color-border)] px-4 py-3"
                     >
                         <div className="flex flex-col min-w-0">
                             <span className="text-sm font-medium text-gray-900 truncate">
@@ -110,10 +110,10 @@ export default function RepPage() {
                                 {card.guardrail_breaches?.length ? ` · ⚠ ${card.guardrail_breaches.length} guardrail breach${card.guardrail_breaches.length > 1 ? "es" : ""}` : ""}
                             </span>
                         </div>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 shrink-0">
                             <ScoreBadge label="Overall"   score={card.overall_score}   />
                             <ScoreBadge label="Adherence" score={card.adherence_score} />
-                            <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg className="w-4 h-4 text-gray-400 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>
                         </div>
