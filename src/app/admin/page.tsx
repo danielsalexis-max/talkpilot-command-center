@@ -79,7 +79,7 @@ function StatusBadge({ label, color }: { label: string; color: "green" | "yellow
         yellow: "border-amber-200 text-amber-700 bg-amber-50",
         red:    "border-red-200 text-red-700 bg-red-50",
         slate:  "border-gray-200 text-gray-600 bg-gray-50",
-        indigo: "border-indigo-200 text-indigo-700 bg-indigo-50",
+        indigo: "border-teal-200 text-teal-700 bg-teal-50",
     }
     return <span className={`text-xs px-2 py-0.5 rounded border capitalize ${colors[color]}`}>{label}</span>
 }
@@ -113,7 +113,7 @@ function UploadZone({
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={loading}
-            className="w-full border-2 border-dashed border-[var(--color-accent)] rounded-xl p-8 flex flex-col items-center gap-3 bg-indigo-50/50 hover:bg-indigo-50 transition-colors disabled:opacity-60 disabled:cursor-wait group"
+            className="w-full border-2 border-dashed border-[var(--color-accent)] rounded-xl p-8 flex flex-col items-center gap-3 bg-teal-50/50 hover:bg-teal-50 transition-colors disabled:opacity-60 disabled:cursor-wait group"
         >
             <input ref={fileRef} type="file" accept={accept} className="hidden" onChange={onChange} />
             <div className="w-12 h-12 bg-[var(--color-accent)] rounded-xl flex items-center justify-center group-disabled:opacity-60">
@@ -635,7 +635,7 @@ function ObjectionsTab({ orgId }: { orgId: string }) {
                     </div>
                     <div className="space-y-2">
                         {extracted.map((o, i) => (
-                            <label key={i} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selected.has(i) ? "border-[var(--color-accent)] bg-indigo-50" : "border-[var(--color-border)] bg-[var(--color-bg)]"}`}>
+                            <label key={i} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selected.has(i) ? "border-[var(--color-accent)] bg-teal-50" : "border-[var(--color-border)] bg-[var(--color-bg)]"}`}>
                                 <input type="checkbox" checked={selected.has(i)}
                                     onChange={() => setSelected(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n })}
                                     className="mt-0.5 accent-[var(--color-accent)]" />
@@ -1465,7 +1465,7 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
             {!hasText && (
                 <div className="space-y-3">
                     <button type="button" onClick={() => fileRef.current?.click()} disabled={loadingFile}
-                        className="w-full border-2 border-dashed border-[var(--color-accent)] rounded-xl p-5 flex flex-col items-center gap-2 bg-indigo-50/50 hover:bg-indigo-50 transition-colors disabled:opacity-60">
+                        className="w-full border-2 border-dashed border-[var(--color-accent)] rounded-xl p-5 flex flex-col items-center gap-2 bg-teal-50/50 hover:bg-teal-50 transition-colors disabled:opacity-60">
                         <input ref={fileRef} type="file" accept=".txt,.md,.srt,.text,.csv" className="hidden" onChange={handleFile} />
                         <div className="w-10 h-10 bg-[var(--color-accent)] rounded-xl flex items-center justify-center">
                             {loadingFile
@@ -1662,7 +1662,7 @@ function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgInfo; on
     if (step === "analyzing") {
         return (
             <div className={CARD + " flex flex-col items-center justify-center gap-6 py-20"}>
-                <div className="w-14 h-14 border-4 border-indigo-200 border-t-[var(--color-accent)] rounded-full animate-spin" />
+                <div className="w-14 h-14 border-4 border-teal-200 border-t-[var(--color-accent)] rounded-full animate-spin" />
                 <div className="text-center">
                     <p className="text-gray-900 font-semibold text-lg">Analyzing with Claude Opus…</p>
                     <p className="text-gray-500 text-sm mt-1">This can take 30–60 seconds for multiple transcripts.</p>
@@ -1714,7 +1714,7 @@ function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgInfo; on
                         </div>
                         <div className="flex flex-wrap gap-2">
                             {dnaResult.tone.descriptors.map(d => (
-                                <span key={d} className="px-3 py-1 rounded-full bg-indigo-50 text-[var(--color-accent)] text-sm font-medium border border-indigo-200">{d}</span>
+                                <span key={d} className="px-3 py-1 rounded-full bg-teal-50 text-[var(--color-accent)] text-sm font-medium border border-teal-200">{d}</span>
                             ))}
                         </div>
                         {org.voice_profile?.tone && (
@@ -1753,7 +1753,7 @@ function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgInfo; on
                                     <div key={i} className="py-3 first:pt-0 last:pb-0">
                                         <p className="text-sm text-gray-900 font-medium">{p.pattern}</p>
                                         <p className="text-xs text-gray-500 mt-0.5">{p.why}</p>
-                                        <p className="text-xs text-indigo-600 mt-0.5">Instead: {p.better_alternative}</p>
+                                        <p className="text-xs text-teal-600 mt-0.5">Instead: {p.better_alternative}</p>
                                     </div>
                                 ))}
                             </div>
@@ -1793,7 +1793,7 @@ function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgInfo; on
                                     </div>
                                     <p className="text-xs text-gray-600">{o.expert_response_summary}</p>
                                     {o.example_quote && (
-                                        <p className="text-xs text-indigo-700 bg-indigo-50 rounded-lg px-3 py-2 italic">"{o.example_quote}"</p>
+                                        <p className="text-xs text-teal-700 bg-teal-50 rounded-lg px-3 py-2 italic">"{o.example_quote}"</p>
                                     )}
                                     <p className="text-xs text-gray-500 border-t border-[var(--color-border)] pt-2">{o.response_guidance}</p>
                                 </div>
@@ -1818,7 +1818,7 @@ function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgInfo; on
                             {dnaResult.conversation_flow.stages.map((s, i) => (
                                 <div key={i} className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-xl p-4 space-y-2">
                                     <div className="flex items-center gap-2">
-                                        <span className="w-6 h-6 rounded-full bg-indigo-100 text-[var(--color-accent)] text-xs font-semibold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                                        <span className="w-6 h-6 rounded-full bg-teal-100 text-[var(--color-accent)] text-xs font-semibold flex items-center justify-center flex-shrink-0">{i + 1}</span>
                                         <p className="text-sm font-semibold text-gray-900">{s.name}</p>
                                     </div>
                                     <p className="text-xs text-gray-600 pl-8">{s.description}</p>

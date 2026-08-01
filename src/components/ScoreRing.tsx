@@ -2,7 +2,7 @@ export function ScoreRing({ score, size = "md" }: { score: number | null; size?:
     const cls = score == null
         ? "bg-gray-100 text-gray-400"
         : score >= 80 ? "bg-emerald-100 text-emerald-700"
-        : score >= 60 ? "bg-indigo-100 text-indigo-700"
+        : score >= 60 ? "bg-teal-100 text-teal-700"
         : score >= 40 ? "bg-amber-100 text-amber-700"
         : "bg-red-100 text-red-700"
 
@@ -27,7 +27,7 @@ export function ScoreBadge({ label, score }: { label: string; score: number | nu
 export function GradePill({ grade }: { grade: "excellent" | "adequate" | "off_script" | "missed" }) {
     const styles = {
         excellent:  "bg-emerald-50 text-emerald-700 border-emerald-200",
-        adequate:   "bg-indigo-50 text-indigo-700 border-indigo-200",
+        adequate:   "bg-teal-50 text-teal-700 border-teal-200",
         off_script: "bg-amber-50 text-amber-700 border-amber-200",
         missed:     "bg-red-50 text-red-700 border-red-200",
     }

@@ -2,16 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Ambient Clarity design system — matches iOS Plus & macOS TalkPilot */
+/* TalkPilot teal brand (D-047) — matches iOS Plus & macOS TalkPilot */
 :root {
-  --color-accent:        #4F46E5;   /* electricBlue — primary indigo */
-  --color-accent-light:  #6366f1;   /* lighter indigo hover */
-  --color-accent-subtle: #EEF2FF;   /* indigo-50 — accent tint */
-  --color-bg:            #F8F9FD;   /* canvas — PlusColor.midnightNavy */
+  --color-accent:        #0C9482;   /* Deep Teal — brand primary */
+  --color-accent-light:  #3EA48F;   /* Mint Green hover */
+  --color-accent-subtle: #EDF5F1;   /* seafoam tint */
+  --color-bg:            #F6FAF8;   /* canvas — seafoam-tinted white */
   --color-surface:       #FFFFFF;   /* ground/card — PlusColor.deepNavy */
   --color-border:        #E5E7EB;   /* gray-200 */
-  --color-text:          #111827;   /* gray-900 — PlusColor.softWhite */
-  --color-text-secondary:#4B5563;   /* gray-600 — PlusColor.textSecondary */
+  --color-text:          #0E182B;   /* Obsidian Navy — PlusColor.primaryText */
+  --color-text-secondary:#46536A;   /* obsidian gray — PlusColor.textSecondary */
   --color-muted:         #9CA3AF;   /* gray-400 */
 }
 
@@ -30,13 +30,13 @@ body {
 }
 
 .score-excellent  { @apply bg-emerald-100 text-emerald-700; }
-.score-good       { @apply bg-indigo-100  text-indigo-700;  }
+.score-good       { @apply bg-teal-100  text-teal-700;  }
 .score-average    { @apply bg-amber-100   text-amber-700;   }
 .score-poor       { @apply bg-red-100     text-red-700;     }
 
 /* ── Grade pills ───────────────────────────────────────────────────── */
 .grade-excellent  { @apply text-emerald-600; }
-.grade-adequate   { @apply text-indigo-600;  }
+.grade-adequate   { @apply text-teal-600;  }
 .grade-off-script { @apply text-amber-600;   }
 .grade-missed     { @apply text-red-600;     }
 

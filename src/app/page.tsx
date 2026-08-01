@@ -136,7 +136,7 @@ export default function OverviewPage() {
                                 labelStyle={{ color: "#111827", fontSize: 12, fontWeight: 600 }}
                                 itemStyle={{ fontSize: 12, color: "#4B5563" }}
                             />
-                            <Line type="monotone" dataKey="overall"   stroke="#4F46E5" strokeWidth={2} dot={false} name="Overall"    />
+                            <Line type="monotone" dataKey="overall"   stroke="#0C9482" strokeWidth={2} dot={false} name="Overall"    />
                             <Line type="monotone" dataKey="adherence" stroke="#10b981" strokeWidth={2} dot={false} name="Adherence"  />
                             <Line type="monotone" dataKey="objection" stroke="#f59e0b" strokeWidth={2} dot={false} name="Objections" />
                         </LineChart>

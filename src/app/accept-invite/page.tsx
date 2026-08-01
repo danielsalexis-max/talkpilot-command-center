@@ -230,7 +230,7 @@ function GetTheAppScreen() {
                             <span className="text-xs text-gray-400 border border-[var(--color-border)] rounded-full px-2.5 py-1">Soon</span>
                         ) : (
                             <a href={r.href} target="_blank" rel="noopener noreferrer"
-                                className="text-xs font-medium text-[var(--color-accent)] border border-[var(--color-accent)] rounded-lg px-3 py-1.5 hover:bg-indigo-50 transition-colors">
+                                className="text-xs font-medium text-[var(--color-accent)] border border-[var(--color-accent)] rounded-lg px-3 py-1.5 hover:bg-teal-50 transition-colors">
                                 {r.key === "mac" ? "Download" : "App Store"}
                             </a>
                         )}
