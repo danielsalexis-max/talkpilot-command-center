@@ -54,7 +54,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const [visibility, setVisibility] = useState<string | null>(null)
     const [menuOpen, setMenuOpen]     = useState(false)
     const [dark, setDark]             = useState(false)
+    const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
     const isPublic = pathname === "/login" || pathname.startsWith("/accept-invite")
+        || pathname.startsWith("/start") || pathname.startsWith("/reset-password")
 
     useEffect(() => {
         applySkin()
@@ -66,8 +68,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
         supabase.rpc("get_org_context").then(({ data }) => {
             if (!data?.org_id) return
-            supabase.from("organizations").select("name, visibility").eq("id", data.org_id).single()
-                .then(({ data: o }) => { if (o) { setOrgName(o.name); setVisibility(o.visibility) } })
+            supabase.from("organizations").select("name, visibility, trial_ends_at, stripe_subscription_id").eq("id", data.org_id).single()
+                .then(({ data: o }) => {
+                    if (!o) return
+                    setOrgName(o.name); setVisibility(o.visibility)
+                    if (o.trial_ends_at && !o.stripe_subscription_id) setTrialEndsAt(o.trial_ends_at)
+                })
         })
     }, [])
 
@@ -158,6 +164,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </nav>
                 <div className="mt-auto flex flex-col gap-2.5">
                     <SkinToggle />
+                    {trialEndsAt && (() => {
+                        const days = Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400e3))
+                        return (
+                            <Link href="/settings?tab=billing"
+                                className={`flex items-center justify-between rounded-lg px-2.5 py-2 text-[11px] font-medium transition-colors ${
+                                    days <= 3 ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                              : "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] hover:bg-[var(--color-hover)]"}`}>
+                                <span>Trial · {days} day{days === 1 ? "" : "s"} left</span>
+                                <span className="font-semibold">Add billing →</span>
+                            </Link>
+                        )
+                    })()}
                     {visibility && (
                         <div className="flex items-start gap-2 bg-[var(--color-accent-subtle)] rounded-lg px-2.5 py-2">
                             <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[var(--color-accent)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

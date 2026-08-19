@@ -99,7 +99,7 @@ function SettingsPageInner() {
                 </div>
             )}
             {tab === "members" && <MembersTab orgId={orgId} org={org} onNavigate={onNavigate} />}
-            {tab === "billing" && <BillingTab orgId={orgId} />}
+            {tab === "billing" && <BillingTab orgId={orgId} trialEndsAt={org.trial_ends_at ?? null} />}
         </div>
     )
 }

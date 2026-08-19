@@ -76,6 +76,18 @@ export default function HomePage() {
     }
 
     if (loading) return <div className="text-sm text-[var(--color-muted)]">Loading…</div>
+    if (error === "No org membership found.") return (
+        <div className="max-w-md mx-auto mt-16 bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-8 text-center shadow-sm">
+            <h1 className="font-display text-xl font-bold text-[var(--color-text)]">You&apos;re not in a workspace yet</h1>
+            <p className="text-sm text-[var(--color-text-secondary)] mt-2">
+                Create one for your team — 14 days free, no card — or ask your manager for an invite link.
+            </p>
+            <a href="/start" className="inline-block mt-5 px-5 py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors">
+                Create your workspace →
+            </a>
+            <p className="text-xs text-[var(--color-muted)] mt-4">Got an invite email? Open its link to join your team&apos;s workspace.</p>
+        </div>
+    )
     if (error)   return <div className="text-red-600 text-sm">{error}</div>
 
     const byUser = new Map<string, MemberInfo>(members.map(m => [m.user_id, m]))

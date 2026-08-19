@@ -40,6 +40,16 @@ export default function LoginPage() {
         }
     }
 
+    async function forgotPassword() {
+        setError(null); setInfo(null)
+        if (!email) { setError("Enter your email above first, then tap Forgot password."); return }
+        const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/reset-password`,
+        })
+        if (err) setError(err.message)
+        else setInfo("Reset link sent — check your email.")
+    }
+
     return (
         <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center px-4">
             <div className="w-full max-w-sm space-y-6">
@@ -94,7 +104,26 @@ export default function LoginPage() {
                                 ? (mode === "signin" ? "Signing in…" : "Creating account…")
                                 : (mode === "signin" ? "Sign in" : "Create account")}
                         </button>
+                        {mode === "signin" && (
+                            <button type="button" onClick={forgotPassword}
+                                className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors">
+                                Forgot password?
+                            </button>
+                        )}
                     </form>
+
+                    <div className="flex items-center gap-3">
+                        <span className="h-px flex-1 bg-[var(--color-border)]" />
+                        <span className="text-[11px] text-[var(--color-muted)]">or</span>
+                        <span className="h-px flex-1 bg-[var(--color-border)]" />
+                    </div>
+                    <button
+                        onClick={() => supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: `${window.location.origin}/` } })}
+                        className="w-full py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors flex items-center justify-center gap-2.5"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.8 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.4 28.7a14.5 14.5 0 0 1 0-9.4l-7.8-6.1a24 24 0 0 0 0 21.6l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2.1 1.4-4.7 2.3-7.7 2.3-6.3 0-11.7-3.7-13.6-9l-7.8 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
+                        Continue with Google
+                    </button>
 
                     <p className="text-center text-xs text-[var(--color-text-secondary)]">
                         {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
@@ -106,6 +135,13 @@ export default function LoginPage() {
                         </button>
                     </p>
                 </div>
+
+                <p className="text-center text-xs text-[var(--color-text-secondary)]">
+                    New team?{" "}
+                    <a href="/start" className="text-[var(--color-accent-deep)] font-semibold hover:underline">
+                        Start your 14-day free trial →
+                    </a>
+                </p>
             </div>
         </div>
     )

@@ -11,6 +11,7 @@ export interface OrgInfo {
     id: string; name: string; slug: string; plan: string
     visibility: string; seats_purchased: number
     status: string; cancel_at: string | null
+    trial_ends_at?: string | null
     voice_profile: { tone?: string; values?: string; self_reference?: string; banned_phrases?: string[]; required_phrases?: string[] }
 }
 interface KbRow    { id: string; title: string; kind: string; status: string; summary: string | null; created_at: string }
@@ -1949,14 +1950,23 @@ interface BillingInfo {
     } | null
 }
 
-export function BillingTab({ orgId }: { orgId: string }) {
+export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?: string | null }) {
     const [info, setInfo]         = useState<BillingInfo | null>(null)
     const [loading, setLoading]   = useState(true)
     const [seatDraft, setSeatDraft] = useState<number>(0)
     const [saving, setSaving]     = useState(false)
     const [portalBusy, setPortalBusy] = useState(false)
+    const [checkoutBusy, setCheckoutBusy] = useState(false)
+    const [interval_, setInterval_]   = useState<"month" | "year">("year")
     const [msg, setMsg]           = useState<string | null>(null)
     const [isErr, setIsErr]       = useState(false)
+
+    // Back from Stripe Checkout: the webhook finalizes the org within seconds.
+    useEffect(() => {
+        const q = new URLSearchParams(window.location.search)
+        if (q.get("checkout") === "success") { setMsg("Payment received — your subscription is active. Welcome aboard."); setIsErr(false) }
+        if (q.get("checkout") === "canceled") { setMsg("Checkout canceled — your trial continues unchanged."); setIsErr(false) }
+    }, [])
 
     const call = useCallback(async (action: string, extra: Record<string, unknown> = {}) => {
         const { data: { session } } = await supabase.auth.getSession()
@@ -2010,6 +2020,17 @@ export function BillingTab({ orgId }: { orgId: string }) {
             setMsg(errStr(e)); setIsErr(true)
         } finally {
             setPortalBusy(false)
+        }
+    }
+
+    async function startCheckout() {
+        setCheckoutBusy(true); setMsg(null)
+        try {
+            const { url } = await call("checkout", { interval: interval_ }) as { url: string }
+            window.location.href = url
+        } catch (e) {
+            setMsg(errStr(e)); setIsErr(true)
+            setCheckoutBusy(false)
         }
     }
 
@@ -2074,6 +2095,37 @@ export function BillingTab({ orgId }: { orgId: string }) {
                             {saving ? "Updating…" : seatDraft > info.seats_purchased ? `Add ${seatDraft - info.seats_purchased} seat${seatDraft - info.seats_purchased !== 1 ? "s" : ""}` : seatDraft < info.seats_purchased ? `Reduce to ${seatDraft}` : "Update seats"}
                         </button>
                         {perSeat && <span className="text-xs text-[var(--color-text-secondary)] pb-2.5">{perSeat} · changes are prorated automatically</span>}
+                    </div>
+                ) : trialEndsAt ? (
+                    <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
+                        {(() => {
+                            const days = Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400e3)
+                            return (
+                                <p className="text-sm text-[var(--color-text-secondary)]">
+                                    {days > 0
+                                        ? <>Free trial — <strong className="text-[var(--color-text)]">{days} day{days === 1 ? "" : "s"} left</strong>. Every feature is on; add billing below and nothing changes at the switch.</>
+                                        : <>Your trial has ended. <strong className="text-[var(--color-text)]">Subscribe to reactivate</strong> — your playbook, knowledge base and scorecards are all saved exactly as you left them.</>}
+                                </p>
+                            )
+                        })()}
+                        <div className="flex flex-wrap items-center gap-3 mt-4">
+                            <div className="flex rounded-lg border border-[var(--color-border)] overflow-hidden text-xs font-medium">
+                                <button onClick={() => setInterval_("month")}
+                                    className={`px-3.5 py-2 transition-colors ${interval_ === "month" ? "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-semibold" : "text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]"}`}>
+                                    Monthly · $40/seat
+                                </button>
+                                <button onClick={() => setInterval_("year")}
+                                    className={`px-3.5 py-2 transition-colors border-l border-[var(--color-border)] ${interval_ === "year" ? "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-semibold" : "text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]"}`}>
+                                    Annual · $32/seat
+                                </button>
+                            </div>
+                            <button className={BTN_PRIMARY} onClick={startCheckout} disabled={checkoutBusy}>
+                                {checkoutBusy ? "Opening checkout…" : "Start subscription"}
+                            </button>
+                            <span className="text-xs text-[var(--color-muted)]">
+                                {info.seats_purchased} seats · secure Stripe checkout
+                            </span>
+                        </div>
                     </div>
                 ) : (
                     <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
