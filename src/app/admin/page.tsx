@@ -3,7 +3,7 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 
-/// The old Admin hub was split by the Boardroom redesign (D-162): coaching
+/// The old Admin hub was split by the Boardroom redesign (D-161): coaching
 /// configuration (playbooks, objections, knowledge, voice, Team DNA) lives at
 /// /playbook; org administration (settings, members, billing) at /settings.
 /// Old bookmarks land here — send them to Settings.
