@@ -2,45 +2,103 @@
 @tailwind components;
 @tailwind utilities;
 
-/* TalkPilot teal brand (D-047) — matches iOS Plus & macOS TalkPilot */
+/* ─────────────────────────────────────────────────────────────────────────────
+   TalkPilot Teams design tokens — Boardroom system (D-047 palette).
+   Light is the default; <html data-skin="dark"> swaps every token to the
+   obsidian set used by the B2C apps' dark appearance. Components style
+   through these variables (bg-[var(--color-surface)] …), so both skins come
+   from this one block. The skin attribute is set pre-hydration in layout.tsx.
+   ──────────────────────────────────────────────────────────────────────────── */
 :root {
   --color-accent:        #0C9482;   /* Deep Teal — brand primary */
   --color-accent-light:  #3EA48F;   /* Mint Green hover */
+  --color-accent-deep:   #076B5E;   /* AA-safe teal for text links / primary buttons on light */
   --color-accent-subtle: #EDF5F1;   /* seafoam tint */
   --color-bg:            #F6FAF8;   /* canvas — seafoam-tinted white */
-  --color-surface:       #FFFFFF;   /* ground/card — PlusColor.deepNavy */
-  --color-border:        #E5E7EB;   /* gray-200 */
-  --color-text:          #0E182B;   /* Obsidian Navy — PlusColor.primaryText */
-  --color-text-secondary:#46536A;   /* obsidian gray — PlusColor.textSecondary */
-  --color-muted:         #9CA3AF;   /* gray-400 */
+  --color-surface:       #FFFFFF;   /* cards */
+  --color-hover:         #F2F7F5;   /* row/button hover wash */
+  --color-border:        #E2EBE7;
+  --color-line-soft:     #EDF5F1;   /* hairline dividers inside cards */
+  --color-text:          #0E182B;   /* Obsidian Navy */
+  --color-text-secondary:#46536A;
+  --color-muted:         #5A6B7D;   /* AA on white (the old #9CA3AF was 3:1) */
+  --btn-bg:              #076B5E;   /* primary action — AA with white label */
+  --btn-hover:           #054F45;
+  --btn-ink:             #FFFFFF;
+}
+html[data-skin="dark"] {
+  --color-accent:        #2FB39E;
+  --color-accent-light:  #4FB8A2;
+  --color-accent-deep:   #9CD9C6;
+  --color-accent-subtle: #1A2B41;
+  --color-bg:            #0A1220;
+  --color-surface:       #0E182B;
+  --color-hover:         #16213A;
+  --color-border:        #24344D;
+  --color-line-soft:     #1A2436;
+  --color-text:          #EDF2F1;
+  --color-text-secondary:#B4C0C9;
+  --color-muted:         #94A2AB;
+  --btn-bg:              #3EA48F;   /* mint fill, obsidian label — AA on dark */
+  --btn-hover:           #4FB8A2;
+  --btn-ink:             #0A1220;
 }
 
 body {
   background-color: var(--color-bg);
   color: var(--color-text);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font-family: var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Score rings ───────────────────────────────────────────────────── */
-.score-ring {
-  @apply inline-flex items-center justify-center rounded-full font-semibold text-sm;
-  width: 48px;
-  height: 48px;
+h1, h2, h3, .font-display {
+  font-family: var(--font-display), var(--font-body), sans-serif;
 }
 
-.score-excellent  { @apply bg-emerald-100 text-emerald-700; }
-.score-good       { @apply bg-teal-100  text-teal-700;  }
-.score-average    { @apply bg-amber-100   text-amber-700;   }
-.score-poor       { @apply bg-red-100     text-red-700;     }
+.font-mono, .tabular {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
 
-/* ── Grade pills ───────────────────────────────────────────────────── */
-.grade-excellent  { @apply text-emerald-600; }
-.grade-adequate   { @apply text-teal-600;  }
-.grade-off-script { @apply text-amber-600;   }
-.grade-missed     { @apply text-red-600;     }
-
-/* ── Verdict pills ─────────────────────────────────────────────────── */
-.verdict-verified     { @apply text-emerald-600; }
-.verdict-unverifiable { @apply text-gray-500;    }
-.verdict-contradicts  { @apply text-red-600;     }
+/* ── Dark-skin remap for the semantic Tailwind utilities in use ─────────────
+   The score/grade/verdict/banner components use emerald/teal/amber/red scale
+   classes directly; on the dark skin those light washes would glare, so the
+   handful of classes actually used are re-keyed here rather than touching
+   every call site. Keep this list in sync when adding new semantic classes. */
+html[data-skin="dark"] .bg-emerald-50   { background-color: #14311F; }
+html[data-skin="dark"] .bg-emerald-100  { background-color: #1A3D27; }
+html[data-skin="dark"] .bg-emerald-500  { background-color: #2E9B4E; }
+html[data-skin="dark"] .bg-green-50     { background-color: #14311F; }
+html[data-skin="dark"] .bg-green-500    { background-color: #2E9B4E; }
+html[data-skin="dark"] .bg-teal-50,
+html[data-skin="dark"] .bg-teal-50\/50  { background-color: #12293E; }
+html[data-skin="dark"] .bg-teal-100     { background-color: #173349; }
+html[data-skin="dark"] .bg-amber-50     { background-color: #37290D; }
+html[data-skin="dark"] .bg-amber-100    { background-color: #423311; }
+html[data-skin="dark"] .bg-amber-400    { background-color: #C98F1F; }
+html[data-skin="dark"] .bg-red-50       { background-color: #3A1818; }
+html[data-skin="dark"] .bg-red-100      { background-color: #47201F; }
+html[data-skin="dark"] .text-emerald-400,
+html[data-skin="dark"] .text-emerald-600,
+html[data-skin="dark"] .text-emerald-700,
+html[data-skin="dark"] .text-green-600,
+html[data-skin="dark"] .text-green-700  { color: #6FCB84; }
+html[data-skin="dark"] .text-teal-600,
+html[data-skin="dark"] .text-teal-700   { color: #9CD9C6; }
+html[data-skin="dark"] .text-amber-500,
+html[data-skin="dark"] .text-amber-600,
+html[data-skin="dark"] .text-amber-700,
+html[data-skin="dark"] .text-amber-800  { color: #E8B75B; }
+html[data-skin="dark"] .text-red-400,
+html[data-skin="dark"] .text-red-500,
+html[data-skin="dark"] .text-red-600,
+html[data-skin="dark"] .text-red-700    { color: #F08A8A; }
+html[data-skin="dark"] .border-emerald-100,
+html[data-skin="dark"] .border-emerald-200 { border-color: #1F4A2E; }
+html[data-skin="dark"] .border-teal-200    { border-color: #1E4258; }
+html[data-skin="dark"] .border-amber-200,
+html[data-skin="dark"] .border-amber-300   { border-color: #574112; }
+html[data-skin="dark"] .border-red-100,
+html[data-skin="dark"] .border-red-200,
+html[data-skin="dark"] .border-red-300     { border-color: #5A2A2A; }
+html[data-skin="dark"] .shadow-sm          { box-shadow: none; }

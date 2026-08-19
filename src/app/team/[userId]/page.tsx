@@ -41,6 +41,8 @@ export default function RepPage() {
 
     async function load() {
         try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) { window.location.replace("/login"); return }
             const { data: ctx } = await supabase.rpc("get_org_context")
             if (!ctx?.org_id) { setLoading(false); return }
 
@@ -59,7 +61,7 @@ export default function RepPage() {
         }
     }
 
-    if (loading) return <div className="text-gray-500 text-sm">Loading…</div>
+    if (loading) return <div className="text-[var(--color-text-secondary)] text-sm">Loading…</div>
 
     const s = query.trim().toLowerCase()
     const shown = s
@@ -70,8 +72,8 @@ export default function RepPage() {
         <div className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                    <Link href="/team" className="text-gray-500 hover:text-gray-900 text-sm transition-colors">← Team</Link>
-                    <h1 className="text-2xl font-semibold text-gray-900">Rep History</h1>
+                    <Link href="/team" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] text-sm transition-colors">← Team</Link>
+                    <h1 className="text-2xl font-semibold text-[var(--color-text)]">Rep History</h1>
                 </div>
                 {cards.length > 5 && <SearchBox value={query} onChange={setQuery} placeholder="Search sessions…" className="w-56" />}
             </div>
@@ -86,7 +88,7 @@ export default function RepPage() {
             )}
 
             {shown.length === 0 && (
-                <p className="text-sm text-gray-500">{s ? `No sessions match “${query}”.` : "No scored sessions found for this rep."}</p>
+                <p className="text-sm text-[var(--color-text-secondary)]">{s ? `No sessions match “${query}”.` : "No scored sessions found for this rep."}</p>
             )}
 
             <div className="space-y-2">
@@ -94,16 +96,16 @@ export default function RepPage() {
                     <Link
                         key={card.id}
                         href={`/scorecard/${card.id}`}
-                        className="flex flex-wrap items-center justify-between gap-3 bg-[var(--color-surface)] hover:bg-gray-50 transition-colors rounded-lg border border-[var(--color-border)] px-4 py-3"
+                        className="flex flex-wrap items-center justify-between gap-3 bg-[var(--color-surface)] hover:bg-[var(--color-hover)] transition-colors rounded-lg border border-[var(--color-border)] px-4 py-3"
                     >
                         <div className="flex flex-col min-w-0">
-                            <span className="text-sm font-medium text-gray-900 truncate">
+                            <span className="text-sm font-medium text-[var(--color-text)] truncate">
                                 {card.session_title
                                     ?? (card.started_at
                                         ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
                                         : "Session")}
                             </span>
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-[var(--color-text-secondary)]">
                                 {card.started_at ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Unknown time"}
                                 {card.duration_minutes ? ` · ${card.duration_minutes} min` : ""}
                                 {card.talk_ratio != null ? ` · ${Math.round(card.talk_ratio * 100)}% talk ratio` : ""}
@@ -113,7 +115,7 @@ export default function RepPage() {
                         <div className="flex items-center gap-4 shrink-0">
                             <ScoreBadge label="Overall"   score={card.overall_score}   />
                             <ScoreBadge label="Adherence" score={card.adherence_score} />
-                            <svg className="w-4 h-4 text-gray-400 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <svg className="w-4 h-4 text-[var(--color-muted)] hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>
                         </div>

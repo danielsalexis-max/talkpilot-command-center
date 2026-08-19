@@ -9,8 +9,8 @@ const MAC_RELEASES_API  = "https://api.github.com/repos/danielsalexis-max/talkpi
 const MAC_RELEASES_PAGE = "https://github.com/danielsalexis-max/talkpilot-releases/releases/latest"
 const IOS_APP_STORE     = "https://apps.apple.com/app/id6763953639"
 
-const INPUT = "w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-const BTN   = "w-full py-2.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-light)] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-60"
+const INPUT = "w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+const BTN   = "w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-medium rounded-lg transition-colors disabled:opacity-60"
 
 type Platform = "mac" | "ios" | "android" | "windows" | "other"
 
@@ -26,7 +26,7 @@ function detectPlatform(): Platform {
 
 export default function AcceptInvitePage() {
     return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-500 text-sm">Checking invite…</div>}>
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[var(--color-text-secondary)] text-sm">Checking invite…</div>}>
             <AcceptInviteContent />
         </Suspense>
     )
@@ -110,26 +110,26 @@ function AcceptInviteContent() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                         </svg>
                     </div>
-                    <h1 className="text-2xl font-semibold text-gray-900">
+                    <h1 className="text-2xl font-semibold text-[var(--color-text)]">
                         TalkPilot <span className="text-[var(--color-accent)]">Teams</span>
                     </h1>
                 </div>
 
-                {status === "loading"   && <p className="text-gray-500 text-sm text-center">Checking invite…</p>}
-                {status === "accepting" && <p className="text-gray-500 text-sm text-center">Accepting invite…</p>}
+                {status === "loading"   && <p className="text-[var(--color-text-secondary)] text-sm text-center">Checking invite…</p>}
+                {status === "accepting" && <p className="text-[var(--color-text-secondary)] text-sm text-center">Accepting invite…</p>}
 
                 {status === "error" && (
                     <div className="text-center space-y-3">
                         <p className="text-red-600 text-sm">{message}</p>
-                        <p className="text-xs text-gray-400">Ask your admin to re-send the invite if the link expired.</p>
+                        <p className="text-xs text-[var(--color-muted)]">Ask your admin to re-send the invite if the link expired.</p>
                     </div>
                 )}
 
                 {status === "confirm_email" && (
                     <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 text-center space-y-2 shadow-sm">
-                        <p className="text-sm font-semibold text-gray-900">Confirm your email</p>
-                        <p className="text-sm text-gray-500">
-                            We sent a confirmation link to <span className="font-medium text-gray-700">{email}</span>.
+                        <p className="text-sm font-semibold text-[var(--color-text)]">Confirm your email</p>
+                        <p className="text-sm text-[var(--color-text-secondary)]">
+                            We sent a confirmation link to <span className="font-medium text-[var(--color-text-secondary)]">{email}</span>.
                             Confirm it, then open this invite link again to join your team.
                         </p>
                     </div>
@@ -141,13 +141,13 @@ function AcceptInviteContent() {
                             {(["signup", "signin"] as const).map(m => (
                                 <button key={m} type="button" onClick={() => { setMode(m); setMessage("") }}
                                     className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${
-                                        mode === m ? "bg-[var(--color-surface)] text-gray-900 font-medium shadow-sm" : "text-gray-500"
+                                        mode === m ? "bg-[var(--color-surface)] text-[var(--color-text)] font-medium shadow-sm" : "text-[var(--color-text-secondary)]"
                                     }`}>
                                     {m === "signup" ? "Create account" : "Sign in"}
                                 </button>
                             ))}
                         </div>
-                        <p className="text-xs text-gray-500 text-center">
+                        <p className="text-xs text-[var(--color-text-secondary)] text-center">
                             {mode === "signup"
                                 ? "New to TalkPilot? Create your account to accept the invite."
                                 : "Already have a TalkPilot account? Sign in to accept."}
@@ -204,15 +204,15 @@ function GetTheAppScreen() {
         <div className="space-y-4">
             <div className="text-center space-y-1">
                 <p className="text-emerald-600 text-sm font-medium">✓ You're on the team!</p>
-                <h2 className="text-lg font-semibold text-gray-900">Now get the TalkPilot app</h2>
-                <p className="text-sm text-gray-500">
+                <h2 className="text-lg font-semibold text-[var(--color-text)]">Now get the TalkPilot app</h2>
+                <p className="text-sm text-[var(--color-text-secondary)]">
                     TalkPilot runs on your Mac or iPhone during your conversations — that's where the magic happens.
                 </p>
             </div>
 
             {primary && (
                 <a href={primary.href} target="_blank" rel="noopener noreferrer"
-                    className="block w-full py-3 bg-[var(--color-accent)] hover:bg-[var(--color-accent-light)] text-white text-sm font-semibold rounded-xl transition-colors text-center">
+                    className="block w-full py-3 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-xl transition-colors text-center">
                     {primary.key === "mac" ? "Download TalkPilot for Mac" : "Get TalkPilot on the App Store"}
                 </a>
             )}
@@ -221,13 +221,13 @@ function GetTheAppScreen() {
                 {rows.map(r => (
                     <div key={r.key} className="flex items-center justify-between px-4 py-3">
                         <div>
-                            <p className="text-sm font-medium text-gray-900">{r.label}
+                            <p className="text-sm font-medium text-[var(--color-text)]">{r.label}
                                 {r.key === platform && <span className="ml-2 text-xs text-[var(--color-accent)]">(this device)</span>}
                             </p>
-                            <p className="text-xs text-gray-500">{r.sub}</p>
+                            <p className="text-xs text-[var(--color-text-secondary)]">{r.sub}</p>
                         </div>
                         {r.soon ? (
-                            <span className="text-xs text-gray-400 border border-[var(--color-border)] rounded-full px-2.5 py-1">Soon</span>
+                            <span className="text-xs text-[var(--color-muted)] border border-[var(--color-border)] rounded-full px-2.5 py-1">Soon</span>
                         ) : (
                             <a href={r.href} target="_blank" rel="noopener noreferrer"
                                 className="text-xs font-medium text-[var(--color-accent)] border border-[var(--color-accent)] rounded-lg px-3 py-1.5 hover:bg-teal-50 transition-colors">
@@ -238,12 +238,12 @@ function GetTheAppScreen() {
                 ))}
             </div>
 
-            <p className="text-xs text-gray-400 text-center">
+            <p className="text-xs text-[var(--color-muted)] text-center">
                 Sign in to the app with the same email and password you just used.
             </p>
 
             <div className="text-center">
-                <Link href="/" className="text-xs text-gray-500 hover:text-gray-900 underline underline-offset-2">
+                <Link href="/" className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] underline underline-offset-2">
                     Manager or admin? Open the Command Center instead
                 </Link>
             </div>

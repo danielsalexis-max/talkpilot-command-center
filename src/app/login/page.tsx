@@ -49,10 +49,10 @@ export default function LoginPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                         </svg>
                     </div>
-                    <h1 className="text-2xl font-semibold text-gray-900">
+                    <h1 className="text-2xl font-semibold text-[var(--color-text)]">
                         TalkPilot <span className="text-[var(--color-accent)]">Teams</span>
                     </h1>
-                    <p className="text-sm text-gray-500 mt-1">Command Center</p>
+                    <p className="text-sm text-[var(--color-text-secondary)] mt-1">Command Center</p>
                 </div>
 
                 <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 shadow-sm space-y-4">
@@ -63,7 +63,7 @@ export default function LoginPage() {
                             value={email}
                             onChange={e => setEmail(e.target.value)}
                             required
-                            className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                            className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                         />
                         <input
                             type="password"
@@ -71,7 +71,7 @@ export default function LoginPage() {
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             required
-                            className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                            className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                         />
                         {mode === "signup" && (
                             <input
@@ -80,7 +80,7 @@ export default function LoginPage() {
                                 value={confirm}
                                 onChange={e => setConfirm(e.target.value)}
                                 required
-                                className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                                className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                             />
                         )}
                         {error && <p className="text-xs text-red-600">{error}</p>}
@@ -88,7 +88,7 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full py-2.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-light)] disabled:opacity-40 text-white text-sm font-semibold rounded-lg transition-colors"
+                            className="w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors"
                         >
                             {loading
                                 ? (mode === "signin" ? "Signing in…" : "Creating account…")
@@ -96,7 +96,7 @@ export default function LoginPage() {
                         </button>
                     </form>
 
-                    <p className="text-center text-xs text-gray-500">
+                    <p className="text-center text-xs text-[var(--color-text-secondary)]">
                         {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
                         <button
                             onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); setInfo(null) }}

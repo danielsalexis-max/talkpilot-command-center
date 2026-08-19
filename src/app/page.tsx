@@ -2,31 +2,51 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { supabase, type Scorecard } from "@/lib/supabase"
-import { ScoreBadge } from "@/components/ScoreRing"
 import Link from "next/link"
+import type { Route } from "next"
+import { supabase, type Scorecard } from "@/lib/supabase"
+import { ScoreRing } from "@/components/ScoreRing"
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts"
 
-interface OrgInfo {
-    id: string; name: string; visibility: string; seats_purchased: number; plan: string
+interface OrgInfo { id: string; name: string; visibility: string; seats_purchased: number; plan: string }
+interface MemberInfo { user_id: string; email: string | null; full_name: string | null; status: string }
+interface TrendPoint { week: string; overall: number | null; adherence: number | null }
+
+interface Attention {
+    kind: "breach" | "decline" | "review"
+    title: string
+    sub: string
+    cta: string
+    href: Route
 }
 
-interface TrendPoint {
-    week: string; overall: number | null; adherence: number | null; objection: number | null
+const avgOf = (cards: Scorecard[], field: keyof Scorecard) => {
+    const vals = cards.map(c => c[field] as number | null).filter((v): v is number => v != null)
+    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null
 }
 
-export default function OverviewPage() {
+function memberLabel(m: MemberInfo | undefined) {
+    return m?.full_name || m?.email || "Rep"
+}
+
+function Delta({ value }: { value: number | null }) {
+    if (value == null || value === 0) return <span className="font-mono text-[11px] text-[var(--color-muted)]">—</span>
+    return value > 0
+        ? <span className="font-mono text-[11px] text-emerald-600">▲ {value}</span>
+        : <span className="font-mono text-[11px] text-red-600">▼ {-value}</span>
+}
+
+export default function HomePage() {
     const router = useRouter()
-    const [org, setOrg]             = useState<OrgInfo | null>(null)
-    const [recent, setRecent]       = useState<Scorecard[]>([])
-    const [trend, setTrend]         = useState<TrendPoint[]>([])
-    const [avgScores, setAvgScores] = useState<Record<string, number | null>>({})
-    const [loading, setLoading]     = useState(true)
-    const [error, setError]         = useState<string | null>(null)
+    const [org, setOrg]           = useState<OrgInfo | null>(null)
+    const [cards, setCards]       = useState<Scorecard[]>([])
+    const [members, setMembers]   = useState<MemberInfo[]>([])
+    const [loading, setLoading]   = useState(true)
+    const [error, setError]       = useState<string | null>(null)
 
-    useEffect(() => { load() }, [])
+    useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     async function load() {
         try {
@@ -35,54 +55,19 @@ export default function OverviewPage() {
 
             const { data: orgData } = await supabase.rpc("get_org_context")
             if (!orgData?.org_id) { setError("No org membership found."); setLoading(false); return }
-
             const orgId = orgData.org_id
 
-            const { data: orgInfo } = await supabase.from("organizations")
-                .select("id, name, visibility, seats_purchased, plan")
-                .eq("id", orgId).single()
+            const [{ data: orgInfo }, { data: scorecards }, { data: mems }] = await Promise.all([
+                supabase.from("organizations").select("id, name, visibility, seats_purchased, plan").eq("id", orgId).single(),
+                supabase.from("session_scorecards").select("*")
+                    .eq("org_id", orgId).eq("status", "scored")
+                    .gte("started_at", new Date(Date.now() - 30 * 86400e3).toISOString())
+                    .order("started_at", { ascending: false }).limit(200),
+                supabase.rpc("get_org_members_with_email", { p_org: orgId }),
+            ])
             setOrg(orgInfo)
-
-            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-            const { data: scorecards } = await supabase
-                .from("session_scorecards")
-                .select("*")
-                .eq("org_id", orgId)
-                .eq("status", "scored")
-                .gte("started_at", thirtyDaysAgo)
-                .order("started_at", { ascending: false })
-                .limit(50)
-
-            const cards = (scorecards ?? []) as Scorecard[]
-            setRecent(cards.slice(0, 10))
-
-            const avg = (field: keyof Scorecard) => {
-                const vals = cards.map(c => c[field] as number | null).filter((v): v is number => v != null)
-                return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null
-            }
-            setAvgScores({
-                overall: avg("overall_score"), adherence: avg("adherence_score"),
-                objection: avg("objection_score"), accuracy: avg("accuracy_score"),
-            })
-
-            const weeks: TrendPoint[] = []
-            for (let w = 3; w >= 0; w--) {
-                const start = new Date(Date.now() - (w + 1) * 7 * 24 * 60 * 60 * 1000)
-                const end   = new Date(Date.now() - w * 7 * 24 * 60 * 60 * 1000)
-                const week  = cards.filter(c => {
-                    const d = c.started_at ? new Date(c.started_at) : null
-                    return d && d >= start && d < end
-                })
-                const wAvg = (field: keyof Scorecard) => {
-                    const vals = week.map(c => c[field] as number | null).filter((v): v is number => v != null)
-                    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null
-                }
-                weeks.push({
-                    week: start.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-                    overall: wAvg("overall_score"), adherence: wAvg("adherence_score"), objection: wAvg("objection_score"),
-                })
-            }
-            setTrend(weeks)
+            setCards((scorecards ?? []) as Scorecard[])
+            setMembers(((mems ?? []) as MemberInfo[]).filter(m => m.status === "active" || !m.status))
         } catch (e) {
             setError((e as Error).message)
         } finally {
@@ -90,94 +75,272 @@ export default function OverviewPage() {
         }
     }
 
-    if (loading) return <div className="text-gray-400 text-sm">Loading…</div>
+    if (loading) return <div className="text-sm text-[var(--color-muted)]">Loading…</div>
     if (error)   return <div className="text-red-600 text-sm">{error}</div>
 
+    const byUser = new Map<string, MemberInfo>(members.map(m => [m.user_id, m]))
+    const half = Date.now() - 15 * 86400e3
+    const recentHalf = cards.filter(c => c.started_at && new Date(c.started_at).getTime() >= half)
+    const priorHalf  = cards.filter(c => c.started_at && new Date(c.started_at).getTime() < half)
+    const delta = (field: keyof Scorecard) => {
+        const a = avgOf(recentHalf, field), b = avgOf(priorHalf, field)
+        return a != null && b != null ? a - b : null
+    }
+
+    // ── Attention feed ──
+    const attention: Attention[] = []
+    const breachCard = cards.find(c => (c.guardrail_breaches ?? []).length > 0)
+    if (breachCard) {
+        const b = breachCard.guardrail_breaches[0]
+        attention.push({
+            kind: "breach",
+            title: `Guardrail breach — ${b.rule}`,
+            sub: `${memberLabel(byUser.get(breachCard.user_id))} · ${breachCard.session_title || "scored call"}`,
+            cta: "Review call →", href: `/scorecard/${breachCard.id}` as Route,
+        })
+    }
+    // Biggest adherence decline, recent half vs prior half, min 2 calls each side.
+    let decline: { user: string; drop: number } | null = null
+    for (const m of members) {
+        const a = avgOf(recentHalf.filter(c => c.user_id === m.user_id), "adherence_score")
+        const b = avgOf(priorHalf.filter(c => c.user_id === m.user_id), "adherence_score")
+        const nA = recentHalf.filter(c => c.user_id === m.user_id).length
+        const nB = priorHalf.filter(c => c.user_id === m.user_id).length
+        if (a != null && b != null && nA >= 2 && nB >= 2 && b - a >= 8 && (!decline || b - a > decline.drop)) {
+            decline = { user: m.user_id, drop: b - a }
+        }
+    }
+    if (decline) {
+        attention.push({
+            kind: "decline",
+            title: `${memberLabel(byUser.get(decline.user))}’s adherence fell ${decline.drop} pts`,
+            sub: "Compared with the two weeks before",
+            cta: "Open rep profile →", href: `/team/${decline.user}` as Route,
+        })
+    }
+    const reviewable = cards.filter(c =>
+        (c.guardrail_breaches ?? []).length > 0 || (c.adherence_score != null && c.adherence_score < 60))
+    if (reviewable.length > 0) {
+        attention.push({
+            kind: "review",
+            title: `${reviewable.length} call${reviewable.length === 1 ? "" : "s"} worth a coaching review`,
+            sub: "Breaches and low-adherence calls from the last 30 days",
+            cta: "Open review queue →", href: "/coaching",
+        })
+    }
+
+    // ── Trend (all 30d rows — the old page computed this from a 50-row slice) ──
+    const trend: TrendPoint[] = []
+    for (let w = 3; w >= 0; w--) {
+        const start = Date.now() - (w + 1) * 7 * 86400e3
+        const end   = Date.now() - w * 7 * 86400e3
+        const week  = cards.filter(c => {
+            const t = c.started_at ? new Date(c.started_at).getTime() : null
+            return t != null && t >= start && t < end
+        })
+        trend.push({
+            week: new Date(start).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            overall: avgOf(week, "overall_score"),
+            adherence: avgOf(week, "adherence_score"),
+        })
+    }
+
+    // ── Leaderboard ──
+    const leaderboard = members
+        .map(m => {
+            const mine = cards.filter(c => c.user_id === m.user_id)
+            return { m, n: mine.length, score: avgOf(mine, "overall_score") }
+        })
+        .filter(r => r.score != null)
+        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+        .slice(0, 5)
+
+    const activeMembers = members.length
+    const sessionsPerRepWeek = activeMembers ? Math.round((cards.length / activeMembers / (30 / 7)) * 10) / 10 : 0
+
+    const kpis: { label: string; field: keyof Scorecard }[] = [
+        { label: "Overall",    field: "overall_score"   },
+        { label: "Adherence",  field: "adherence_score" },
+        { label: "Objections", field: "objection_score" },
+        { label: "Accuracy",   field: "accuracy_score"  },
+    ]
+
+    const attnStyle: Record<Attention["kind"], string> = {
+        breach:  "border-l-red-500",
+        decline: "border-l-amber-400",
+        review:  "border-l-[var(--color-accent-light)]",
+    }
+    const attnPill: Record<Attention["kind"], { label: string; cls: string }> = {
+        breach:  { label: "CRITICAL",      cls: "bg-red-50 text-red-700" },
+        decline: { label: "TRENDING DOWN", cls: "bg-amber-50 text-amber-700" },
+        review:  { label: "COACHING",      cls: "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)]" },
+    }
+
     return (
-        <div className="space-y-8">
+        <div className="space-y-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-semibold text-gray-900">{org?.name}</h1>
-                    <p className="text-sm text-gray-500 mt-1 capitalize">
-                        {org?.plan} plan · {org?.seats_purchased} seats · {org?.visibility?.replace("_", " ")} visibility
+                    <h1 className="text-2xl font-bold text-[var(--color-text)]">{org?.name}</h1>
+                    <p className="text-sm text-[var(--color-text-secondary)] mt-1 capitalize">
+                        {org?.plan} plan · {org?.seats_purchased} seats · {org?.visibility?.replace(/_/g, " ")} visibility
                     </p>
                 </div>
-                <Link href="/team" className="text-sm text-[var(--color-accent)] hover:text-[var(--color-accent-light)] transition-colors font-medium">
-                    View team →
+                <Link href="/settings?tab=members"
+                    className="px-4 py-2 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors">
+                    Invite reps
                 </Link>
             </div>
 
-            {/* Score tiles */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                {[
-                    { label: "Overall",    key: "overall"   },
-                    { label: "Adherence",  key: "adherence" },
-                    { label: "Objections", key: "objection" },
-                    { label: "Accuracy",   key: "accuracy"  },
-                ].map(({ label, key }) => (
-                    <div key={key} className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 flex flex-col items-center gap-3 shadow-sm">
-                        <ScoreBadge label={label} score={avgScores[key] ?? null} />
-                        <span className="text-xs text-gray-400">30-day avg</span>
-                    </div>
-                ))}
-            </div>
-
-            {/* Trend chart */}
-            {trend.some(t => t.overall != null) && (
-                <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-6 shadow-sm">
-                    <h2 className="text-sm font-semibold text-gray-900 mb-4">Score trend — last 4 weeks</h2>
-                    <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={trend} margin={{ left: -20 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                            <XAxis dataKey="week" tick={{ fontSize: 11, fill: "#9CA3AF" }} />
-                            <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#9CA3AF" }} />
-                            <Tooltip
-                                contentStyle={{ background: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 8, boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
-                                labelStyle={{ color: "#111827", fontSize: 12, fontWeight: 600 }}
-                                itemStyle={{ fontSize: 12, color: "#4B5563" }}
-                            />
-                            <Line type="monotone" dataKey="overall"   stroke="#0C9482" strokeWidth={2} dot={false} name="Overall"    />
-                            <Line type="monotone" dataKey="adherence" stroke="#10b981" strokeWidth={2} dot={false} name="Adherence"  />
-                            <Line type="monotone" dataKey="objection" stroke="#f59e0b" strokeWidth={2} dot={false} name="Objections" />
-                        </LineChart>
-                    </ResponsiveContainer>
+            {/* Attention feed */}
+            {attention.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {attention.map(a => (
+                        <Link key={a.kind} href={a.href}
+                            className={`bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] border-l-[3px] ${attnStyle[a.kind]} p-4 shadow-sm hover:shadow transition-shadow block`}>
+                            <span className={`inline-block font-mono text-[10px] tracking-wide px-2 py-0.5 rounded-full ${attnPill[a.kind].cls}`}>{attnPill[a.kind].label}</span>
+                            <p className="text-[13px] font-semibold text-[var(--color-text)] mt-2 leading-snug">{a.title}</p>
+                            <p className="text-xs text-[var(--color-text-secondary)] mt-1">{a.sub}</p>
+                            <p className="text-xs font-semibold text-[var(--color-accent-deep)] mt-2">{a.cta}</p>
+                        </Link>
+                    ))}
                 </div>
             )}
 
-            {/* Recent sessions */}
-            <div>
-                <h2 className="text-sm font-semibold text-gray-900 mb-3">Recent sessions</h2>
-                <div className="space-y-2">
-                    {recent.length === 0 && (
-                        <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] px-6 py-8 text-center shadow-sm">
-                            <p className="text-sm text-gray-500">No scored sessions in the last 30 days.</p>
-                            <p className="text-xs text-gray-400 mt-1">Sessions appear here after calls are scored by the AI pipeline.</p>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
+                <div className="space-y-4 min-w-0">
+                    {/* KPI tiles */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {kpis.map(k => (
+                            <div key={k.field} className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-4 shadow-sm">
+                                <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)]">{k.label}</p>
+                                <div className="flex items-baseline gap-2 mt-1">
+                                    <span className="font-mono text-2xl text-[var(--color-text)]">{avgOf(cards, k.field) ?? "—"}</span>
+                                    <Delta value={delta(k.field)} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Trend */}
+                    {trend.some(t => t.overall != null) && (
+                        <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-sm font-semibold text-[var(--color-text)]">Score trend — last 4 weeks</h2>
+                                <div className="flex items-center gap-3 text-[11px] text-[var(--color-text-secondary)]">
+                                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0C9482]" />Overall</span>
+                                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#E69F19]" />Adherence</span>
+                                </div>
+                            </div>
+                            <div className="text-[var(--color-muted)] mt-3">
+                                <ResponsiveContainer width="100%" height={200}>
+                                    <LineChart data={trend} margin={{ left: -20 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.18} />
+                                        <XAxis dataKey="week" tick={{ fontSize: 11, fill: "currentColor" }} stroke="currentColor" strokeOpacity={0.25} />
+                                        <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "currentColor" }} stroke="currentColor" strokeOpacity={0.25} />
+                                        <Tooltip
+                                            contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8 }}
+                                            labelStyle={{ color: "var(--color-text)", fontSize: 12, fontWeight: 600 }}
+                                            itemStyle={{ fontSize: 12 }}
+                                        />
+                                        <Line type="monotone" dataKey="overall"   stroke="#0C9482" strokeWidth={2.5} dot={{ r: 3 }} connectNulls name="Overall"   />
+                                        <Line type="monotone" dataKey="adherence" stroke="#E69F19" strokeWidth={2}   dot={{ r: 2.5 }} connectNulls name="Adherence" />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
                         </div>
                     )}
-                    {recent.map(card => (
-                        <Link
-                            key={card.id}
-                            href={`/scorecard/${card.id}`}
-                            className="flex flex-wrap items-center justify-between gap-3 bg-[var(--color-surface)] hover:bg-gray-50 transition-colors rounded-xl border border-[var(--color-border)] px-4 py-3 shadow-sm"
-                        >
-                            <div className="flex flex-col min-w-0">
-                                <span className="text-sm text-gray-900 font-medium truncate">
-                                    {card.started_at
-                                        ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
-                                        : "Unknown time"}
-                                </span>
-                                <span className="text-xs text-gray-400">
-                                    {card.duration_minutes ? `${card.duration_minutes} min` : "—"} · {card.session_source === "plus_conversations" ? "iOS" : "macOS"}
-                                </span>
+
+                    {/* Recent calls */}
+                    <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
+                            <h2 className="text-sm font-semibold text-[var(--color-text)]">Recent calls</h2>
+                            <Link href="/calls" className="text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">All calls →</Link>
+                        </div>
+                        {cards.length === 0 && (
+                            <div className="py-8 text-center">
+                                <p className="text-sm text-[var(--color-text-secondary)]">No scored sessions in the last 30 days.</p>
+                                <p className="text-xs text-[var(--color-muted)] mt-1">Sessions appear here after calls are scored by the AI pipeline.</p>
                             </div>
-                            <div className="flex items-center gap-6 shrink-0">
-                                <ScoreBadge label="Overall" score={card.overall_score} />
-                                <svg className="w-4 h-4 text-gray-300 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
+                        )}
+                        <div className="divide-y divide-[var(--color-line-soft)]">
+                            {cards.slice(0, 6).map(c => (
+                                <Link key={c.id} href={`/scorecard/${c.id}`}
+                                    className="flex items-center justify-between gap-3 py-2.5 hover:bg-[var(--color-hover)] -mx-2 px-2 rounded-lg transition-colors">
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium text-[var(--color-text)] truncate">
+                                            {c.session_title || (c.started_at ? new Date(c.started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Scored call")}
+                                        </p>
+                                        <p className="text-xs text-[var(--color-muted)]">
+                                            {memberLabel(byUser.get(c.user_id))}
+                                            {c.started_at ? ` · ${new Date(c.started_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}
+                                            {c.duration_minutes ? ` · ${c.duration_minutes} min` : ""}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        {(c.guardrail_breaches ?? []).length > 0 &&
+                                            <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700">BREACH</span>}
+                                        <ScoreRing score={c.overall_score} />
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Right rail */}
+                <div className="space-y-4">
+                    <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
+                        <h2 className="text-sm font-semibold text-[var(--color-text)]">Adoption</h2>
+                        <div className="space-y-3 mt-3">
+                            <div>
+                                <div className="flex justify-between text-xs text-[var(--color-text-secondary)]">
+                                    <span>Active seats</span>
+                                    <span className="font-mono text-[var(--color-text)]">{activeMembers} / {org?.seats_purchased ?? "—"}</span>
+                                </div>
+                                <div className="h-1.5 bg-[var(--color-line-soft)] rounded-full mt-1.5">
+                                    <div className="h-full bg-[var(--color-accent)] rounded-full"
+                                        style={{ width: `${Math.min(100, org?.seats_purchased ? (activeMembers / org.seats_purchased) * 100 : 0)}%` }} />
+                                </div>
                             </div>
-                        </Link>
-                    ))}
+                            <div>
+                                <div className="flex justify-between text-xs text-[var(--color-text-secondary)]">
+                                    <span>Sessions per rep · week</span>
+                                    <span className="font-mono text-[var(--color-text)]">{sessionsPerRepWeek}</span>
+                                </div>
+                                <div className="h-1.5 bg-[var(--color-line-soft)] rounded-full mt-1.5">
+                                    <div className="h-full bg-[var(--color-accent-light)] rounded-full"
+                                        style={{ width: `${Math.min(100, sessionsPerRepWeek * 12)}%` }} />
+                                </div>
+                            </div>
+                            <div className="flex justify-between text-xs text-[var(--color-text-secondary)]">
+                                <span>Scored calls · 30 days</span>
+                                <span className="font-mono text-[var(--color-text)]">{cards.length}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
+                            <h2 className="text-sm font-semibold text-[var(--color-text)]">Leaderboard</h2>
+                            <Link href="/team" className="text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">All reps →</Link>
+                        </div>
+                        {leaderboard.length === 0 && <p className="text-xs text-[var(--color-muted)]">Scores appear once calls are graded.</p>}
+                        <div className="space-y-2.5">
+                            {leaderboard.map((r, i) => (
+                                <Link key={r.m.user_id} href={`/team/${r.m.user_id}`} className="flex items-center gap-2.5 group">
+                                    <span className="font-mono text-[11px] text-[var(--color-muted)] w-3.5">{i + 1}</span>
+                                    <span className="w-7 h-7 rounded-full bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] text-[10px] font-semibold flex items-center justify-center shrink-0">
+                                        {memberLabel(r.m).split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                                    </span>
+                                    <span className="text-[13px] font-medium text-[var(--color-text)] truncate group-hover:text-[var(--color-accent-deep)]">
+                                        {memberLabel(r.m)}
+                                        <span className="block text-[10.5px] font-normal text-[var(--color-muted)]">{r.n} calls</span>
+                                    </span>
+                                    <span className="font-mono text-sm ml-auto text-[var(--color-text)]">{r.score}</span>
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

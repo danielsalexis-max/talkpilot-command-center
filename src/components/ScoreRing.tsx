@@ -1,6 +1,6 @@
 export function ScoreRing({ score, size = "md" }: { score: number | null; size?: "sm" | "md" | "lg" }) {
     const cls = score == null
-        ? "bg-gray-100 text-gray-400"
+        ? "bg-[var(--color-line-soft)] text-[var(--color-muted)]"
         : score >= 80 ? "bg-emerald-100 text-emerald-700"
         : score >= 60 ? "bg-teal-100 text-teal-700"
         : score >= 40 ? "bg-amber-100 text-amber-700"
@@ -19,7 +19,7 @@ export function ScoreBadge({ label, score }: { label: string; score: number | nu
     return (
         <div className="flex flex-col items-center gap-1">
             <ScoreRing score={score} />
-            <span className="text-xs text-gray-500">{label}</span>
+            <span className="text-xs text-[var(--color-text-secondary)]">{label}</span>
         </div>
     )
 }
@@ -42,7 +42,7 @@ export function GradePill({ grade }: { grade: "excellent" | "adequate" | "off_sc
 export function VerdictPill({ verdict }: { verdict: "verified" | "unverifiable" | "contradicts" }) {
     const styles = {
         verified:     "bg-emerald-50 text-emerald-700 border-emerald-200",
-        unverifiable: "bg-gray-50 text-gray-500 border-gray-200",
+        unverifiable: "bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-[var(--color-border)]",
         contradicts:  "bg-red-50 text-red-700 border-red-200",
     }
     const labels = { verified: "Verified", unverifiable: "Unverifiable", contradicts: "Contradicts" }

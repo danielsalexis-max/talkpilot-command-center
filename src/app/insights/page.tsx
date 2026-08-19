@@ -31,6 +31,8 @@ export default function InsightsPage() {
 
     async function load() {
         try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) { window.location.replace("/login"); return }
             const { data: ctx } = await supabase.rpc("get_org_context")
             if (!ctx?.org_id) { setLoading(false); return }
             const orgId = ctx.org_id
@@ -103,26 +105,26 @@ export default function InsightsPage() {
         }
     }
 
-    if (loading) return <div className="text-gray-400 text-sm">Loading…</div>
+    if (loading) return <div className="text-[var(--color-muted)] text-sm">Loading…</div>
 
     const totalClaims = claimSummary.reduce((a, b) => a + b.count, 0)
 
     return (
         <div className="space-y-8">
-            <h1 className="text-2xl font-semibold text-gray-900">Insights</h1>
+            <h1 className="text-2xl font-semibold text-[var(--color-text)]">Insights</h1>
 
             {/* Claim accuracy */}
             {totalClaims > 0 && (
                 <div>
-                    <h2 className="text-sm font-semibold text-gray-900 mb-3">Factual accuracy — 30 days ({totalClaims} claims)</h2>
+                    <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">Factual accuracy — 30 days ({totalClaims} claims)</h2>
                     <div className="flex flex-wrap gap-3">
                         {claimSummary.map(c => (
                             <div key={c.verdict} className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 flex flex-col items-center gap-2 min-w-[100px] flex-1 sm:flex-none sm:min-w-[120px] shadow-sm">
-                                <span className="text-2xl font-semibold text-gray-900">
+                                <span className="text-2xl font-semibold text-[var(--color-text)]">
                                     {Math.round((c.count / totalClaims) * 100)}%
                                 </span>
                                 <VerdictPill verdict={c.verdict} />
-                                <span className="text-xs text-gray-400">{c.count} claims</span>
+                                <span className="text-xs text-[var(--color-muted)]">{c.count} claims</span>
                             </div>
                         ))}
                     </div>
@@ -132,16 +134,16 @@ export default function InsightsPage() {
             {/* Objection patterns */}
             {objectionPatterns.length > 0 && (
                 <div>
-                    <h2 className="text-sm font-semibold text-gray-900 mb-3">Objection patterns — 30 days</h2>
+                    <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">Objection patterns — 30 days</h2>
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] divide-y divide-[var(--color-border)] shadow-sm">
                         {objectionPatterns.map((o, i) => (
                             <div key={i} className="flex items-center justify-between px-4 py-3 gap-4">
-                                <p className="text-sm text-gray-700 flex-1 min-w-0 truncate">
+                                <p className="text-sm text-[var(--color-text-secondary)] flex-1 min-w-0 truncate">
                                     &ldquo;{o.objection_text.slice(0, 80)}&rdquo;
                                 </p>
                                 <div className="flex items-center gap-3 flex-shrink-0">
                                     <GradePill grade={o.grade} />
-                                    <span className="text-xs text-gray-400 tabular-nums w-8 text-right">×{o.count}</span>
+                                    <span className="text-xs text-[var(--color-muted)] tabular-nums w-8 text-right">×{o.count}</span>
                                 </div>
                             </div>
                         ))}
@@ -152,11 +154,11 @@ export default function InsightsPage() {
             {/* Digests */}
             <div>
                 <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-semibold text-gray-900">Weekly digests</h2>
+                    <h2 className="text-sm font-semibold text-[var(--color-text)]">Weekly digests</h2>
                     <button
                         onClick={generateDigest}
                         disabled={generating}
-                        className="text-xs px-3 py-1.5 bg-[var(--color-accent)] hover:bg-[var(--color-accent-light)] disabled:opacity-40 text-white rounded-lg transition-colors font-medium"
+                        className="text-xs px-3 py-1.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] rounded-lg transition-colors font-medium"
                     >
                         {generating ? "Generating…" : "Generate now"}
                     </button>
@@ -164,8 +166,8 @@ export default function InsightsPage() {
 
                 {digests.length === 0 && (
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] px-6 py-8 text-center shadow-sm">
-                        <p className="text-sm text-gray-500">No digests yet.</p>
-                        <p className="text-xs text-gray-400 mt-1">Click &ldquo;Generate now&rdquo; to create the first one, or wait for the weekly cron.</p>
+                        <p className="text-sm text-[var(--color-text-secondary)]">No digests yet.</p>
+                        <p className="text-xs text-[var(--color-muted)] mt-1">Click &ldquo;Generate now&rdquo; to create the first one, or wait for the weekly cron.</p>
                     </div>
                 )}
 
@@ -173,16 +175,16 @@ export default function InsightsPage() {
                     {digests.map(d => (
                         <div key={d.id} className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
                             <div className="flex items-center justify-between mb-3">
-                                <span className="text-sm font-semibold text-gray-900">
+                                <span className="text-sm font-semibold text-[var(--color-text)]">
                                     {new Date(d.period_start + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                                     {" – "}
                                     {new Date(d.period_end + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
                                 </span>
-                                <span className="text-xs text-gray-400">
+                                <span className="text-xs text-[var(--color-muted)]">
                                     {(d.stats as Record<string, number>)?.session_count ?? 0} sessions
                                 </span>
                             </div>
-                            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{d.summary}</p>
+                            <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed whitespace-pre-wrap">{d.summary}</p>
                         </div>
                     ))}
                 </div>

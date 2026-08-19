@@ -39,6 +39,8 @@ export default function TeamPage() {
 
     async function load() {
         try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) { window.location.replace("/login"); return }
             const { data: ctx } = await supabase.rpc("get_org_context")
             if (!ctx?.org_id) { setLoading(false); return }
 
@@ -123,13 +125,13 @@ export default function TeamPage() {
     const ColHeader = ({ field, label, className = "" }: { field: keyof TeamStats; label: string; className?: string }) => (
         <button
             onClick={() => { if (sortKey === field) setSortDesc(!sortDesc); else { setSortKey(field); setSortDesc(true) } }}
-            className={`text-xs font-medium text-center whitespace-nowrap justify-self-center transition-colors ${className} ${sortKey === field ? "text-[var(--color-accent)]" : "text-gray-400 hover:text-gray-700"}`}
+            className={`text-xs font-medium text-center whitespace-nowrap justify-self-center transition-colors ${className} ${sortKey === field ? "text-[var(--color-accent)]" : "text-[var(--color-muted)] hover:text-[var(--color-text)]"}`}
         >
             {label}{sortKey === field ? (sortDesc ? " ↓" : " ↑") : ""}
         </button>
     )
 
-    if (loading) return <div className="text-gray-400 text-sm">Loading…</div>
+    if (loading) return <div className="text-[var(--color-muted)] text-sm">Loading…</div>
 
     // Rep + Sessions + Overall always show; Adherence/Objections/Accuracy are
     // reachable on a rep's own page, so they're progressively revealed as
@@ -140,8 +142,8 @@ export default function TeamPage() {
         <div className="space-y-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-semibold text-gray-900">Team</h1>
-                    <p className="text-sm text-gray-500 mt-1">30-day performance averages. Click a rep to see their full scorecard history.</p>
+                    <h1 className="text-2xl font-semibold text-[var(--color-text)]">Team</h1>
+                    <p className="text-sm text-[var(--color-text-secondary)] mt-1">30-day performance averages. Click a rep to see their full scorecard history.</p>
                 </div>
                 <SearchBox value={query} onChange={setQuery} placeholder="Search reps…" />
             </div>
@@ -157,7 +159,7 @@ export default function TeamPage() {
 
             <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] overflow-hidden shadow-sm overflow-x-auto">
                 <div className={`grid ${gridCols} items-center gap-2 px-4 py-2.5 border-b border-[var(--color-border)] bg-[var(--color-bg)] min-w-[360px]`}>
-                    <span className="text-xs font-medium text-gray-500">Rep</span>
+                    <span className="text-xs font-medium text-[var(--color-text-secondary)]">Rep</span>
                     <ColHeader field="session_count" label="Sessions"   />
                     <ColHeader field="avg_overall"   label="Overall"    />
                     <ColHeader field="avg_adherence" label="Adherence"  className="hidden sm:block" />
@@ -166,7 +168,7 @@ export default function TeamPage() {
                     <span />
                 </div>
                 {sorted.length === 0 && (
-                    <div className="px-4 py-8 text-sm text-gray-500 text-center">
+                    <div className="px-4 py-8 text-sm text-[var(--color-text-secondary)] text-center">
                         {q ? `No reps match “${query}”.` : "No active members with scored sessions."}
                     </div>
                 )}
@@ -174,20 +176,20 @@ export default function TeamPage() {
                     <Link
                         key={m.user_id}
                         href={`/team/${m.user_id}`}
-                        className={`grid ${gridCols} items-center gap-2 px-4 py-3 border-b border-[var(--color-border)] hover:bg-gray-50 transition-colors last:border-0 min-w-[360px]`}
+                        className={`grid ${gridCols} items-center gap-2 px-4 py-3 border-b border-[var(--color-border)] hover:bg-[var(--color-hover)] transition-colors last:border-0 min-w-[360px]`}
                     >
                         <div className="flex flex-col min-w-0">
-                            <span className="text-sm text-gray-900 font-medium truncate">
+                            <span className="text-sm text-[var(--color-text)] font-medium truncate">
                                 {m.user_name ?? m.user_email ?? m.user_id.slice(0, 8) + "…"}
                             </span>
-                            {m.team_name && <span className="text-xs text-gray-400">{m.team_name}</span>}
+                            {m.team_name && <span className="text-xs text-[var(--color-muted)]">{m.team_name}</span>}
                         </div>
-                        <span className="text-sm text-gray-500 text-center tabular-nums justify-self-center">{m.session_count}</span>
+                        <span className="text-sm text-[var(--color-text-secondary)] text-center tabular-nums justify-self-center">{m.session_count}</span>
                         <div className="justify-self-center"><ScoreRing score={m.avg_overall}   size="sm" /></div>
                         <div className="hidden sm:block justify-self-center"><ScoreRing score={m.avg_adherence} size="sm" /></div>
                         <div className="hidden md:block justify-self-center"><ScoreRing score={m.avg_objection} size="sm" /></div>
                         <div className="hidden md:block justify-self-center"><ScoreRing score={m.avg_accuracy}  size="sm" /></div>
-                        <svg className="w-4 h-4 text-gray-300 justify-self-center" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-4 h-4 text-[var(--color-muted)] justify-self-center" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                     </Link>
