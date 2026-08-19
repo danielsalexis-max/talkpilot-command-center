@@ -1,0 +1,1095 @@
+<title>TalkPilot Teams Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@600;700;800&family=Inter:wght@400;500;600&family=Azeret+Mono:wght@400;500&display=swap">
+<style>
+  body {
+    --canvas: #F6FAF8; --card: #FFFFFF; --line: #E2EBE7; --line-soft: #EDF5F1;
+    --ink: #0E182B; --ink2: #46536A; --muted: #5A6B7D;
+    --teal: #0C9482; --deep: #076B5E; --mint: #3EA48F; --seafoam: #EDF5F1; --seafoam-2: #C6E5DC;
+    --ok: #1E7A34; --ok-bg: #EAF7EE; --warn: #E69F19; --warn-ink: #8A5A06; --warn-bg: #FCF3E1;
+    --bad: #DE4444; --bad-ink: #B93636; --bad-bg: #FCEAEA; --bad-border: #F2C6C6;
+    --btn-bg: #076B5E; --btn-hover: #054F45; --btn-ink: #FFFFFF;
+    --toast-bg: #0E182B; --toast-ink: #F6FAF8; --upload-bg: rgba(237,245,241,0.5);
+  }
+  body[data-skin="dark"] {
+    --canvas: #0A1220; --card: #0E182B; --line: #24344D; --line-soft: #1A2436;
+    --ink: #EDF2F1; --ink2: #B4C0C9; --muted: #94A2AB;
+    --teal: #2FB39E; --deep: #9CD9C6; --mint: #3EA48F; --seafoam: #1A2B41; --seafoam-2: #2A4A40;
+    --ok: #6FCB84; --ok-bg: #14311F; --warn: #E69F19; --warn-ink: #E8B75B; --warn-bg: #37290D;
+    --bad: #DE4444; --bad-ink: #F08A8A; --bad-bg: #3A1818; --bad-border: #5A2A2A;
+    --btn-bg: #3EA48F; --btn-hover: #4FB8A2; --btn-ink: #0A1220;
+    --toast-bg: #EDF2F1; --toast-ink: #0E182B; --upload-bg: rgba(26,43,65,0.5);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--canvas); color: var(--ink); font-family: "Inter", -apple-system, sans-serif; font-size: 14px; line-height: 1.5; }
+  .hg { font-family: "Hanken Grotesk", "Inter", sans-serif; }
+  .mono { font-family: "Azeret Mono", monospace; font-variant-numeric: tabular-nums; }
+  a { color: var(--deep); }
+  button { font: inherit; cursor: pointer; background: none; border: none; color: inherit; padding: 0; }
+  button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; border-radius: 6px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+  .app { display: flex; min-height: 100vh; }
+
+  /* ── Sidebar ── */
+  .sidebar { width: 232px; flex-shrink: 0; background: var(--card); border-right: 1px solid var(--line); padding: 20px 14px; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+  .logo-row { display: flex; align-items: center; gap: 10px; padding: 0 8px 18px; }
+  .logo-tile { width: 34px; height: 34px; background: var(--teal); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .logo-name { font-family: "Hanken Grotesk", sans-serif; font-size: 15px; font-weight: 700; line-height: 1.1; }
+  .logo-name span { color: var(--teal); }
+  .logo-org { font-size: 11px; color: var(--muted); }
+  .nav { display: flex; flex-direction: column; gap: 3px; }
+  .navitem { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 9px; font-size: 13.5px; font-weight: 500; color: var(--ink2); width: 100%; text-align: left; }
+  .navitem svg { stroke: var(--muted); flex-shrink: 0; }
+  .navitem:hover { background: var(--canvas); }
+  .navitem.active { background: var(--seafoam); color: var(--deep); font-weight: 600; }
+  .navitem.active svg { stroke: var(--teal); }
+  .nav-badge { margin-left: auto; font-family: "Azeret Mono", monospace; font-size: 10px; padding: 2px 8px; border-radius: 99px; background: var(--bad-bg); color: var(--bad-ink); }
+  .side-footer { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+  .trust-card { display: flex; align-items: flex-start; gap: 8px; background: var(--seafoam); border-radius: 10px; padding: 9px 11px; }
+  .trust-card svg { flex-shrink: 0; margin-top: 1px; }
+  .trust-card div { font-size: 10.5px; color: var(--deep); line-height: 1.35; }
+  .user-row { display: flex; align-items: center; gap: 9px; padding: 4px 8px; }
+  .avatar { width: 28px; height: 28px; border-radius: 99px; background: var(--seafoam-2); color: var(--deep); font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .avatar.lg { width: 52px; height: 52px; font-size: 18px; font-family: "Hanken Grotesk", sans-serif; }
+
+  /* ── Main ── */
+  .main { flex: 1; min-width: 0; padding: 26px 30px 60px; }
+  .view { display: none; max-width: 1180px; margin: 0 auto; }
+  .view.active { display: block; }
+  .page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+  h1 { font-family: "Hanken Grotesk", sans-serif; font-size: 23px; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
+  .page-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .head-actions { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .crumb { font-size: 11.5px; color: var(--muted); margin-bottom: 12px; }
+  .crumb button { color: var(--deep); font-weight: 500; }
+  .crumb button:hover { text-decoration: underline; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+  .card-pad { padding: 16px 18px; }
+  .card-title { font-family: "Hanken Grotesk", sans-serif; font-size: 14px; font-weight: 700; }
+  .card-head { display: flex; align-items: center; gap: 10px; }
+  .link-btn { font-size: 11.5px; color: var(--deep); font-weight: 600; }
+  .link-btn:hover { text-decoration: underline; }
+
+  .btn { border-radius: 9px; padding: 8px 15px; font-size: 12.5px; font-weight: 600; }
+  .btn-primary { background: var(--btn-bg); color: var(--btn-ink); }
+  .btn-primary:hover { background: var(--btn-hover); }
+  .btn-ghost { background: var(--seafoam); color: var(--deep); border: 1px solid var(--seafoam-2); }
+  .btn-ghost:hover { background: var(--seafoam-2); }
+  .btn-danger { background: none; color: var(--bad-ink); border: 1px solid var(--bad-border); padding: 5px 11px; font-size: 11.5px; border-radius: 8px; }
+
+  .pill { display: inline-flex; align-items: center; font-family: "Azeret Mono", monospace; font-size: 10px; padding: 2px 9px; border-radius: 99px; letter-spacing: 0.03em; white-space: nowrap; }
+  .pill-ok { background: var(--ok-bg); color: var(--ok); }
+  .pill-warn { background: var(--warn-bg); color: var(--warn-ink); }
+  .pill-bad { background: var(--bad-bg); color: var(--bad-ink); }
+  .pill-teal { background: var(--seafoam); color: var(--deep); }
+  .pill-gray { background: var(--line-soft); color: var(--ink2); }
+
+  .grid { display: grid; gap: 14px; }
+  .cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .split { display: grid; grid-template-columns: 1fr 340px; gap: 14px; align-items: start; }
+  @media (max-width: 1080px) { .split { grid-template-columns: 1fr; } .cols-4 { grid-template-columns: repeat(2, minmax(0,1fr)); } .cols-3 { grid-template-columns: 1fr; } }
+
+  .kpi { padding: 14px 16px; }
+  .kpi-label { font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+  .kpi-num { display: flex; align-items: baseline; gap: 8px; margin-top: 4px; }
+  .kpi-num .mono { font-size: 26px; }
+  .delta { font-family: "Azeret Mono", monospace; font-size: 11px; }
+  .up { color: var(--ok); } .down { color: var(--bad-ink); } .flat { color: var(--muted); }
+
+  .attn { padding: 14px 16px; border-left-width: 3px; border-left-style: solid; display: block; width: 100%; text-align: left; }
+  .attn:hover { box-shadow: 0 2px 10px rgba(14,24,43,0.06); }
+  .attn-meta { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); }
+  .attn-title { font-size: 13px; font-weight: 600; margin-top: 7px; }
+  .attn-sub { font-size: 12px; color: var(--ink2); margin-top: 3px; }
+  .attn-cta { font-size: 12px; color: var(--deep); font-weight: 600; margin-top: 8px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th { text-align: left; font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 0 10px 8px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 10px 10px 10px 0; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  tr.rowlink { cursor: pointer; }
+  tr.rowlink:hover td { background: var(--canvas); }
+  .tblwrap { overflow-x: auto; }
+
+  .score-ring { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 99px; font-family: "Azeret Mono", monospace; font-size: 12px; }
+  .sr-good { background: var(--ok-bg); color: var(--ok); }
+  .sr-mid { background: var(--warn-bg); color: var(--warn-ink); }
+  .sr-poor { background: var(--bad-bg); color: var(--bad-ink); }
+  .sr-none { background: var(--line-soft); color: var(--muted); }
+
+  input[type="text"], input[type="search"], input[type="email"], select, textarea { background: var(--canvas); border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; font: inherit; font-size: 12.5px; color: var(--ink); width: 100%; }
+  input::placeholder, textarea::placeholder { color: var(--muted); }
+  .search { max-width: 260px; }
+  .chips { display: flex; gap: 7px; flex-wrap: wrap; }
+  .chip { font-size: 11.5px; font-weight: 500; padding: 5px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--card); color: var(--ink2); }
+  .chip.active { background: var(--seafoam); border-color: var(--seafoam-2); color: var(--deep); font-weight: 600; }
+
+  .subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 18px; overflow-x: auto; }
+  .subtab { padding: 9px 14px; font-size: 13px; font-weight: 500; color: var(--ink2); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+  .subtab.active { color: var(--deep); font-weight: 600; border-bottom-color: var(--teal); }
+
+  .bar { height: 6px; background: var(--line-soft); border-radius: 99px; overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 99px; background: var(--teal); }
+
+  .focus-card { background: var(--seafoam); border-radius: 10px; padding: 10px 12px; }
+  .focus-title { display: flex; align-items: center; font-size: 12.5px; font-weight: 600; color: var(--deep); gap: 8px; }
+  .focus-note { font-size: 10.5px; color: var(--ink2); margin-top: 5px; }
+
+  .bubble { max-width: 85%; border-radius: 14px; padding: 9px 13px; font-size: 12.5px; }
+  .bubble .ts { font-family: "Azeret Mono", monospace; font-size: 9.5px; color: var(--muted); margin-top: 4px; }
+  .bubble-them { align-self: flex-start; background: var(--canvas); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .bubble-rep { align-self: flex-end; background: var(--seafoam); border: 1px solid var(--seafoam-2); border-bottom-right-radius: 4px; }
+  .bubble-flag { align-self: flex-end; background: var(--bad-bg); border: 1px solid var(--bad-border); border-bottom-right-radius: 4px; }
+
+  .note { display: flex; gap: 9px; }
+  .note-body { background: var(--canvas); border-radius: 10px; padding: 8px 11px; font-size: 12px; flex: 1; }
+  .note-meta { font-family: "Azeret Mono", monospace; font-size: 9.5px; color: var(--muted); margin-top: 4px; }
+
+  .empty { text-align: center; padding: 34px 20px; color: var(--muted); font-size: 12.5px; }
+  .empty .hg { font-size: 14px; font-weight: 700; color: var(--ink2); margin-bottom: 4px; }
+
+  .upload-zone { border: 2px dashed var(--mint); background: var(--upload-bg); border-radius: 14px; padding: 30px; text-align: center; }
+  .upload-tile { width: 44px; height: 44px; border-radius: 12px; background: var(--teal); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+
+  .stage { padding-top: 2px; }
+  .stage-bar { height: 4px; border-radius: 99px; }
+  .stage-name { font-size: 12px; font-weight: 600; margin-top: 8px; }
+  .stage-sub { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+
+  .integ { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+  .integ-tile { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: var(--seafoam); color: var(--deep); font-family: "Hanken Grotesk", sans-serif; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+
+  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px); background: var(--toast-bg); color: var(--toast-ink); font-size: 12.5px; padding: 10px 18px; border-radius: 10px; opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; max-width: 90vw; z-index: 50; box-shadow: 0 4px 18px rgba(0,0,0,0.25); }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .mt8 { margin-top: 8px; } .mt12 { margin-top: 12px; } .mt16 { margin-top: 16px; } .mt20 { margin-top: 20px; }
+  .stack { display: flex; flex-direction: column; }
+  .g6 { gap: 6px; } .g10 { gap: 10px; } .g14 { gap: 14px; }
+  .row { display: flex; align-items: center; } .g8 { gap: 8px; }
+  .muted { color: var(--muted); } .small { font-size: 11.5px; }
+</style>
+
+<div class="app">
+  <!-- ═══════════ Sidebar ═══════════ -->
+  <nav class="sidebar">
+    <div class="logo-row">
+      <div class="logo-tile"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M6 4h9a5 5 0 0 1 0 10H10v3l-4 3V4z" stroke="#FFFFFF" stroke-width="2.2" stroke-linejoin="round"/></svg></div>
+      <div><div class="logo-name">TalkPilot <span>Teams</span></div><div class="logo-org">Meridian Software</div></div>
+    </div>
+    <div class="nav" id="nav">
+      <button class="navitem" data-nav="home"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Home</button>
+      <button class="navitem" data-nav="calls"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v12H9l-5 4V5z"/></svg>Calls</button>
+      <button class="navitem" data-nav="team"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/><path d="M16 5.5a3 3 0 0 1 0 5.5"/><path d="M17.5 15.2c1.9.6 3 2 3 4.8"/></svg>Team</button>
+      <button class="navitem" data-nav="coaching"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="5"/></svg>Coaching<span class="nav-badge">3</span></button>
+      <button class="navitem" data-nav="insights"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Insights</button>
+      <button class="navitem" data-nav="playbook"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15z"/><path d="M4 18.5A2.5 2.5 0 0 1 6.5 16H20"/></svg>Playbook</button>
+      <button class="navitem" data-nav="settings"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></svg>Settings</button>
+    </div>
+    <div class="side-footer">
+      <button class="navitem" id="skin-toggle" onclick="toggleSkin()" aria-label="Switch appearance">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>
+        <span id="skin-toggle-label">Dark mode</span>
+      </button>
+      <div class="trust-card">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0C9482" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z"/></svg>
+        <div><strong>Full transcripts</strong> visibility<br>Reps always see their own scorecards</div>
+      </div>
+      <div class="user-row"><div class="avatar">AD</div><div style="font-size: 12px; font-weight: 500">Alexis Daniels<div class="small muted" style="font-weight: 400">Owner</div></div></div>
+    </div>
+  </nav>
+
+  <main class="main">
+
+    <!-- ═══════════ HOME ═══════════ -->
+    <section class="view" id="view-home">
+      <div class="page-head">
+        <div><h1>Good morning, Alexis</h1><div class="page-sub">Wednesday, August 19 · 12 calls scored since Monday</div></div>
+        <div class="head-actions">
+          <select style="width: auto" aria-label="Date range"><option>Last 30 days</option><option>Last 7 days</option><option>Quarter</option></select>
+          <button class="btn btn-primary" onclick="go('settings','members')">Invite reps</button>
+        </div>
+      </div>
+
+      <div class="grid cols-3">
+        <button class="card attn" style="border-left-color: var(--bad)" onclick="openCall('acme')">
+          <div class="attn-meta"><span class="pill pill-bad">CRITICAL</span>2h ago</div>
+          <div class="attn-title">Guardrail breach — “guaranteed 40% ROI”</div>
+          <div class="attn-sub">Jordan Reyes · Acme Corp — renewal</div>
+          <div class="attn-cta">Review call →</div>
+        </button>
+        <button class="card attn" style="border-left-color: var(--warn)" onclick="openRep('priya')">
+          <div class="attn-meta"><span class="pill pill-warn">TRENDING DOWN</span>this week</div>
+          <div class="attn-title">Priya Sharma’s adherence fell 12 pts</div>
+          <div class="attn-sub">Discovery stage skipped in 4 of 6 calls</div>
+          <div class="attn-cta">Open rep profile →</div>
+        </button>
+        <button class="card attn" style="border-left-color: var(--mint)" onclick="go('coaching')">
+          <div class="attn-meta"><span class="pill pill-teal">COACHING</span>queue</div>
+          <div class="attn-title">3 calls waiting for your review</div>
+          <div class="attn-sub">Oldest is from Monday — Elena, churn save</div>
+          <div class="attn-cta">Open review queue →</div>
+        </button>
+      </div>
+
+      <div class="split mt16">
+        <div class="stack g14">
+          <div class="grid cols-4">
+            <div class="card kpi"><div class="kpi-label">Overall</div><div class="kpi-num"><span class="mono">78</span><span class="delta up">▲ 3</span></div></div>
+            <div class="card kpi"><div class="kpi-label">Adherence</div><div class="kpi-num"><span class="mono">71</span><span class="delta down">▼ 4</span></div></div>
+            <div class="card kpi"><div class="kpi-label">Objections</div><div class="kpi-num"><span class="mono">82</span><span class="delta up">▲ 5</span></div></div>
+            <div class="card kpi"><div class="kpi-label">Accuracy</div><div class="kpi-num"><span class="mono">91</span><span class="delta up">▲ 1</span></div></div>
+          </div>
+          <div class="card card-pad">
+            <div class="card-head"><div class="card-title">Score trend</div>
+              <div class="row g8" style="margin-left: auto; font-size: 11px; color: var(--ink2)">
+                <span class="row" style="gap: 5px"><span style="width: 8px; height: 8px; border-radius: 99px; background: var(--teal)"></span>Overall</span>
+                <span class="row" style="gap: 5px"><span style="width: 8px; height: 8px; border-radius: 99px; background: var(--warn)"></span>Adherence</span>
+              </div>
+            </div>
+            <svg viewBox="0 0 640 180" style="width: 100%; height: 180px; margin-top: 10px" preserveAspectRatio="none" role="img" aria-label="Four-week score trend">
+              <line x1="0" y1="45" x2="640" y2="45" style="stroke: var(--line-soft)" vector-effect="non-scaling-stroke"/>
+              <line x1="0" y1="90" x2="640" y2="90" style="stroke: var(--line-soft)" vector-effect="non-scaling-stroke"/>
+              <line x1="0" y1="135" x2="640" y2="135" style="stroke: var(--line-soft)" vector-effect="non-scaling-stroke"/>
+              <polygon points="20,115 130,100 240,107 350,80 460,86 570,58 620,54 620,175 20,175" style="fill: var(--teal)" opacity="0.07"/>
+              <polyline points="20,115 130,100 240,107 350,80 460,86 570,58 620,54" fill="none" style="stroke: var(--teal)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+              <polyline points="20,135 130,127 240,140 350,113 460,123 570,105 620,111" fill="none" style="stroke: var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+            </svg>
+            <div class="mono" style="display: flex; justify-content: space-between; font-size: 10px; color: var(--muted)"><span>Jul 22</span><span>Jul 29</span><span>Aug 5</span><span>Aug 12</span><span>Aug 19</span></div>
+          </div>
+          <div class="card card-pad">
+            <div class="card-head"><div class="card-title">Recent calls</div><button class="link-btn" style="margin-left: auto" onclick="go('calls')">All calls →</button></div>
+            <div class="tblwrap mt8"><table><tbody id="home-recent"></tbody></table></div>
+          </div>
+        </div>
+
+        <div class="stack g14">
+          <div class="card card-pad">
+            <div class="card-title">Adoption</div>
+            <div class="stack g10 mt12">
+              <div><div class="row small" style="color: var(--ink2)"><span>Active seats</span><span class="mono" style="margin-left: auto; color: var(--ink)">14 / 20</span></div><div class="bar mt8" style="margin-top: 5px"><div style="width: 70%"></div></div></div>
+              <div><div class="row small" style="color: var(--ink2)"><span>Sessions per rep · week</span><span class="mono" style="margin-left: auto; color: var(--ink)">6.2</span></div><div class="bar" style="margin-top: 5px"><div style="width: 78%; background: var(--mint)"></div></div></div>
+              <div><div class="row small" style="color: var(--ink2)"><span>Practice completion</span><span class="mono" style="margin-left: auto; color: var(--ink)">68%</span></div><div class="bar" style="margin-top: 5px"><div style="width: 68%; background: var(--seafoam-2)"></div></div></div>
+            </div>
+          </div>
+          <div class="card card-pad">
+            <div class="card-head"><div class="card-title">Leaderboard</div><button class="link-btn" style="margin-left: auto" onclick="go('team')">All reps →</button></div>
+            <div class="stack g10 mt12" id="home-leaderboard"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ CALLS ═══════════ -->
+    <section class="view" id="view-calls">
+      <div class="page-head">
+        <div><h1>Calls</h1><div class="page-sub">Every scored session across the org. Click a call to open its scorecard.</div></div>
+        <div class="head-actions"><input type="search" class="search" id="calls-search" placeholder="Search calls or reps…" oninput="renderCalls()"></div>
+      </div>
+      <div class="chips" id="calls-filters">
+        <button class="chip active" data-f="all" onclick="setCallFilter('all')">All</button>
+        <button class="chip" data-f="breach" onclick="setCallFilter('breach')">Guardrail breaches</button>
+        <button class="chip" data-f="low" onclick="setCallFilter('low')">Adherence &lt; 60</button>
+        <button class="chip" data-f="top" onclick="setCallFilter('top')">Top calls</button>
+      </div>
+      <div class="card card-pad mt16">
+        <div class="tblwrap"><table>
+          <thead><tr><th>Call</th><th>Rep</th><th>Date</th><th>Length</th><th>Talk ratio</th><th>Overall</th><th>Adherence</th><th></th></tr></thead>
+          <tbody id="calls-body"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- ═══════════ CALL DETAIL ═══════════ -->
+    <section class="view" id="view-call">
+      <div class="crumb"><button onclick="go('calls')">Calls</button> / <span id="call-crumb"></span></div>
+      <div class="page-head">
+        <div><h1 id="call-title"></h1><div class="page-sub" id="call-sub"></div></div>
+        <div class="head-actions"><span class="pill pill-teal">MERIDIAN SALES v3</span><button class="btn btn-ghost" id="call-rep-btn"></button></div>
+      </div>
+
+      <div class="split">
+        <div class="stack g14">
+          <div class="grid" style="grid-template-columns: 300px 1fr">
+            <div class="card card-pad row" style="gap: 16px">
+              <svg width="76" height="76" viewBox="0 0 76 76" role="img" aria-label="Overall score">
+                <circle cx="38" cy="38" r="32" fill="none" style="stroke: var(--line-soft)" stroke-width="7"/>
+                <circle id="call-ring" cx="38" cy="38" r="32" fill="none" stroke="#E69F19" stroke-width="7" stroke-linecap="round" stroke-dasharray="127 201" transform="rotate(-90 38 38)"/>
+                <text id="call-ring-num" x="38" y="44" text-anchor="middle" font-family="Azeret Mono, monospace" font-size="21" style="fill: var(--ink)">63</text>
+              </svg>
+              <div class="stack g6 small" style="color: var(--ink2)">
+                <div class="row"><span style="width: 76px">Adherence</span><span class="mono" id="call-adh"></span></div>
+                <div class="row"><span style="width: 76px">Objections</span><span class="mono" style="color: var(--deep)">74</span></div>
+                <div class="row"><span style="width: 76px">Accuracy</span><span class="mono" style="color: var(--bad-ink)">61</span></div>
+              </div>
+            </div>
+            <div class="card" id="call-breach" style="padding: 14px 18px; border-left: 3px solid var(--bad); display: flex; flex-direction: column; justify-content: center; gap: 6px">
+              <div class="row g8">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#DE4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17.5v.5"/></svg>
+                <span style="font-size: 12.5px; font-weight: 700; color: var(--bad-ink)">Guardrail breach · critical</span>
+                <span class="mono small muted" style="margin-left: auto; font-size: 10px">21:40</span>
+              </div>
+              <div style="font-size: 12.5px">Rule: <strong>never guarantee ROI figures</strong></div>
+              <div class="small" style="color: var(--ink2); font-style: italic">“…honestly you’ll see a guaranteed 40% ROI within the first quarter, that’s standard for us.”</div>
+            </div>
+            <div class="card card-pad" id="call-nobreach" style="display: none; grid-column: 2; align-content: center">
+              <div class="row g8"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1E7A34" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 10 18 20 6"/></svg><span style="font-size: 12.5px; font-weight: 600; color: var(--ok)">No guardrail breaches on this call</span></div>
+              <div class="small muted mt8">All hard rules held. Flagged moments below are coaching opportunities, not violations.</div>
+            </div>
+          </div>
+
+          <div class="card card-pad">
+            <div class="card-title">Playbook adherence — Meridian Sales v3</div>
+            <div class="grid mt12" style="grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px">
+              <div class="stage"><div class="stage-bar" style="background: var(--teal)"></div><div class="stage-name" style="color: var(--deep)">Rapport</div><div class="stage-sub">Complete · 3 min</div></div>
+              <div class="stage"><div class="stage-bar" style="background: var(--warn)"></div><div class="stage-name" style="color: var(--warn-ink)">Discovery</div><div class="stage-sub">Missing: budget owner</div></div>
+              <div class="stage"><div class="stage-bar" style="background: var(--teal)"></div><div class="stage-name" style="color: var(--deep)">Value framing</div><div class="stage-sub">Complete · case study cited</div></div>
+              <div class="stage"><div class="stage-bar" style="background: var(--teal)"></div><div class="stage-name" style="color: var(--deep)">Objections</div><div class="stage-sub">2 handled, 1 off-script</div></div>
+              <div class="stage"><div class="stage-bar" style="background: var(--bad)"></div><div class="stage-name" style="color: var(--bad-ink)">Next steps</div><div class="stage-sub">Missed — no date secured</div></div>
+            </div>
+          </div>
+
+          <div class="grid cols-2">
+            <div class="card card-pad">
+              <div class="card-title">Objections</div>
+              <div class="stack g14 mt12">
+                <div style="border-bottom: 1px solid var(--line-soft); padding-bottom: 12px">
+                  <div class="row g8"><span class="pill pill-ok">EXCELLENT</span><span class="mono small muted" style="font-size: 10px">08:12</span></div>
+                  <div style="font-size: 12.5px; font-weight: 500; margin-top: 6px">“We’re already using Gong for this.”</div>
+                  <div class="small" style="color: var(--ink2); margin-top: 4px">Used the approved reframe — Gong reviews calls after; we change them live. Cited the Halvorsen win.</div>
+                </div>
+                <div style="border-bottom: 1px solid var(--line-soft); padding-bottom: 12px">
+                  <div class="row g8"><span class="pill pill-warn">OFF-SCRIPT</span><span class="mono small muted" style="font-size: 10px">21:35</span></div>
+                  <div style="font-size: 12.5px; font-weight: 500; margin-top: 6px">“The price is 30% above what we budgeted.”</div>
+                  <div class="small" style="color: var(--ink2); margin-top: 4px">Skipped the value anchor and improvised the ROI guarantee — see the guardrail breach.</div>
+                </div>
+                <div>
+                  <div class="row g8"><span class="pill pill-ok">ADEQUATE</span><span class="mono small muted" style="font-size: 10px">27:03</span></div>
+                  <div style="font-size: 12.5px; font-weight: 500; margin-top: 6px">“We’d need legal to review the DPA.”</div>
+                  <div class="small" style="color: var(--ink2); margin-top: 4px">Offered the standard DPA packet; didn’t book the legal call.</div>
+                </div>
+              </div>
+            </div>
+            <div class="card card-pad">
+              <div class="card-title">Truth audit</div>
+              <div class="stack g14 mt12">
+                <div style="border-bottom: 1px solid var(--line-soft); padding-bottom: 12px">
+                  <span class="pill pill-ok">VERIFIED</span>
+                  <div style="font-size: 12.5px; font-weight: 500; margin-top: 6px">“SOC 2 Type II certified since 2024.”</div>
+                  <div class="small muted mt8" style="margin-top: 4px">KB · Security overview, p.2</div>
+                </div>
+                <div style="border-bottom: 1px solid var(--line-soft); padding-bottom: 12px">
+                  <span class="pill pill-bad">CONTRADICTS</span>
+                  <div style="font-size: 12.5px; font-weight: 500; margin-top: 6px">“Guaranteed 40% ROI in the first quarter.”</div>
+                  <div class="small muted" style="margin-top: 4px">KB · Pricing FAQ: “never commit to ROI figures”</div>
+                </div>
+                <div>
+                  <span class="pill pill-gray">UNVERIFIABLE</span>
+                  <div style="font-size: 12.5px; font-weight: 500; margin-top: 6px">“Our churn is the lowest in the category.”</div>
+                  <button class="link-btn" style="margin-top: 4px; font-size: 11px" onclick="go('playbook','knowledge')">No KB evidence — add a source →</button>
+                </div>
+                <div class="small muted">2 more verified claims collapsed · <button class="link-btn" style="font-size: 11px" onclick="toast('Prototype: full claim list opens here.')">show all</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="display: flex; flex-direction: column; min-height: 640px">
+          <div class="row" style="padding: 14px 18px; border-bottom: 1px solid var(--line-soft)">
+            <div class="card-title">Transcript</div><span class="pill pill-teal" style="margin-left: auto">FULL TRANSCRIPT</span>
+          </div>
+          <div class="stack g10" style="flex: 1; padding: 14px 18px">
+            <div class="bubble bubble-them">We like the product, but the price is 30% above what we budgeted this year.<div class="ts">Acme · 21:31</div></div>
+            <div class="bubble bubble-flag">Honestly you’ll see a guaranteed 40% ROI within the first quarter, that’s standard for us.<div class="ts" style="color: var(--bad-ink)">Rep · 21:40 · guardrail</div></div>
+            <div class="bubble bubble-them">Guaranteed? That’s a strong word — can you put that in the contract?<div class="ts">Acme · 21:52</div></div>
+            <div class="bubble bubble-rep">Let me walk that back — what I can commit to is the payback model we built with Halvorsen, and I’ll share their numbers.<div class="ts">Rep · 22:05 · recovery</div></div>
+            <div class="small muted" style="align-self: center">— 3 more flagged moments · full transcript above —</div>
+          </div>
+          <div class="stack g10" style="padding: 12px 16px; border-top: 1px solid var(--line-soft)">
+            <div class="chips">
+              <button class="chip" onclick="toast('Prototype: AI summary appears here.')">Summarize call</button>
+              <button class="chip" onclick="toast('Prototype: AI risk scan appears here.')">Risky promises?</button>
+              <button class="chip" onclick="toast('Prototype: AI next steps appear here.')">Next steps</button>
+            </div>
+            <div class="stack g10" id="call-notes"></div>
+            <form class="row g8" onsubmit="return postNote(event, 'call-notes', 'call-note-input')">
+              <input type="text" id="call-note-input" placeholder="Ask about this call, or leave a coaching note…">
+              <button class="btn btn-primary" type="submit" style="flex-shrink: 0">Post</button>
+            </form>
+            <div class="small muted" style="font-size: 10.5px">Coaching notes land in the rep’s app, pinned to this call.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ TEAM ═══════════ -->
+    <section class="view" id="view-team">
+      <div class="page-head">
+        <div><h1>Team</h1><div class="page-sub">30-day averages. Click a rep for their full profile and coaching history.</div></div>
+        <div class="head-actions">
+          <input type="search" class="search" id="team-search" placeholder="Search reps…" oninput="renderTeam()">
+          <button class="btn btn-primary" onclick="go('settings','members')">Invite reps</button>
+        </div>
+      </div>
+      <div class="card card-pad">
+        <div class="card-head"><div class="card-title">Teams</div><button class="link-btn" style="margin-left: auto" onclick="toast('Prototype: create a team, name it, drag reps in.')">+ New team</button></div>
+        <div class="chips mt12">
+          <span class="chip active">All · 7 reps</span>
+          <button class="chip" onclick="toast('Prototype: filters the roster to Enterprise pod.')">Enterprise pod · 3</button>
+          <button class="chip" onclick="toast('Prototype: filters the roster to Mid-market.')">Mid-market · 2</button>
+          <button class="chip" onclick="toast('Prototype: filters the roster to SDR team.')">SDR team · 2</button>
+        </div>
+      </div>
+      <div class="card card-pad mt16">
+        <div class="tblwrap"><table>
+          <thead><tr><th>Rep</th><th>Team</th><th>Sessions</th><th>Overall</th><th>Adherence</th><th>Objections</th><th>Accuracy</th><th>Trend</th></tr></thead>
+          <tbody id="team-body"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- ═══════════ REP PROFILE ═══════════ -->
+    <section class="view" id="view-rep">
+      <div class="crumb"><button onclick="go('team')">Team</button> / <span id="rep-crumb"></span></div>
+      <div class="page-head">
+        <div class="row" style="gap: 14px">
+          <div class="avatar lg" id="rep-avatar"></div>
+          <div><h1 id="rep-name"></h1><div class="page-sub" id="rep-sub"></div></div>
+        </div>
+        <div class="head-actions">
+          <button class="btn btn-ghost" onclick="toast('Prototype: pick a scenario — stock, or generated from your playbook and objection library.')">Assign practice</button>
+          <button class="btn btn-primary" onclick="toast('Prototype: the focus area is pushed to the rep’s app and coached live on their next calls.')">Assign focus area</button>
+        </div>
+      </div>
+
+      <div id="rep-empty" class="card empty" style="display: none">
+        <div class="hg">No calls yet</div>
+        This rep accepted their invite but hasn’t run a session. TalkPilot coaches them live from their Mac or iPhone — scorecards appear here after their first call.
+        <div class="mt12"><button class="btn btn-ghost" onclick="toast('Prototype: sends a nudge email with setup steps.')">Send a nudge</button></div>
+      </div>
+
+      <div id="rep-content">
+        <div class="grid cols-4">
+          <div class="card kpi"><div class="kpi-label">Overall</div><div class="kpi-num"><span class="mono" id="rep-k1"></span><span class="delta" id="rep-d1"></span></div></div>
+          <div class="card kpi"><div class="kpi-label">Adherence</div><div class="kpi-num"><span class="mono" id="rep-k2"></span><span class="delta" id="rep-d2"></span></div></div>
+          <div class="card kpi"><div class="kpi-label">Objections</div><div class="kpi-num"><span class="mono" id="rep-k3"></span><span class="delta flat">—</span></div></div>
+          <div class="card kpi"><div class="kpi-label">Accuracy</div><div class="kpi-num"><span class="mono" id="rep-k4"></span><span class="delta flat">—</span></div></div>
+        </div>
+
+        <div class="split mt16">
+          <div class="stack g14">
+            <div class="card card-pad">
+              <div class="card-head"><div class="card-title">Eight-week trend</div>
+                <div class="row g8" style="margin-left: auto; font-size: 11px; color: var(--ink2)">
+                  <span class="row" style="gap: 5px"><span style="width: 8px; height: 8px; border-radius: 99px; background: var(--teal)"></span>Overall</span>
+                  <span class="row" style="gap: 5px"><span style="width: 8px; height: 8px; border-radius: 99px; background: var(--warn)"></span>Adherence</span>
+                </div>
+              </div>
+              <svg viewBox="0 0 640 120" style="width: 100%; height: 120px; margin-top: 8px" preserveAspectRatio="none" role="img" aria-label="Eight-week rep trend">
+                <line x1="0" y1="30" x2="640" y2="30" style="stroke: var(--line-soft)" vector-effect="non-scaling-stroke"/><line x1="0" y1="60" x2="640" y2="60" style="stroke: var(--line-soft)" vector-effect="non-scaling-stroke"/><line x1="0" y1="90" x2="640" y2="90" style="stroke: var(--line-soft)" vector-effect="non-scaling-stroke"/>
+                <polyline id="rep-line1" points="20,48 105,42 190,55 275,40 360,52 445,58 530,70 615,78" fill="none" style="stroke: var(--teal)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+                <polyline id="rep-line2" points="20,58 105,50 190,62 275,52 360,66 445,74 530,88 615,98" fill="none" style="stroke: var(--warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+              </svg>
+            </div>
+            <div class="card card-pad">
+              <div class="card-head"><div class="card-title">Calls</div></div>
+              <div class="tblwrap mt8"><table>
+                <thead><tr><th>Call</th><th>Date</th><th>Talk ratio</th><th>Overall</th><th>Adherence</th><th></th></tr></thead>
+                <tbody id="rep-calls"></tbody>
+              </table></div>
+            </div>
+          </div>
+
+          <div class="stack g14">
+            <div class="card card-pad">
+              <div class="card-head"><div class="card-title">Active focus areas</div><button class="link-btn" style="margin-left: auto" onclick="go('coaching')">Manage →</button></div>
+              <div class="stack g10 mt12" id="rep-focus"></div>
+            </div>
+            <div class="card card-pad">
+              <div class="card-title">Practice</div>
+              <div id="rep-practice" class="mt12"></div>
+            </div>
+            <div class="card card-pad">
+              <div class="card-title">Coaching thread</div>
+              <div class="stack g10 mt12" id="rep-notes"></div>
+              <form class="row g8 mt12" onsubmit="return postNote(event, 'rep-notes', 'rep-note-input')">
+                <input type="text" id="rep-note-input" placeholder="Leave a note — it lands in their app…">
+                <button class="btn btn-primary" type="submit" style="flex-shrink: 0">Post</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ COACHING ═══════════ -->
+    <section class="view" id="view-coaching">
+      <div class="page-head">
+        <div><h1>Coaching</h1><div class="page-sub">The loop: review calls, push focus areas, assign practice — grades roll back up here.</div></div>
+      </div>
+      <div class="grid cols-3">
+        <div class="card card-pad">
+          <div class="card-head"><div class="card-title">Review queue</div><span class="pill pill-bad" style="margin-left: auto">3</span></div>
+          <div class="stack g10 mt12">
+            <button class="attn card" style="border-left-color: var(--bad); border-radius: 10px" onclick="openCall('acme')">
+              <div class="attn-title" style="margin-top: 0">Acme Corp — renewal</div>
+              <div class="attn-sub">Jordan Reyes · critical breach · Aug 19</div>
+            </button>
+            <button class="attn card" style="border-left-color: var(--warn); border-radius: 10px" onclick="openCall('northwind')">
+              <div class="attn-title" style="margin-top: 0">Northwind — pricing follow-up</div>
+              <div class="attn-sub">Priya Sharma · adherence 44 · Aug 18</div>
+            </button>
+            <button class="attn card" style="border-left-color: var(--mint); border-radius: 10px" onclick="openCall('osprey')">
+              <div class="attn-title" style="margin-top: 0">Osprey Media — churn save</div>
+              <div class="attn-sub">Elena Vasquez · unreviewed · Aug 14</div>
+            </button>
+          </div>
+        </div>
+        <div class="card card-pad">
+          <div class="card-head"><div class="card-title">Focus areas</div><button class="link-btn" style="margin-left: auto" onclick="toast('Prototype: pick a rep, write the focus, set a horizon — it’s coached live in their app.')">+ Assign</button></div>
+          <div class="stack g10 mt12">
+            <div class="focus-card">
+              <div class="focus-title">Run full discovery before pricing<span class="mono small muted" style="margin-left: auto; font-size: 10px">Priya · 2w</span></div>
+              <div class="bar" style="margin-top: 8px; height: 5px; background: var(--seafoam-2)"><div style="width: 35%"></div></div>
+            </div>
+            <div class="focus-card">
+              <div class="focus-title">Talk ratio below 55%<span class="mono small muted" style="margin-left: auto; font-size: 10px">Priya · 1w</span></div>
+              <div class="bar" style="margin-top: 8px; height: 5px; background: var(--seafoam-2)"><div style="width: 40%"></div></div>
+            </div>
+            <div class="focus-card">
+              <div class="focus-title">Always book the next step on-call<span class="mono small muted" style="margin-left: auto; font-size: 10px">Jordan · 2w</span></div>
+              <div class="bar" style="margin-top: 8px; height: 5px; background: var(--seafoam-2)"><div style="width: 20%"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card card-pad">
+          <div class="card-head"><div class="card-title">Practice</div><button class="link-btn" style="margin-left: auto" onclick="toast('Prototype: assign a stock scenario, or generate one from your own playbook and objections.')">+ Assign</button></div>
+          <div class="stack g10 mt12">
+            <div class="row g8" style="border-bottom: 1px solid var(--line-soft); padding-bottom: 10px">
+              <div style="font-size: 12.5px; font-weight: 500">The skeptical prospect<div class="small muted" style="font-weight: 400">Priya · due Fri</div></div>
+              <span class="score-ring sr-mid" style="margin-left: auto">71</span>
+            </div>
+            <div class="row g8" style="border-bottom: 1px solid var(--line-soft); padding-bottom: 10px">
+              <div style="font-size: 12.5px; font-weight: 500">Pricing objection · from your playbook<div class="small muted" style="font-weight: 400">Jordan · due Mon</div></div>
+              <span class="pill pill-gray" style="margin-left: auto">NOT RUN</span>
+            </div>
+            <div class="row g8">
+              <div style="font-size: 12.5px; font-weight: 500">Churn save — Osprey rehearsal<div class="small muted" style="font-weight: 400">Elena · completed</div></div>
+              <span class="score-ring sr-good" style="margin-left: auto">86</span>
+            </div>
+            <div class="small muted" style="font-size: 10.5px">Grades roll up automatically when the rep finishes a run in their app.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ INSIGHTS ═══════════ -->
+    <section class="view" id="view-insights">
+      <div class="page-head">
+        <div><h1>Insights</h1><div class="page-sub">Org-wide patterns from the last 30 days of scored calls.</div></div>
+        <div class="head-actions"><button class="btn btn-primary" onclick="toast('Prototype: generates this week’s digest now instead of waiting for the weekly cron.')">Generate digest</button></div>
+      </div>
+      <div class="split">
+        <div class="stack g14">
+          <div class="card card-pad">
+            <div class="card-title">Factual accuracy — 214 claims audited</div>
+            <div class="grid cols-3 mt12">
+              <div><div class="kpi-num"><span class="mono" style="font-size: 24px; color: var(--ok)">78%</span></div><span class="pill pill-ok">VERIFIED</span></div>
+              <div><div class="kpi-num"><span class="mono" style="font-size: 24px; color: var(--ink2)">17%</span></div><span class="pill pill-gray">UNVERIFIABLE</span></div>
+              <div><div class="kpi-num"><span class="mono" style="font-size: 24px; color: var(--bad-ink)">5%</span></div><span class="pill pill-bad">CONTRADICTS</span></div>
+            </div>
+            <div class="small" style="color: var(--ink2); margin-top: 12px; background: var(--seafoam); border-radius: 9px; padding: 9px 12px">Top unverifiable topic: <strong>churn / retention numbers</strong> (11 claims). <button class="link-btn" style="font-size: 11px" onclick="go('playbook','knowledge')">Add a source to your knowledge base →</button></div>
+          </div>
+          <div class="card card-pad">
+            <div class="card-title">Objection patterns</div>
+            <div class="stack mt12">
+              <div class="row g8" style="padding: 9px 0; border-bottom: 1px solid var(--line-soft)"><span style="font-size: 12.5px">“The price is above what we budgeted”</span><span class="pill pill-warn" style="margin-left: auto">OFF-SCRIPT</span><span class="mono small muted">×14</span></div>
+              <div class="row g8" style="padding: 9px 0; border-bottom: 1px solid var(--line-soft)"><span style="font-size: 12.5px">“We’re already using Gong / Chorus”</span><span class="pill pill-ok" style="margin-left: auto">EXCELLENT</span><span class="mono small muted">×11</span></div>
+              <div class="row g8" style="padding: 9px 0; border-bottom: 1px solid var(--line-soft)"><span style="font-size: 12.5px">“Can we pick this up next quarter?”</span><span class="pill pill-ok" style="margin-left: auto">ADEQUATE</span><span class="mono small muted">×9</span></div>
+              <div class="row g8" style="padding: 9px 0"><span style="font-size: 12.5px">“Legal needs to review the DPA first”</span><span class="pill pill-bad" style="margin-left: auto">MISSED</span><span class="mono small muted">×6</span></div>
+            </div>
+            <div class="small muted mt8" style="font-size: 11px">Pricing objections are 38% of all moments — the Halvorsen case study converts them 2.3× better when cited.</div>
+          </div>
+        </div>
+        <div class="stack g14">
+          <div class="card card-pad">
+            <div class="card-title">Weekly digest</div>
+            <div class="small" style="color: var(--ink2); margin-top: 10px; line-height: 1.6"><strong>Aug 11 – Aug 18.</strong> 49 scored conversations, team average 73 (+4). Marcus leads objection handling (91) — his price-objection reframe is worth sharing Friday. Watch item: Jordan accepted “next quarter” delays without a counter in 4 of 7 calls.</div>
+            <div class="mono small muted mt8" style="font-size: 10px">Delivered to 3 recipients · Slack + email</div>
+          </div>
+          <div class="card card-pad">
+            <div class="card-title">Outcomes</div>
+            <div class="small" style="color: var(--ink2); margin-top: 10px">Connect your CRM to correlate scores with revenue — e.g. “calls scoring 80+ close at 2.1× the rate of calls under 60.”</div>
+            <div class="mt12"><button class="btn btn-ghost" onclick="go('settings','integrations')">Connect CRM →</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ PLAYBOOK ═══════════ -->
+    <section class="view" id="view-playbook">
+      <div class="page-head">
+        <div><h1>Playbook</h1><div class="page-sub">Your org brain: what reps are coached from live, and scored against after.</div></div>
+      </div>
+      <div class="subtabs" id="pb-tabs">
+        <button class="subtab active" data-t="playbooks" onclick="setSub('pb','playbooks')">Playbooks</button>
+        <button class="subtab" data-t="objections" onclick="setSub('pb','objections')">Objections</button>
+        <button class="subtab" data-t="knowledge" onclick="setSub('pb','knowledge')">Knowledge</button>
+        <button class="subtab" data-t="voice" onclick="setSub('pb','voice')">Voice</button>
+        <button class="subtab" data-t="dna" onclick="setSub('pb','dna')">Team DNA</button>
+      </div>
+
+      <div class="pb-panel" id="pb-playbooks">
+        <div class="card card-pad">
+          <div class="card-head">
+            <div><div class="card-title">Meridian Sales v3</div><div class="small muted">Custom · 5 stages · active since Jul 2</div></div>
+            <span class="pill pill-ok" style="margin-left: auto">ACTIVE</span>
+            <button class="btn btn-ghost" onclick="toast('Prototype: opens the stage/guardrail editor.')">Edit</button>
+          </div>
+          <div class="chips mt12">
+            <span class="chip">1 · Rapport</span><span class="chip">2 · Discovery</span><span class="chip">3 · Value framing</span><span class="chip">4 · Objections</span><span class="chip">5 · Next steps</span>
+          </div>
+          <div class="small" style="color: var(--ink2); margin-top: 12px">Guardrails: <span class="pill pill-bad">never guarantee ROI</span> <span class="pill pill-bad">no unapproved discounts</span> <span class="pill pill-warn">flag competitor disparagement</span></div>
+        </div>
+        <div class="card card-pad mt16">
+          <div class="card-head">
+            <div><div class="card-title">Discovery-first (Team DNA — Marcus)</div><div class="small muted">Extracted from 5 transcripts · 4 stages · v1</div></div>
+            <span class="pill pill-gray" style="margin-left: auto">DRAFT</span>
+            <button class="btn btn-ghost" onclick="toast('Prototype: activating deactivates the current playbook — one active at a time.')">Activate</button>
+          </div>
+        </div>
+        <div class="mt16 row g8">
+          <button class="btn btn-primary" onclick="toast('Prototype: build stages by hand, or import a methodology doc and let AI extract them.')">+ New playbook</button>
+          <button class="btn btn-ghost" onclick="toast('Prototype: upload a doc — AI extracts name, methodology and stages for review.')">Import from document</button>
+        </div>
+      </div>
+
+      <div class="pb-panel" id="pb-objections" style="display: none">
+        <div class="card card-pad">
+          <div class="card-head"><div class="card-title">Objection library · 12 active</div>
+            <button class="btn btn-ghost" style="margin-left: auto" onclick="toast('Prototype: upload a doc — AI extracts objections and responses for review before import.')">Import</button>
+            <button class="btn btn-primary" onclick="toast('Prototype: objection + ideal response + severity. AI matches by meaning, not exact words.')">+ Add</button>
+          </div>
+          <div class="stack mt12">
+            <div style="padding: 11px 0; border-bottom: 1px solid var(--line-soft)">
+              <div class="row g8"><span style="font-size: 12.5px; font-weight: 500">“The price is too high / above budget”</span><span class="pill pill-bad" style="margin-left: auto">CRITICAL</span></div>
+              <div class="small" style="color: var(--ink2); margin-top: 4px">Anchor on payback, cite Halvorsen case, never discount on the first push. Trade concessions for commitment.</div>
+            </div>
+            <div style="padding: 11px 0; border-bottom: 1px solid var(--line-soft)">
+              <div class="row g8"><span style="font-size: 12.5px; font-weight: 500">“We already use Gong / Chorus”</span><span class="pill pill-warn" style="margin-left: auto">HIGH</span></div>
+              <div class="small" style="color: var(--ink2); margin-top: 4px">Reframe: they analyze after the call; we change the call while it happens. Not a replacement — a different layer.</div>
+            </div>
+            <div style="padding: 11px 0">
+              <div class="row g8"><span style="font-size: 12.5px; font-weight: 500">“Let’s revisit next quarter”</span><span class="pill pill-warn" style="margin-left: auto">MEDIUM</span></div>
+              <div class="small" style="color: var(--ink2); margin-top: 4px">Ask what changes next quarter; quantify the cost of waiting; offer a smaller start now.</div>
+            </div>
+          </div>
+          <div class="small muted mt12" style="font-size: 11px">Reps get the approved response live, in their HUD, the moment the objection is detected.</div>
+        </div>
+      </div>
+
+      <div class="pb-panel" id="pb-knowledge" style="display: none">
+        <div class="upload-zone">
+          <div class="upload-tile"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V5M7.5 9.5 12 5l4.5 4.5"/><path d="M4 17v3h16v-3"/></svg></div>
+          <div style="font-size: 14px; font-weight: 600; color: var(--deep)">Upload a document</div>
+          <div class="small" style="color: var(--ink2); margin-top: 4px">Pricing sheets, case studies, product docs, battle cards. We read it, you review, then it grounds live coaching and the truth audit.</div>
+          <div class="mt12"><button class="btn btn-ghost" onclick="toast('Prototype: file picker — .txt, .md, .csv, .pdf.')">Choose file</button></div>
+        </div>
+        <div class="card card-pad mt16">
+          <div class="card-title">Knowledge base · 4 documents</div>
+          <div class="stack mt12">
+            <div class="row g8" style="padding: 10px 0; border-bottom: 1px solid var(--line-soft)"><div style="font-size: 12.5px; font-weight: 500">Meridian Pricing &amp; Packaging 2026<div class="small muted" style="font-weight: 400">Three tiers · SSO on Growth · 15% annual discount</div></div><span class="pill pill-gray" style="margin-left: auto">PRICING</span><span class="pill pill-ok">READY</span></div>
+            <div class="row g8" style="padding: 10px 0; border-bottom: 1px solid var(--line-soft)"><div style="font-size: 12.5px; font-weight: 500">Halvorsen Group case study<div class="small muted" style="font-weight: 400">32% faster onboarding · $410k expansion</div></div><span class="pill pill-gray" style="margin-left: auto">CASE STUDY</span><span class="pill pill-ok">READY</span></div>
+            <div class="row g8" style="padding: 10px 0; border-bottom: 1px solid var(--line-soft)"><div style="font-size: 12.5px; font-weight: 500">Security overview (SOC 2)<div class="small muted" style="font-weight: 400">Certifications, data handling, subprocessors</div></div><span class="pill pill-gray" style="margin-left: auto">PRODUCT</span><span class="pill pill-ok">READY</span></div>
+            <div class="row g8" style="padding: 10px 0"><div style="font-size: 12.5px; font-weight: 500">Competitor battlecard — Gong<div class="small muted" style="font-weight: 400">Positioning, pricing comparison, landmines</div></div><span class="pill pill-gray" style="margin-left: auto">COMPETITIVE</span><span class="pill pill-warn">PROCESSING</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pb-panel" id="pb-voice" style="display: none">
+        <div class="card card-pad">
+          <div class="card-title">Company voice &amp; culture</div>
+          <div class="small" style="color: var(--ink2); margin-top: 4px">Injected into every rep’s live coaching so suggestions sound like your company.</div>
+          <div style="font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 16px">Tone</div>
+          <div class="chips mt8">
+            <span class="chip active">Consultative</span><span class="chip active">Data-driven</span><span class="chip active">Warm</span>
+            <button class="chip" onclick="toast('Prototype: toggles this tone into the voice profile.')">Direct</button>
+            <button class="chip" onclick="toast('Prototype: toggles this tone into the voice profile.')">Challenger</button>
+            <button class="chip" onclick="toast('Prototype: toggles this tone into the voice profile.')">Concise</button>
+          </div>
+          <div class="grid cols-2 mt16">
+            <div>
+              <div style="font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase">Banned phrases</div>
+              <div class="chips mt8"><span class="pill pill-bad">guaranteed ROI</span><span class="pill pill-bad">best in the industry</span><span class="pill pill-bad">trust me</span></div>
+            </div>
+            <div>
+              <div style="font-size: 11px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase">Required language</div>
+              <div class="chips mt8"><span class="pill pill-ok">payback model</span><span class="pill pill-ok">pilot program</span></div>
+            </div>
+          </div>
+          <div class="mt16"><button class="btn btn-primary" onclick="toast('Prototype: saved — applies to every rep’s next call.')">Save voice profile</button></div>
+        </div>
+      </div>
+
+      <div class="pb-panel" id="pb-dna" style="display: none">
+        <div class="card card-pad">
+          <div class="card-title">Team DNA</div>
+          <div class="small" style="color: var(--ink2); margin-top: 4px">Upload 3–5 transcripts of your best rep (Otter, Fireflies, Granola…). We extract their tone, power phrases, objection responses, and conversation flow — and turn them into org-wide coaching.</div>
+          <div class="grid cols-3 mt16">
+            <div class="focus-card"><div class="focus-title">1 · Upload transcripts</div><div class="focus-note">Mark who the expert is in each conversation.</div></div>
+            <div class="focus-card"><div class="focus-title">2 · AI analysis</div><div class="focus-note">30–60 seconds. Extracts tone, phrases, objections, flow.</div></div>
+            <div class="focus-card"><div class="focus-title">3 · Review &amp; apply</div><div class="focus-note">Apply each section separately — nothing changes without your OK.</div></div>
+          </div>
+          <div class="mt16"><button class="btn btn-primary" onclick="toast('Prototype: opens the transcript upload flow.')">Start with transcripts</button></div>
+          <div class="small muted mt12" style="font-size: 11px">Last run: “Marcus Oduya” · Jul 28 · produced the Discovery-first draft playbook + 9 objection responses.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════ SETTINGS ═══════════ -->
+    <section class="view" id="view-settings">
+      <div class="page-head">
+        <div><h1>Settings</h1><div class="page-sub">Meridian Software · Business plan</div></div>
+      </div>
+      <div class="subtabs" id="st-tabs">
+        <button class="subtab active" data-t="org" onclick="setSub('st','org')">Organization</button>
+        <button class="subtab" data-t="members" onclick="setSub('st','members')">Members</button>
+        <button class="subtab" data-t="billing" onclick="setSub('st','billing')">Billing</button>
+        <button class="subtab" data-t="integrations" onclick="setSub('st','integrations')">Integrations</button>
+        <button class="subtab" data-t="trust" onclick="setSub('st','trust')">Trust Center</button>
+      </div>
+
+      <div class="st-panel" id="st-org">
+        <div class="stack g14" style="max-width: 640px">
+          <div class="card card-pad">
+            <div class="card-title">Organization</div>
+            <div class="stack g10 mt12">
+              <label class="small" style="color: var(--ink2)">Name<input type="text" value="Meridian Software" class="mt8" style="margin-top: 5px"></label>
+              <div class="small muted">Plan: <strong style="color: var(--ink)">Business</strong> · Seats: <span class="mono">20</span> · Slug: <span class="mono">meridian-demo</span></div>
+            </div>
+            <div class="mt16"><button class="btn btn-primary" onclick="toast('Prototype: saved.')">Save</button></div>
+          </div>
+          <div class="card card-pad">
+            <div class="card-title">Appearance</div>
+            <div class="small" style="color: var(--ink2); margin-top: 4px">How the Command Center looks for you. Reps’ apps have their own setting (dark by default).</div>
+            <select id="skin-select" class="mt12" onchange="setSkin(this.value)" aria-label="Appearance">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+              <option value="system">Match system</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="st-panel" id="st-members" style="display: none">
+        <div class="card card-pad">
+          <div class="card-head"><div class="card-title">Members · 14 of 20 seats</div>
+            <input type="email" placeholder="teammate@meridiandemo.com" style="margin-left: auto; max-width: 260px">
+            <select style="width: auto"><option>Member</option><option>Manager</option><option>Admin</option></select>
+            <button class="btn btn-primary" onclick="toast('Prototype: sends the invite email with the accept link.')">Invite</button>
+          </div>
+          <div class="tblwrap mt12"><table>
+            <thead><tr><th>Member</th><th>Role</th><th>Team</th><th>Joined</th><th></th></tr></thead>
+            <tbody id="members-body"></tbody>
+          </table></div>
+        </div>
+      </div>
+
+      <div class="st-panel" id="st-billing" style="display: none">
+        <div class="grid cols-2" style="max-width: 900px">
+          <div class="card card-pad">
+            <div class="card-title">Seats</div>
+            <div class="small" style="color: var(--ink2); margin-top: 8px"><span class="mono">14</span> members + <span class="mono">2</span> pending invites of <span class="mono">20</span> seats</div>
+            <div class="bar mt12" style="height: 10px"><div style="width: 80%"></div></div>
+            <div class="row g8 mt16">
+              <button class="btn btn-ghost" onclick="toast('Prototype: seat stepper with proration preview.')">Adjust seats</button>
+              <button class="btn btn-primary" onclick="toast('Prototype: opens the Stripe customer portal.')">Manage billing ↗</button>
+            </div>
+          </div>
+          <div class="card card-pad">
+            <div class="card-title">Subscription</div>
+            <div class="stack g6 small mt12" style="color: var(--ink2)">
+              <div class="row"><span>Plan</span><span style="margin-left: auto; color: var(--ink); font-weight: 600">Business</span></div>
+              <div class="row"><span>Status</span><span class="pill pill-ok" style="margin-left: auto">ACTIVE</span></div>
+              <div class="row"><span>Renews</span><span class="mono" style="margin-left: auto; color: var(--ink)">Sep 12, 2026</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="st-panel" id="st-integrations" style="display: none">
+        <div class="grid cols-2" style="max-width: 900px">
+          <div class="card integ"><div class="integ-tile">HS</div><div style="font-size: 12.5px; font-weight: 600">HubSpot<div class="small muted" style="font-weight: 400">Sync scorecards to deals; pull outcomes back</div></div><button class="btn btn-ghost" style="margin-left: auto" onclick="toast('Prototype: OAuth connect flow.')">Connect</button></div>
+          <div class="card integ"><div class="integ-tile">SF</div><div style="font-size: 12.5px; font-weight: 600">Salesforce<div class="small muted" style="font-weight: 400">Sync scorecards to opportunities</div></div><button class="btn btn-ghost" style="margin-left: auto" onclick="toast('Prototype: OAuth connect flow.')">Connect</button></div>
+          <div class="card integ"><div class="integ-tile">SL</div><div style="font-size: 12.5px; font-weight: 600">Slack<div class="small muted" style="font-weight: 400">Weekly digest + critical breach alerts</div></div><span class="pill pill-ok" style="margin-left: auto">CONNECTED</span></div>
+          <div class="card integ"><div class="integ-tile">@</div><div style="font-size: 12.5px; font-weight: 600">Email digests<div class="small muted" style="font-weight: 400">Weekly summary to owners and managers</div></div><span class="pill pill-ok" style="margin-left: auto">ON</span></div>
+        </div>
+      </div>
+
+      <div class="st-panel" id="st-trust" style="display: none">
+        <div class="grid cols-2" style="max-width: 980px; align-items: start">
+          <div class="stack g14">
+            <div class="card card-pad">
+              <div class="card-title">Transcript visibility for managers</div>
+              <select class="mt12">
+                <option>Scores only — no transcript access</option>
+                <option>Flagged moments — breach and objection excerpts</option>
+                <option selected>Full transcripts — unrestricted</option>
+              </select>
+              <div class="small" style="color: var(--ink2); margin-top: 10px">Enforced in the database, not the interface — a manager at “scores only” cannot query transcript rows at all. Reps always see their own scorecards in full, whatever this is set to.</div>
+            </div>
+            <div class="card card-pad">
+              <div class="card-title">Transcript retention</div>
+              <select class="mt12">
+                <option>Keep 90 days, then purge transcripts (keep scores)</option>
+                <option selected>Keep 1 year</option>
+                <option>Keep indefinitely</option>
+              </select>
+              <div class="small" style="color: var(--ink2); margin-top: 10px">Scorecards outlive raw transcripts: scores and evidence excerpts are kept after the full transcript purges.</div>
+            </div>
+          </div>
+          <div class="card card-pad">
+            <div class="card-head"><div class="card-title">Audit log</div><button class="link-btn" style="margin-left: auto" onclick="toast('Prototype: exports the full log as CSV.')">Export</button></div>
+            <div class="stack mt12">
+              <div class="small" style="padding: 8px 0; border-bottom: 1px solid var(--line-soft)"><span class="mono muted" style="font-size: 10px">AUG 19 09:14</span> · Alexis changed visibility to <strong>full transcripts</strong></div>
+              <div class="small" style="padding: 8px 0; border-bottom: 1px solid var(--line-soft)"><span class="mono muted" style="font-size: 10px">AUG 18 16:02</span> · Marcus promoted to <strong>manager</strong></div>
+              <div class="small" style="padding: 8px 0; border-bottom: 1px solid var(--line-soft)"><span class="mono muted" style="font-size: 10px">AUG 18 11:47</span> · Knowledge doc uploaded: <strong>Gong battlecard</strong></div>
+              <div class="small" style="padding: 8px 0"><span class="mono muted" style="font-size: 10px">AUG 15 10:30</span> · 2 invites sent (SDR team)</div>
+            </div>
+            <div class="small" style="color: var(--ink2); margin-top: 12px; background: var(--seafoam); border-radius: 9px; padding: 9px 12px">Recording disclosure is built into the rep apps — TalkPilot never records audio, and coaching is disclosed per your region’s consent rules.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+<div id="toast" role="status"></div>
+
+<script>
+const REPS = {
+  marcus: { name: "Marcus Oduya", team: "Enterprise pod", sessions: 12, o: 88, a: 85, ob: 90, ac: 93, d: 2, since: "Feb" },
+  elena:  { name: "Elena Vasquez", team: "Mid-market", sessions: 10, o: 84, a: 80, ob: 86, ac: 91, d: 4, since: "Mar" },
+  tomas:  { name: "Tomás Nguyen", team: "Mid-market", sessions: 8, o: 79, a: 74, ob: 81, ac: 90, d: 0, since: "Apr" },
+  dana:   { name: "Dana Whitfield", team: "SDR team", sessions: 7, o: 72, a: 69, ob: 74, ac: 88, d: -3, since: "May" },
+  jordan: { name: "Jordan Reyes", team: "Enterprise pod", sessions: 9, o: 68, a: 62, ob: 74, ac: 82, d: -1, since: "Mar" },
+  priya:  { name: "Priya Sharma", team: "Enterprise pod", sessions: 6, o: 64, a: 55, ob: 76, ac: 89, d: -8, since: "May" },
+  sam:    { name: "Sam Kaur", team: "SDR team", sessions: 0, o: null, a: null, ob: null, ac: null, d: 0, since: "Aug" }
+};
+const CALLS = [
+  { id: "acme", title: "Acme Corp — renewal", rep: "jordan", date: "Aug 19", dur: 32, talk: 58, o: 63, a: 58, breach: true },
+  { id: "northwind", title: "Northwind — pricing follow-up", rep: "priya", date: "Aug 18", dur: 27, talk: 61, o: 58, a: 44, breach: true },
+  { id: "halvorsen", title: "Halvorsen Group — discovery", rep: "marcus", date: "Aug 18", dur: 38, talk: 46, o: 91, a: 88, breach: false },
+  { id: "vertex", title: "Vertex Labs — negotiation", rep: "elena", date: "Aug 17", dur: 45, talk: 52, o: 86, a: 83, breach: false },
+  { id: "brightline", title: "Brightline — qualification", rep: "dana", date: "Aug 16", dur: 22, talk: 57, o: 70, a: 68, breach: false },
+  { id: "globex", title: "Globex — discovery", rep: "priya", date: "Aug 15", dur: 41, talk: 48, o: 72, a: 66, breach: false },
+  { id: "osprey", title: "Osprey Media — churn save", rep: "elena", date: "Aug 14", dur: 36, talk: 49, o: 81, a: 77, breach: false },
+  { id: "initech", title: "Initech — demo debrief", rep: "priya", date: "Aug 13", dur: 30, talk: 55, o: 61, a: 52, breach: false },
+  { id: "umbra", title: "Umbra Health — renewal", rep: "priya", date: "Aug 11", dur: 24, talk: 44, o: 70, a: 63, breach: false }
+];
+let callFilter = "all";
+let currentRep = null;
+
+const $ = (id) => document.getElementById(id);
+const initials = (n) => n.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+const ringCls = (v) => v == null ? "sr-none" : v >= 78 ? "sr-good" : v >= 60 ? "sr-mid" : "sr-poor";
+const ring = (v) => '<span class="score-ring ' + ringCls(v) + '">' + (v == null ? "—" : v) + '</span>';
+const deltaHtml = (d) => d > 0 ? '<span class="delta up">▲ ' + d + '</span>' : d < 0 ? '<span class="delta down">▼ ' + (-d) + '</span>' : '<span class="delta flat">—</span>';
+
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+function go(view, sub) {
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  $("view-" + view).classList.add("active");
+  document.querySelectorAll(".navitem").forEach(n => n.classList.toggle("active",
+    n.dataset.nav === (view === "call" ? "calls" : view === "rep" ? "team" : view)));
+  if (view === "playbook" && sub) setSub("pb", sub);
+  if (view === "settings" && sub) setSub("st", sub);
+  window.scrollTo({ top: 0 });
+}
+
+function setSub(prefix, tab) {
+  const tabs = prefix === "pb" ? $("pb-tabs") : $("st-tabs");
+  tabs.querySelectorAll(".subtab").forEach(b => b.classList.toggle("active", b.dataset.t === tab));
+  document.querySelectorAll("." + prefix + "-panel").forEach(p => p.style.display = "none");
+  $(prefix + "-" + tab).style.display = "block";
+}
+
+function callRow(c, compact) {
+  const r = REPS[c.rep];
+  const breach = c.breach ? ' <span class="pill pill-bad">BREACH</span>' : "";
+  if (compact) {
+    return '<tr class="rowlink" onclick="openCall(\'' + c.id + '\')" tabindex="0">' +
+      '<td style="font-weight: 500">' + c.title + '<div class="small muted" style="font-weight: 400">' + r.name + ' · ' + c.date + '</div></td>' +
+      '<td style="text-align: right">' + ring(c.o) + breach + '</td></tr>';
+  }
+  return '<tr class="rowlink" onclick="openCall(\'' + c.id + '\')" tabindex="0">' +
+    '<td style="font-weight: 500">' + c.title + '</td><td>' + r.name + '</td>' +
+    '<td class="mono" style="color: var(--ink2)">' + c.date + '</td>' +
+    '<td class="mono" style="color: var(--ink2)">' + c.dur + ' min</td>' +
+    '<td class="mono" style="color: var(--ink2)">' + c.talk + '%</td>' +
+    '<td>' + ring(c.o) + '</td><td>' + ring(c.a) + '</td><td>' + (c.breach ? '<span class="pill pill-bad">BREACH</span>' : '') + '</td></tr>';
+}
+
+function renderCalls() {
+  const q = ($("calls-search").value || "").toLowerCase();
+  let list = CALLS.filter(c => (c.title + " " + REPS[c.rep].name).toLowerCase().includes(q));
+  if (callFilter === "breach") list = list.filter(c => c.breach);
+  if (callFilter === "low") list = list.filter(c => c.a < 60);
+  if (callFilter === "top") list = list.filter(c => c.o >= 80);
+  $("calls-body").innerHTML = list.map(c => callRow(c)).join("") ||
+    '<tr><td colspan="8" class="empty">No calls match. Clear the search or filters.</td></tr>';
+}
+function setCallFilter(f) {
+  callFilter = f;
+  $("calls-filters").querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c.dataset.f === f));
+  renderCalls();
+}
+
+function openCall(id) {
+  const c = CALLS.find(x => x.id === id);
+  const r = REPS[c.rep];
+  $("call-crumb").textContent = c.title;
+  $("call-title").textContent = c.title;
+  $("call-sub").textContent = c.date + " · " + c.dur + " min · Rep spoke " + c.talk + "% · scored by grader v2026-08";
+  $("call-rep-btn").textContent = r.name + " →";
+  $("call-rep-btn").onclick = () => openRep(c.rep);
+  $("call-ring-num").textContent = c.o;
+  $("call-ring").setAttribute("stroke-dasharray", Math.round(c.o / 100 * 201) + " 201");
+  $("call-ring").style.stroke = c.o >= 78 ? "var(--ok)" : c.o >= 60 ? "var(--warn)" : "var(--bad)";
+  $("call-adh").textContent = c.a;
+  $("call-adh").style.color = c.a >= 60 ? "var(--warn-ink)" : "var(--bad-ink)";
+  $("call-breach").style.display = c.breach ? "flex" : "none";
+  $("call-nobreach").style.display = c.breach ? "none" : "block";
+  go("call");
+}
+
+function renderTeam() {
+  const q = ($("team-search").value || "").toLowerCase();
+  const rows = Object.entries(REPS)
+    .filter(([, r]) => (r.name + " " + r.team).toLowerCase().includes(q))
+    .sort((a, b) => (b[1].o ?? -1) - (a[1].o ?? -1))
+    .map(([id, r]) =>
+      '<tr class="rowlink" onclick="openRep(\'' + id + '\')" tabindex="0">' +
+      '<td><div class="row g8"><span class="avatar">' + initials(r.name) + '</span><span style="font-weight: 500">' + r.name + '</span></div></td>' +
+      '<td class="small" style="color: var(--ink2)">' + r.team + '</td>' +
+      '<td class="mono" style="color: var(--ink2)">' + r.sessions + '</td>' +
+      '<td>' + ring(r.o) + '</td><td>' + ring(r.a) + '</td><td>' + ring(r.ob) + '</td><td>' + ring(r.ac) + '</td>' +
+      '<td>' + deltaHtml(r.d) + '</td></tr>');
+  $("team-body").innerHTML = rows.join("");
+}
+
+function openRep(id) {
+  currentRep = id;
+  const r = REPS[id];
+  $("rep-crumb").textContent = r.name;
+  $("rep-avatar").textContent = initials(r.name);
+  $("rep-name").textContent = r.name;
+  $("rep-sub").textContent = r.team + " · Member since " + r.since + " · " + r.sessions + " scored calls";
+  const empty = r.sessions === 0;
+  $("rep-empty").style.display = empty ? "block" : "none";
+  $("rep-content").style.display = empty ? "none" : "block";
+  if (!empty) {
+    $("rep-k1").textContent = r.o; $("rep-d1").outerHTML = '<span class="delta" id="rep-d1">' + deltaHtml(r.d).replace(/<\/?span[^>]*>/g, "") + "</span>";
+    $("rep-d1").className = "delta " + (r.d > 0 ? "up" : r.d < 0 ? "down" : "flat");
+    $("rep-k2").textContent = r.a; $("rep-d2").textContent = r.d < 0 ? "▼ " + Math.min(12, -r.d + 4) : "—";
+    $("rep-d2").className = "delta " + (r.d < 0 ? "down" : "flat");
+    $("rep-k3").textContent = r.ob; $("rep-k4").textContent = r.ac;
+    const base = 100 - r.o;
+    $("rep-line1").setAttribute("points", [0,1,2,3,4,5,6,7].map(i => (20 + i * 85) + "," + Math.max(14, Math.min(106, base + 10 + Math.sin(i * 1.7 + r.o) * 10 + (r.d < 0 ? i * 2.5 : -i * 1.5)))).join(" "));
+    $("rep-line2").setAttribute("points", [0,1,2,3,4,5,6,7].map(i => (20 + i * 85) + "," + Math.max(18, Math.min(112, base + 22 + Math.cos(i * 1.3 + r.a) * 9 + (r.d < 0 ? i * 3 : -i * 1.2)))).join(" "));
+    $("rep-calls").innerHTML = CALLS.filter(c => c.rep === id).map(c =>
+      '<tr class="rowlink" onclick="openCall(\'' + c.id + '\')" tabindex="0">' +
+      '<td style="font-weight: 500">' + c.title + '</td><td class="mono" style="color: var(--ink2)">' + c.date + '</td>' +
+      '<td class="mono" style="color: var(--ink2)">' + c.talk + '%</td><td>' + ring(c.o) + '</td><td>' + ring(c.a) + '</td>' +
+      '<td>' + (c.breach ? '<span class="pill pill-bad">BREACH</span>' : '') + '</td></tr>').join("") ||
+      '<tr><td colspan="6" class="empty">No recent calls in this window.</td></tr>';
+    $("rep-focus").innerHTML = id === "priya"
+      ? '<div class="focus-card"><div class="focus-title">Run full discovery before pricing<span class="mono small muted" style="margin-left: auto; font-size: 10px">2 wks</span></div><div class="bar" style="margin-top: 8px; height: 5px; background: var(--seafoam-2)"><div style="width: 35%"></div></div><div class="focus-note">Coached live in her app during calls</div></div>' +
+        '<div class="focus-card"><div class="focus-title">Talk ratio below 55%<span class="mono small muted" style="margin-left: auto; font-size: 10px">1 wk</span></div><div class="bar" style="margin-top: 8px; height: 5px; background: var(--seafoam-2)"><div style="width: 40%"></div></div><div class="focus-note">55% → 48% → 61% last three calls — inconsistent</div></div>'
+      : id === "jordan"
+      ? '<div class="focus-card"><div class="focus-title">Always book the next step on-call<span class="mono small muted" style="margin-left: auto; font-size: 10px">2 wks</span></div><div class="bar" style="margin-top: 8px; height: 5px; background: var(--seafoam-2)"><div style="width: 20%"></div></div><div class="focus-note">Assigned after the Acme breach review</div></div>'
+      : '<div class="empty" style="padding: 18px 10px">No focus areas assigned.<div class="mt8"><button class="link-btn" onclick="toast(\'Prototype: write the focus, set a horizon — coached live in their app.\')">Assign one →</button></div></div>';
+    $("rep-practice").innerHTML = id === "priya"
+      ? '<div class="row g8"><div style="font-size: 12.5px; font-weight: 500">The skeptical prospect<div class="small muted" style="font-weight: 400">Assigned Aug 12 · due Fri</div></div><span class="score-ring sr-mid" style="margin-left: auto">71</span></div><div class="small" style="color: var(--ink2); margin-top: 9px; background: var(--canvas); border-radius: 8px; padding: 8px 10px">Grader: “Held price twice, gave in on the third push.”</div>'
+      : '<div class="empty" style="padding: 18px 10px">No practice assigned.<div class="mt8"><button class="link-btn" onclick="toast(\'Prototype: assign a stock scenario or generate one from your playbook.\')">Assign a scenario →</button></div></div>';
+    $("rep-notes").innerHTML = id === "priya"
+      ? noteHtml("AD", "Great recovery on the Globex budget pushback — that’s the pattern to repeat.", "Aug 15 · on Globex — discovery") +
+        noteHtml("PS", "Thanks — trying the two-question discovery opener this week.", "Aug 16 · reply")
+      : '<div class="small muted">No notes yet — start the thread below.</div>';
+  }
+  go("rep");
+}
+
+function noteHtml(who, body, meta) {
+  return '<div class="note"><span class="avatar" style="width: 24px; height: 24px; font-size: 9px; flex-shrink: 0">' + who + '</span><div class="note-body">' + body + '<div class="note-meta">' + meta + '</div></div></div>';
+}
+
+function postNote(e, listId, inputId) {
+  e.preventDefault();
+  const input = $(inputId);
+  const text = input.value.trim();
+  if (!text) return false;
+  const div = document.createElement("div");
+  div.innerHTML = noteHtml("AD", "", "Just now · visible to the rep in their app");
+  div.querySelector(".note-body").insertBefore(document.createTextNode(text), div.querySelector(".note-meta"));
+  $(listId).appendChild(div.firstChild);
+  input.value = "";
+  toast("Posted — the rep sees this in their app.");
+  return false;
+}
+
+let skinPref = "light";
+try { skinPref = localStorage.getItem("tp-skin") || "light"; } catch (e) {}
+const sysDark = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+function applySkin() {
+  const dark = skinPref === "dark" || (skinPref === "system" && sysDark && sysDark.matches);
+  document.body.dataset.skin = dark ? "dark" : "light";
+  const lbl = $("skin-toggle-label");
+  if (lbl) lbl.textContent = dark ? "Light mode" : "Dark mode";
+  const sel = $("skin-select");
+  if (sel) sel.value = skinPref;
+}
+function setSkin(pref) {
+  skinPref = pref;
+  try { localStorage.setItem("tp-skin", pref); } catch (e) {}
+  applySkin();
+}
+function toggleSkin() {
+  setSkin(document.body.dataset.skin === "dark" ? "light" : "dark");
+}
+if (sysDark && sysDark.addEventListener) sysDark.addEventListener("change", applySkin);
+
+function boot() {
+  applySkin();
+  $("home-recent").innerHTML = CALLS.slice(0, 5).map(c => callRow(c, true)).join("");
+  $("home-leaderboard").innerHTML = Object.entries(REPS)
+    .filter(([, r]) => r.o != null).sort((a, b) => b[1].o - a[1].o).slice(0, 5)
+    .map(([id, r], i) =>
+      '<button class="row g8" style="width: 100%; text-align: left" onclick="openRep(\'' + id + '\')">' +
+      '<span class="mono small muted" style="width: 14px; font-size: 11px">' + (i + 1) + '</span>' +
+      '<span class="avatar" style="width: 26px; height: 26px; font-size: 10px">' + initials(r.name) + '</span>' +
+      '<span style="font-size: 12.5px; font-weight: 500">' + r.name + '<div class="small muted" style="font-weight: 400; font-size: 10.5px">' + r.team + '</div></span>' +
+      '<span class="mono" style="margin-left: auto; font-size: 14px; color: ' + (r.o >= 78 ? "var(--deep)" : r.o >= 60 ? "var(--warn-ink)" : "var(--bad-ink)") + '">' + r.o + '</span></button>').join("");
+  $("members-body").innerHTML = Object.entries(REPS).map(([id, r]) =>
+    '<tr><td><div class="row g8"><span class="avatar">' + initials(r.name) + '</span><div><span style="font-weight: 500">' + r.name + '</span><div class="small muted">' + r.name.toLowerCase().split(" ").join(".") + '@meridiandemo.com</div></div></div></td>' +
+    '<td><span class="pill ' + (id === "marcus" ? "pill-teal" : "pill-gray") + '">' + (id === "marcus" ? "MANAGER" : "MEMBER") + '</span></td>' +
+    '<td class="small" style="color: var(--ink2)">' + r.team + '</td>' +
+    '<td class="mono small" style="color: var(--ink2)">' + r.since + ' 2026</td>' +
+    '<td><button class="btn-danger btn" onclick="toast(\'Prototype: confirm dialog, then removes the member — their personal TalkPilot keeps working.\')">Remove</button></td></tr>').join("") +
+    '<tr><td colspan="5" class="small muted" style="padding-top: 12px">+ 7 more members · 2 pending invites (sarah.lin@, kwame.a@) — full list continues.</td></tr>';
+  document.querySelectorAll(".navitem[data-nav]").forEach(n => n.addEventListener("click", () => go(n.dataset.nav)));
+  renderCalls(); renderTeam();
+  go("home");
+}
+boot();
+</script>
