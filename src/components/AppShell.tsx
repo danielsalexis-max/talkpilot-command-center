@@ -10,7 +10,7 @@ import { applySkin, getSkinPref, setSkinPref, watchSystemSkin } from "@/lib/skin
 /// Client-side chrome — the Boardroom sidebar. Split out of the root layout so
 /// layout.tsx can stay a server component and export metadata.
 ///
-/// IA (D-161): Home / Calls / Team / Coaching / Insights / Playbook / Settings.
+/// IA (D-162): Home / Calls / Team / Coaching / Insights / Playbook / Settings.
 /// The old flat top-nav + "Admin" gear is gone: the coaching library lives
 /// under Playbook, org administration under Settings.
 
