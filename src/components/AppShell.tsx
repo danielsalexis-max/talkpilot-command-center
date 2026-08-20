@@ -142,7 +142,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const Brand = () => (
         <Link href="/" className="flex items-center gap-2.5 min-w-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icon.png" alt="" className="w-8 h-8 rounded-lg shrink-0" />
+            <img src="/brand-mark.png" alt="" className="w-8 h-8 object-contain shrink-0" />
             <span className="min-w-0">
                 <span className="block font-display font-bold text-[15px] leading-tight text-[var(--color-text)] whitespace-nowrap">
                     TalkPilot <span className="text-[var(--color-accent)]">Teams</span>

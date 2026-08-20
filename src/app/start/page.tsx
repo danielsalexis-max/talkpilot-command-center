@@ -246,10 +246,11 @@ export default function StartPage() {
     return (
         <div className="min-h-screen flex bg-[var(--color-bg)]">
             {/* ── Left: the wizard ── */}
-            <div className="flex-1 flex flex-col px-6 sm:px-12 py-8 max-w-[640px] mx-auto lg:mx-0">
+            <div className="flex-1 flex justify-center px-6 sm:px-10 lg:px-14 py-8 lg:py-12">
+                <div className="w-full max-w-[440px] flex flex-col">
                 <div className="flex items-center gap-2.5 mb-10">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/icon.png" alt="" className="w-8 h-8 rounded-lg" />
+                    <img src="/brand-mark.png" alt="" className="w-8 h-8 object-contain" />
                     <span className="font-display font-bold text-[15px] text-[var(--color-text)]">TalkPilot <span className="text-[var(--color-accent)]">Teams</span></span>
                 </div>
 
@@ -263,15 +264,15 @@ export default function StartPage() {
                     ))}
                 </div>
 
-                <div className="flex-1">
+                <div className="flex-1 flex flex-col justify-center">
                     {step === "account" && (
-                        <div className="max-w-sm">
+                        <div>
                             <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight" style={{ textWrap: "balance" }}>
                                 Give your whole team your best rep’s instincts
                             </h1>
                             <p className="text-sm text-[var(--color-text-secondary)] mt-2">
                                 Live coaching on every call, scored against your playbook.
-                                <span className="font-semibold text-[var(--color-text)]"> 14 days free — no card.</span>
+                                <span className="font-semibold text-[var(--color-text)] whitespace-nowrap"> 14 days free — no card.</span>
                             </p>
                             <form onSubmit={handleAccount} className="space-y-3 mt-7">
                                 <input type="email" required placeholder="Work email" className={INPUT}
@@ -301,7 +302,7 @@ export default function StartPage() {
                     )}
 
                     {step === "workspace" && (
-                        <div className="max-w-sm">
+                        <div>
                             <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">Name your workspace</h1>
                             <p className="text-sm text-[var(--color-text-secondary)] mt-2">This is what your team sees when they join.</p>
                             <form onSubmit={handleWorkspace} className="space-y-4 mt-7">
@@ -370,7 +371,7 @@ export default function StartPage() {
                     )}
 
                     {step === "invite" && (
-                        <div className="max-w-sm">
+                        <div>
                             <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">Invite your first reps</h1>
                             <p className="text-sm text-[var(--color-text-secondary)] mt-2">
                                 {kitApplied
@@ -438,6 +439,7 @@ export default function StartPage() {
                     <span className="mx-2">·</span>
                     Questions? <a href="mailto:alexis@talkpilot.co" className="text-[var(--color-accent-deep)] hover:underline">Talk to us</a>
                 </p>
+                </div>
             </div>
 
             <Showcase />
