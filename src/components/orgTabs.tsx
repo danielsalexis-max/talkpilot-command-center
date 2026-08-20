@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback, useRef } from "react"
+import { embedObjections, reindexObjections, ingestKnowledgeInline, reindexKnowledge, approvedResponsesFrom, guidanceOf } from "@/lib/orgBrain"
 import { supabase } from "@/lib/supabase"
 import { SearchBox } from "@/components/SearchBox"
 import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
@@ -15,8 +16,8 @@ export interface OrgInfo {
     voice_profile: { tone?: string; values?: string; self_reference?: string; banned_phrases?: string[]; required_phrases?: string[] }
 }
 interface KbRow    { id: string; title: string; kind: string; status: string; summary: string | null; created_at: string }
-interface ObjRow   { id: string; objection: string; response_guidance: string | null; severity: string; active: boolean; variants: string[] | null }
-interface PbStage  { name: string; description: string; required_items: string[]; guardrail_rules: Array<{type: string; keyword: string; action: string}> }
+interface ObjRow   { id: string; objection: string; response_guidance: string | null; approved_responses: { text?: string }[] | null; severity: string; active: boolean; variants: string[] | null }
+interface PbStage  { key?: string; name: string; description: string; required?: string[]; required_items: string[]; guardrail_rules: Array<{type: string; keyword: string; action: string}> }
 interface PbRow    { id: string; name: string; methodology: string | null; status: string; version: number; stages: PbStage[]; created_at: string }
 interface MemberRow { user_id: string; email: string | null; role: string; status: string; joined_at: string }
 interface InviteRow { id: string; email: string; role: string; accepted_at: string | null; expires_at: string }
@@ -366,6 +367,7 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
     const [kind, setKind]           = useState("product")
     const [content, setContent]     = useState("")
     const [uploading, setUploading] = useState(false)
+    const [reindexing, setReindexing] = useState<string | null>(null)
     const [msg, setMsg]             = useState<string | null>(null)
     const [isErr, setIsErr]         = useState(false)
     const fileRef = useRef<HTMLInputElement>(null)
@@ -394,20 +396,14 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
         if (!title.trim() || !content.trim()) return
         setUploading(true); setMsg(null)
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/ingest-knowledge`, {
-                method: "POST",
-                headers: { "Authorization": `Bearer ${session?.access_token}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ org_id: orgId, title: title.trim(), kind, content: content.trim() }),
-            })
-            if (res.ok) {
-                setMsg("Document uploaded and processing."); setIsErr(false)
-                setTitle(""); setContent(""); setKind("product")
-                await load()
+            const failure = await ingestKnowledgeInline(orgId, title.trim(), kind, content.trim())
+            if (failure) {
+                setMsg(`Error: ${failure}`); setIsErr(true)
             } else {
-                const e = await res.json().catch(() => ({}))
-                setMsg(`Error: ${errStr(e.error) || res.statusText}`); setIsErr(true)
+                setMsg("Document added — indexed and searchable in live calls."); setIsErr(false)
+                setTitle(""); setContent(""); setKind("product")
             }
+            await load()
         } finally {
             setUploading(false)
         }
@@ -416,6 +412,19 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
     async function deleteDoc(id: string) {
         await supabase.from("org_knowledge").delete().eq("id", id)
         setDocs(prev => prev.filter(d => d.id !== id))
+    }
+
+    // Repair path: a document can read "ready" while having no chunks at all
+    // (seeded rows, or an ingest that failed halfway). Without chunks it
+    // contributes a summary but can never be retrieved during a call.
+    async function reindexDoc(id: string) {
+        setReindexing(id); setMsg(null)
+        try {
+            const failure = await reindexKnowledge(orgId, id)
+            setMsg(failure ? `Re-index failed: ${failure}` : "Re-indexed — searchable in live calls.")
+            setIsErr(!!failure)
+            await load()
+        } finally { setReindexing(null) }
     }
 
     const kindColor = (k: string): "indigo"|"green"|"yellow"|"slate" => {
@@ -494,6 +503,9 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                             <div className="flex items-center gap-2 flex-shrink-0">
                                 <StatusBadge label={d.kind.replace("_"," ")} color={kindColor(d.kind)} />
                                 <StatusBadge label={d.status} color={d.status === "ready" ? "green" : d.status === "error" ? "red" : "yellow"} />
+                                <button className={BTN_GHOST} disabled={reindexing === d.id} onClick={() => reindexDoc(d.id)}>
+                                    {reindexing === d.id ? "Re-indexing…" : "Re-index"}
+                                </button>
                                 <button className={BTN_DANGER} onClick={() => deleteDoc(d.id)}>Delete</button>
                             </div>
                         </div>
@@ -523,17 +535,39 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
     const [extracting, setExtracting]         = useState(false)
     const [extracted, setExtracted]           = useState<ExtractedObjection[]>([])
     const [selected, setSelected]             = useState<Set<number>>(new Set())
+    const [unindexed, setUnindexed]           = useState(0)
+    const [reindexing, setReindexing]         = useState(false)
     const [importing, setImporting]           = useState(false)
     const [extractMsg, setExtractMsg]         = useState<string | null>(null)
     const extractFileRef = useRef<HTMLInputElement>(null)
 
     const load = useCallback(async () => {
-        const { data } = await supabase.from("org_objections")
-            .select("id, objection, response_guidance, severity, active, variants")
-            .eq("org_id", orgId).order("severity")
+        const [{ data }, { count }] = await Promise.all([
+            supabase.from("org_objections")
+                .select("id, objection, response_guidance, approved_responses, severity, active, variants")
+                .eq("org_id", orgId).order("severity"),
+            // An objection with no embedding can never be matched mid-call, so
+            // the library can look complete while doing nothing.
+            supabase.from("org_objections")
+                .select("id", { count: "exact", head: true })
+                .eq("org_id", orgId).is("embedding", null),
+        ])
         setObjs((data ?? []) as ObjRow[])
+        setUnindexed(count ?? 0)
         setLoading(false)
     }, [orgId])
+
+    async function runReindex() {
+        setReindexing(true); setMsg(null)
+        try {
+            const r = await reindexObjections(orgId)
+            setMsg(r.failed > 0
+                ? `Indexed ${r.embedded} of ${r.pending}; ${r.failed} failed. Try again in a moment.`
+                : `Indexed ${r.embedded} objection${r.embedded === 1 ? "" : "s"} — live matching is on.`)
+            setIsErr(r.failed > 0)
+            await load()
+        } finally { setReindexing(false) }
+    }
 
     useEffect(() => { load() }, [load])
 
@@ -571,15 +605,20 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
             org_id: orgId,
             objection: o.objection,
             response_guidance: o.response_guidance || null,
+            approved_responses: approvedResponsesFrom(o.response_guidance),
             severity: o.severity || "medium",
             variants: o.variants ?? [],
             active: true,
         }))
-        const { error } = await supabase.from("org_objections").insert(rows)
+        const { data: inserted, error } = await supabase.from("org_objections").insert(rows).select("id")
+        if (error) { setImporting(false); setExtractMsg(`Import error: ${error.message}`); return }
+        // Embed before reporting success — an unembedded objection can never match.
+        const r = await embedObjections(orgId, (inserted ?? []).map(x => x.id as string))
         setImporting(false)
-        if (error) { setExtractMsg(`Import error: ${error.message}`); return }
         setExtracted([]); setSelected(new Set())
-        setExtractMsg(`Imported ${toImport.length} objections.`)
+        setExtractMsg(r.failed > 0
+            ? `Imported ${toImport.length}, but ${r.failed} couldn't be indexed for live matching — use Re-index.`
+            : `Imported ${toImport.length} objections — all searchable in live calls.`)
         await load()
     }
 
@@ -605,18 +644,23 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
     async function addObjection() {
         if (!objText.trim()) return
         setSaving(true); setMsg(null)
-        const { error } = await supabase.from("org_objections").insert({
+        const { data: inserted, error } = await supabase.from("org_objections").insert({
             org_id: orgId,
             objection: objText.trim(),
             response_guidance: guidance.trim() || null,
+            approved_responses: approvedResponsesFrom(guidance),
             severity,
             variants: variants.split("\n").map(s => s.trim()).filter(Boolean),
             active: true,
-        })
+        }).select("id").single()
+        if (error) { setSaving(false); setMsg(error.message); setIsErr(true); return }
+        const r = await embedObjections(orgId, inserted ? [inserted.id as string] : [])
         setSaving(false)
-        if (error) { setMsg(error.message); setIsErr(true) }
-        else {
-            setMsg("Objection added."); setIsErr(false)
+        {
+            setMsg(r.failed > 0
+                ? "Objection saved, but it couldn't be indexed for live matching yet — use Re-index."
+                : "Objection added — live coaching can match it now.")
+            setIsErr(r.failed > 0)
             setObjText(""); setGuidance(""); setVariants(""); setSeverity("medium")
             await load()
         }
@@ -637,6 +681,17 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
 
     return (
         <div className="space-y-6">
+            {unindexed > 0 && (
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+                    <p className="text-xs text-amber-900">
+                        <span className="font-semibold">{unindexed} objection{unindexed === 1 ? " isn't" : "s aren't"} indexed yet.</span>{" "}
+                        Live coaching can only match objections that have been indexed — these won&apos;t fire on calls until you re-index.
+                    </p>
+                    <button className={BTN_GHOST} disabled={reindexing} onClick={runReindex}>
+                        {reindexing ? "Indexing…" : "Re-index now"}
+                    </button>
+                </div>
+            )}
             {/* AI document extraction */}
             <div className="space-y-4">
                 <UploadZone
@@ -671,7 +726,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                                     className="mt-0.5 accent-[var(--color-accent)]" />
                                 <div className="min-w-0">
                                     <p className="text-sm text-[var(--color-text)] font-medium">{o.objection}</p>
-                                    {o.response_guidance && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{o.response_guidance}</p>}
+                                    {guidanceOf(o) && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{guidanceOf(o)}</p>}
                                     <div className="flex items-center gap-2 mt-1">
                                         <StatusBadge label={o.severity || "medium"} color={sevColor(o.severity || "medium")} />
                                         {o.variants?.length > 0 && <span className="text-xs text-[var(--color-muted)]">+{o.variants.length} variants</span>}
@@ -743,7 +798,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                 <div className="space-y-2">
                     {objs.filter(o => {
                         const s = query.trim().toLowerCase()
-                        return !s || o.objection.toLowerCase().includes(s) || (o.response_guidance ?? "").toLowerCase().includes(s) || (o.variants ?? []).some(v => v.toLowerCase().includes(s))
+                        return !s || o.objection.toLowerCase().includes(s) || (guidanceOf(o) ?? "").toLowerCase().includes(s) || (o.variants ?? []).some(v => v.toLowerCase().includes(s))
                     }).map(o => (
                         <div key={o.id} className={ROW + " items-start"}>
                             <div className="flex-1 min-w-0">
@@ -751,7 +806,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                                     <p className="text-sm text-[var(--color-text)] font-medium">{o.objection}</p>
                                     {!o.active && <StatusBadge label="disabled" color="slate" />}
                                 </div>
-                                {o.response_guidance && <p className="text-xs text-[var(--color-text-secondary)] mt-1">{o.response_guidance}</p>}
+                                {guidanceOf(o) && <p className="text-xs text-[var(--color-text-secondary)] mt-1">{guidanceOf(o)}</p>}
                                 {o.variants && o.variants.length > 0 && (
                                     <p className="text-xs text-[var(--color-muted)] mt-0.5">+{o.variants.length} variant{o.variants.length !== 1 ? "s" : ""}</p>
                                 )}
@@ -848,16 +903,33 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
     async function savePlaybook() {
         if (!pbName.trim() || stages.some(s => !s.name.trim())) return
         setSaving(true); setMsg(null)
-        const stagesJson: PbStage[] = stages.map(s => ({
-            name: s.name.trim(),
-            description: s.description.trim(),
-            required_items: s.requiredItems.split("\n").map(x => x.trim()).filter(Boolean),
-            guardrail_rules: s.guardrails.filter(g => g.keyword.trim()).map(g => ({
-                type: "forbidden_phrase", keyword: g.keyword.trim(), action: g.action
+        const stagesJson: PbStage[] = stages.map(s => {
+            const required = s.requiredItems.split("\n").map(x => x.trim()).filter(Boolean)
+            return {
+                key: s.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""),
+                name: s.name.trim(),
+                description: s.description.trim(),
+                // `required` is the key the live coach reads; `required_items` is
+                // kept so playbooks saved before this stay loadable in the editor.
+                required,
+                required_items: required,
+                guardrail_rules: s.guardrails.filter(g => g.keyword.trim()).map(g => ({
+                    type: "forbidden_phrase", keyword: g.keyword.trim(), action: g.action
+                }))
+            }
+        })
+        // Stage-level forbidden phrases were only ever stored inside stages[],
+        // which nothing reads. Roll them up into the top-level `guardrails`
+        // column, which is what reaches the model during a call.
+        const guardrailsJson = stages.flatMap(st =>
+            st.guardrails.filter(g => g.keyword.trim()).map(g => ({
+                rule: `Do not say "${g.keyword.trim()}" during ${st.name.trim() || "this call"}`,
+                severity: g.action === "escalate" ? "critical" : "normal",
             }))
-        }))
+        )
         const { error } = await supabase.from("org_playbooks").insert({
-            org_id: orgId, name: pbName.trim(), methodology, stages: stagesJson, status: "draft", version: 1
+            org_id: orgId, name: pbName.trim(), methodology, stages: stagesJson,
+            guardrails: guardrailsJson, status: "draft", version: 1
         })
         setSaving(false)
         if (error) { setMsg(error.message); setIsErr(true) }
@@ -1660,10 +1732,14 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         if (!dnaResult) return
         setApplyingObjections(true)
         try {
-            await supabase.from("org_objections").insert(dnaResult.objections.map(o => ({
-                org_id: orgId, objection: o.objection, response_guidance: o.response_guidance,
-                severity: o.severity, variants: null, active: true,
-            })))
+            const { data: inserted } = await supabase.from("org_objections").insert(
+                dnaResult.objections.map(o => ({
+                    org_id: orgId, objection: o.objection, response_guidance: o.response_guidance,
+                    approved_responses: approvedResponsesFrom(o.response_guidance),
+                    severity: o.severity, variants: null, active: true,
+                }))
+            ).select("id")
+            await embedObjections(orgId, (inserted ?? []).map(x => x.id as string))
             setAppliedSections(prev => new Set([...prev, "objections"]))
         } finally { setApplyingObjections(false) }
     }
@@ -1672,14 +1748,26 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         if (!dnaResult) return
         setApplyingFlow(true)
         try {
+            // Exactly one playbook may be active — get_org_context takes the
+            // first active one, so leaving the old one active makes which
+            // playbook coaches the team a coin flip.
+            await supabase.from("org_playbooks").update({ status: "draft" })
+                .eq("org_id", orgId).eq("status", "active")
             await supabase.from("org_playbooks").insert({
                 org_id: orgId,
                 name: `${expertName.trim() || "Expert"} Playbook (Team DNA)`,
                 methodology: dnaResult.conversation_flow.methodology_guess,
                 status: "active", version: 1,
+                // Same stage shape the coach reads (required / talking_points /
+                // exit_criteria). The old `required_items` key was silently
+                // dropped on the way into the prompt.
                 stages: dnaResult.conversation_flow.stages.map(s => ({
-                    name: s.name, description: s.description,
-                    required_items: s.required_items, guardrail_rules: [],
+                    key: s.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""),
+                    name: s.name,
+                    description: s.description,
+                    required: s.required_items ?? [],
+                    talking_points: [],
+                    exit_criteria: "",
                 })),
             })
             setAppliedSections(prev => new Set([...prev, "flow"]))

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase"
+import { approvedResponsesFrom, embedObjections } from "@/lib/orgBrain"
 
 /// Starter coaching kits for /start (D-163): one click gives a brand-new org
 /// an active playbook + objection library, so the readiness gate passes and
@@ -92,16 +93,25 @@ export async function applyStarterKit(orgId: string, kit: StarterKit): Promise<s
     })
     if (pbErr) return pbErr.message
 
-    const { error: objErr } = await supabase.from("org_objections").insert(
+    const { data: inserted, error: objErr } = await supabase.from("org_objections").insert(
         STARTER_OBJECTIONS.map(o => ({
             org_id: orgId,
             objection: o.objection,
             response_guidance: o.response_guidance,
+            // The live coach reads approved_responses; the admin UI edits
+            // response_guidance. Write both or the objection matches and then
+            // hands the rep nothing.
+            approved_responses: approvedResponsesFrom(o.response_guidance),
             severity: o.severity,
             active: true,
             variants: null,
         }))
-    )
+    ).select("id")
     if (objErr) return objErr.message
+
+    // Embed them, or the whole starter library is invisible to objection-lookup
+    // and the first call a new team makes coaches nothing. Non-fatal: the
+    // Objections tab shows an un-indexed count and offers a re-index.
+    await embedObjections(orgId, (inserted ?? []).map(r => r.id as string))
     return null
 }
