@@ -7,12 +7,17 @@ import { useOrg, OrgBanners } from "@/lib/useOrg"
 import { PlaybooksTab, ObjectionsTab, KnowledgeTab, VoiceTab, TeamDNATab } from "@/components/orgTabs"
 
 type Tab = "playbooks" | "objections" | "knowledge" | "voice" | "dna"
-const TABS: { key: Tab; label: string }[] = [
+// `featured` marks Team DNA. It generates a whole playbook from your best rep —
+// the highest-leverage thing on this page — but it sits last in a row of five
+// identical tabs, so its position reads as "least important". It stays last on
+// purpose (the first tab is also the default landing, and DNA is a setup action
+// rather than a daily one); the accent carries the signal instead.
+const TABS: { key: Tab; label: string; featured?: boolean }[] = [
     { key: "playbooks",  label: "Playbooks"  },
     { key: "objections", label: "Objections" },
     { key: "knowledge",  label: "Knowledge"  },
     { key: "voice",      label: "Voice"      },
-    { key: "dna",        label: "Team DNA"   },
+    { key: "dna",        label: "Team DNA", featured: true },
 ]
 
 function PlaybookPageInner() {
@@ -47,15 +52,31 @@ function PlaybookPageInner() {
             <OrgBanners org={org} />
 
             <div className="border-b border-[var(--color-border)] flex gap-1 overflow-x-auto">
-                {TABS.map(t => (
-                    <button key={t.key} onClick={() => setTab(t.key)}
-                        className={`px-4 py-2 text-sm border-b-2 transition-colors -mb-px whitespace-nowrap ${
-                            tab === t.key
-                                ? "border-[var(--color-accent)] text-[var(--color-accent-deep)] font-semibold"
-                                : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-                        }`}
-                    >{t.label}</button>
-                ))}
+                {TABS.map(t => {
+                    const active = tab === t.key
+                    return (
+                        <button key={t.key} onClick={() => setTab(t.key)}
+                            className={`px-4 py-2 text-sm border-b-2 transition-colors -mb-px whitespace-nowrap inline-flex items-center gap-1.5 ${
+                                active
+                                    ? "border-[var(--color-accent)] text-[var(--color-accent-deep)] font-semibold"
+                                    : t.featured
+                                        // Full-strength text and medium weight: one step up from
+                                        // the muted siblings, one step below the active tab.
+                                        ? "border-transparent text-[var(--color-text)] font-medium hover:text-[var(--color-accent-deep)]"
+                                        : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                            }`}
+                        >
+                            {t.featured && (
+                                <span aria-hidden
+                                    className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                                        active ? "bg-[var(--color-accent-deep)]" : "bg-[var(--color-accent)]"
+                                    }`}
+                                />
+                            )}
+                            {t.label}
+                        </button>
+                    )
+                })}
             </div>
 
             {tab === "playbooks"  && <PlaybooksTab orgId={orgId} />}
