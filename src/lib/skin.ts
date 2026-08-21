@@ -13,7 +13,8 @@ export function getSkinPref(): SkinPref {
         const v = localStorage.getItem(KEY)
         if (v === "light" || v === "dark" || v === "system") return v
     } catch { /* private mode */ }
-    return "light"
+    // No stored choice → follow the OS. An explicit pick in Settings still wins.
+    return "system"
 }
 
 export function applySkin(pref: SkinPref = getSkinPref()) {

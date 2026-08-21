@@ -47,7 +47,7 @@ export const viewport: Viewport = {
 // the wrong skin. Mirrors src/lib/skin.ts (keep the two in sync).
 const skinInit = `
 try {
-  var p = localStorage.getItem("tp-skin") || "light";
+  var p = localStorage.getItem("tp-skin") || "system";
   var d = p === "dark" || (p === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.dataset.skin = d ? "dark" : "light";
 } catch (e) { document.documentElement.dataset.skin = "light"; }

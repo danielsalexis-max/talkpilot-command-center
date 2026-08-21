@@ -34,6 +34,7 @@ export default function TeamPage() {
     const [sortDesc, setSortDesc] = useState(true)
     const [query, setQuery]       = useState("")
     const [topGrowth, setTopGrowth] = useState<[string, number][]>([])
+    const [pendingInvites, setPendingInvites] = useState(0)
 
     useEffect(() => { load() }, [])
 
@@ -43,6 +44,15 @@ export default function TeamPage() {
             if (!user) { window.location.replace("/login"); return }
             const { data: ctx } = await supabase.rpc("get_org_context")
             if (!ctx?.org_id) { setLoading(false); return }
+
+            // Invited-but-not-yet-joined people are invisible on this page, which
+            // reads as "the invite didn't work" (D-171). RLS scopes org_invites to
+            // admins, so for managers this just stays 0.
+            supabase.from("org_invites")
+                .select("id", { count: "exact", head: true })
+                .eq("org_id", ctx.org_id).is("accepted_at", null)
+                .gt("expires_at", new Date().toISOString())
+                .then(({ count }) => setPendingInvites(count ?? 0))
 
             const { data: memberRows } = await supabase
                 .from("org_members")
@@ -143,7 +153,14 @@ export default function TeamPage() {
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-semibold text-[var(--color-text)]">Team</h1>
-                    <p className="text-sm text-[var(--color-text-secondary)] mt-1">30-day performance averages. Click a rep to see their full scorecard history.</p>
+                    <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+                        30-day performance averages. Click a rep to see their full scorecard history.
+                        {pendingInvites > 0 && (
+                            <>{" "}<Link href={"/settings?tab=members" as never} className="text-[var(--color-accent-deep)] font-medium hover:underline">
+                                {pendingInvites} invite{pendingInvites === 1 ? "" : "s"} pending →
+                            </Link></>
+                        )}
+                    </p>
                 </div>
                 <SearchBox value={query} onChange={setQuery} placeholder="Search reps…" />
             </div>

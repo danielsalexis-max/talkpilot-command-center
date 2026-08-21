@@ -21,6 +21,20 @@ const INPUT = "w-full bg-[var(--color-bg)] border border-[var(--color-border)] r
 const BTN = "w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors"
 const BTN_GHOST = "w-full py-2.5 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors"
 
+// Workspace creation wants a company identity behind it (D-171). Sign-IN with a
+// personal address stays fine — invited members are whatever address the org
+// invited — but the account that OWNS an org should be reachable at the company.
+const PERSONAL_DOMAINS = new Set([
+    "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.uk", "hotmail.com",
+    "hotmail.co.uk", "outlook.com", "live.com", "msn.com", "icloud.com", "me.com",
+    "mac.com", "aol.com", "proton.me", "protonmail.com", "pm.me", "gmx.com",
+    "gmx.de", "mail.com", "yandex.com", "yandex.ru", "zoho.com", "web.de",
+])
+export function isPersonalEmail(email: string): boolean {
+    const domain = email.trim().toLowerCase().split("@").pop() ?? ""
+    return PERSONAL_DOMAINS.has(domain)
+}
+
 async function callFn(name: string, body: unknown) {
     const { data: { session } } = await supabase.auth.getSession()
     const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/${name}`, {
@@ -125,7 +139,10 @@ function Showcase() {
                     ))}
                 </div>
             </div>
-            <p className="relative font-mono text-[9.5px] tracking-[0.14em] text-[#5A6B7D] mt-10">COACH UP, NOT SURVEIL DOWN — REPS ALWAYS SEE THEIR OWN SCORECARDS</p>
+            <div className="relative mt-10 flex flex-col items-center gap-1.5">
+                <p className="font-mono text-[11px] tracking-[0.16em] text-[#9CD9C6] border border-[#2FB39E]/40 rounded-full px-4 py-1.5">COACH UP, NOT SURVEIL DOWN</p>
+                <p className="font-mono text-[9.5px] tracking-[0.12em] text-[#5A6B7D]">REPS ALWAYS SEE THEIR OWN SCORECARDS</p>
+            </div>
         </div>
     )
 }
@@ -147,6 +164,7 @@ export default function StartPage() {
     const [seats, setSeats]       = useState(5)
     const [orgId, setOrgId]       = useState<string | null>(null)
 
+    const [teamType, setTeamType]     = useState<"sales" | "support">("sales")
     const [kitApplied, setKitApplied] = useState<string | null>(null)
     const [wantsDna, setWantsDna]     = useState(false)
     const [invites, setInvites]       = useState<string[]>(["", "", ""])
@@ -199,7 +217,12 @@ export default function StartPage() {
     }
 
     async function handleWorkspace(e: React.FormEvent) {
-        e.preventDefault(); setError(null); setBusy(true)
+        e.preventDefault(); setError(null)
+        if (isPersonalEmail(email)) {
+            setError("Workspaces need a work email. Sign up with your company address — your reps' invites and billing all hang off it.")
+            return
+        }
+        setBusy(true)
         try {
             const res = await callFn("create-org", { name: orgName, seats })
             setOrgId(res.org_id)
@@ -338,26 +361,39 @@ export default function StartPage() {
                             <p className="text-sm text-[var(--color-text-secondary)] mt-2">
                                 This is what makes coaching <em>yours</em> — reps get guided through these stages live, and every call is scored against them. Pick a starting point; edit everything later.
                             </p>
-                            <div className="space-y-3 mt-6">
-                                {STARTER_KITS.map(kit => (
+                            {/* One question, then two compact cards — the per-stage chips made
+                                this step read as a wall (D-171). Details live in a single meta
+                                line; everything is editable under Playbook afterwards. */}
+                            <div className="flex rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] p-1 mt-6 max-w-xs">
+                                {([["sales", "Sales"], ["support", "Support & success"]] as const).map(([key, label]) => (
+                                    <button key={key} type="button" onClick={() => setTeamType(key)}
+                                        className={`flex-1 py-1.5 text-xs rounded-md transition-colors ${
+                                            teamType === key
+                                                ? "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-semibold"
+                                                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                                        }`}>{label}</button>
+                                ))}
+                            </div>
+                            <div className="space-y-3 mt-3">
+                                {STARTER_KITS.filter(kit => kit.team === teamType).map(kit => (
                                     <button key={kit.key} disabled={busy} onClick={() => handleKit(kit)}
-                                        className="w-full text-left bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent-light)] rounded-xl p-4 transition-colors disabled:opacity-50 group">
+                                        className="w-full text-left bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent-light)] rounded-xl px-4 py-3.5 transition-colors disabled:opacity-50 group">
                                         <div className="flex items-center justify-between">
                                             <p className="text-sm font-semibold text-[var(--color-text)]">{kit.title}</p>
                                             <span className="text-xs font-semibold text-[var(--color-accent-deep)] opacity-0 group-hover:opacity-100 transition-opacity">Use this →</span>
                                         </div>
                                         <p className="text-xs text-[var(--color-text-secondary)] mt-1">{kit.tagline}</p>
-                                        <div className="flex flex-wrap gap-1.5 mt-2.5">
-                                            {kit.stages.map((s, i) => (
-                                                <span key={s.name} className="text-[10.5px] px-2 py-0.5 rounded-full bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)]">{i + 1} · {s.name}</span>
-                                            ))}
-                                        </div>
-                                        <p className="text-[10.5px] text-[var(--color-muted)] mt-2">Includes 6 common objections with approved responses</p>
+                                        <p className="text-[10.5px] text-[var(--color-muted)] mt-1.5">
+                                            {kit.stages.length} stages · {kit.objections.length} objections with approved responses · edit anything later
+                                        </p>
                                     </button>
                                 ))}
                                 <button disabled={busy} onClick={() => { setWantsDna(true); setStep("invite") }}
                                     className="w-full text-left bg-[var(--color-surface)] border border-dashed border-[var(--color-accent-light)] rounded-xl p-4 transition-colors hover:bg-[var(--color-accent-subtle)] disabled:opacity-50">
-                                    <p className="text-sm font-semibold text-[var(--color-accent-deep)]">✦ Clone your best rep instead (Team DNA)</p>
+                                    <p className="text-sm font-semibold text-[var(--color-accent-deep)] inline-flex items-center gap-1.5">
+                                        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent)] shrink-0" />
+                                        Clone your best rep instead (Team DNA)
+                                    </p>
                                     <p className="text-xs text-[var(--color-text-secondary)] mt-1">
                                         Upload 3–5 transcripts of your top performer — we extract their tone, phrases, objection responses and flow into a playbook. Takes ~5 minutes; we’ll take you there after setup.
                                     </p>
@@ -376,7 +412,7 @@ export default function StartPage() {
                             <p className="text-sm text-[var(--color-text-secondary)] mt-2">
                                 {kitApplied
                                     ? <>The <strong>{kitApplied}</strong> playbook is live — anyone who joins gets coached from it on their very first call.</>
-                                    : "They install TalkPilot on Mac or iPhone and get coached live on their calls."}
+                                    : "They install TalkPilot on Mac, iPhone or Android and get coached live on their calls."}
                             </p>
                             <form onSubmit={handleInvites} className="space-y-3 mt-7">
                                 {invites.map((v, i) => (
@@ -390,9 +426,14 @@ export default function StartPage() {
                                     {busy ? "Sending…" : invites.some(v => v.trim()) ? "Send invites & finish" : "Finish setup"}
                                 </button>
                             </form>
-                            <button onClick={() => { doneRef.current = true; setStep("done") }} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-4">
-                                Skip — I’ll invite them later
-                            </button>
+                            <div className="flex items-center gap-4 mt-4">
+                                <button onClick={() => setStep("brain")} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">
+                                    ← Back
+                                </button>
+                                <button onClick={() => { doneRef.current = true; setStep("done") }} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">
+                                    Skip — I’ll invite them later
+                                </button>
+                            </div>
                         </div>
                     )}
 
@@ -405,7 +446,7 @@ export default function StartPage() {
                             {inviteNote && <p className="text-xs text-[var(--color-accent-deep)] font-medium mt-1">{inviteNote}</p>}
                             <div className="space-y-4 mt-6">
                                 {[
-                                    ["1", "Reps install TalkPilot", "Mac or iPhone — they sign in with their invite and they're in your workspace."],
+                                    ["1", "Reps install TalkPilot", "Mac, iPhone or Android — they sign in with their invite and they're in your workspace."],
                                     ["2", "Their next call gets coached live", kitApplied ? `Guided through the ${kitApplied} stages, with your approved objection responses on tap.` : "Once your playbook is active, they're guided through your stages live."],
                                     ["3", "The scorecard lands here", "Stage adherence, objection grades and coaching moments — in your Command Center minutes after the call ends."],
                                 ].map(([n, title, sub]) => (

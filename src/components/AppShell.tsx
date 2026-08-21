@@ -55,6 +55,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const [menuOpen, setMenuOpen]     = useState(false)
     const [dark, setDark]             = useState(false)
     const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
+    const [role, setRole]             = useState<string | null>(null)
     const isPublic = pathname === "/login" || pathname.startsWith("/accept-invite")
         || pathname.startsWith("/start") || pathname.startsWith("/reset-password")
 
@@ -65,7 +66,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }, [])
 
     useEffect(() => {
-        supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
+        supabase.auth.getUser().then(({ data }) => {
+            setEmail(data.user?.email ?? null)
+            if (!data.user) return
+            // The Command Center is the manager surface. A plain member landing
+            // here (e.g. via the accept-invite footer link) saw a half-empty
+            // dashboard instead of being pointed at the app (D-171) — RLS kept
+            // the data safe, but the UX read as broken. Resolve the role and
+            // gate below.
+            supabase.from("org_members").select("role")
+                .eq("user_id", data.user.id).eq("status", "active").maybeSingle()
+                .then(({ data: m }) => setRole(m?.role ?? null))
+        })
         supabase.rpc("get_org_context").then(({ data }) => {
             if (!data?.org_id) return
             supabase.from("organizations").select("name, visibility, trial_ends_at, stripe_subscription_id").eq("id", data.org_id).single()
@@ -153,6 +165,43 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     )
 
     if (isPublic) return <main>{children}</main>
+
+    // Members get coached in the app, not administered here. Managers, admins
+    // and owners pass through; everyone else gets pointed at the right door.
+    if (role === "member") return (
+        <main className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center px-4">
+            <div className="w-full max-w-sm text-center space-y-5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/brand-mark.png" alt="" className="w-12 h-12 object-contain mx-auto" />
+                <div>
+                    <h1 className="text-xl font-semibold text-[var(--color-text)]">
+                        The Command Center is for managers
+                    </h1>
+                    <p className="text-sm text-[var(--color-text-secondary)] mt-2">
+                        You&apos;re a member of <span className="font-medium text-[var(--color-text)]">{orgName ?? "your workspace"}</span> —
+                        your coaching happens in the TalkPilot app, and your scorecards live there too.
+                    </p>
+                </div>
+                <div className="space-y-2">
+                    <a href="https://apps.apple.com/app/id6763953639" target="_blank" rel="noreferrer"
+                        className="block w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-medium rounded-lg transition-colors">
+                        Get TalkPilot for iPhone
+                    </a>
+                    <a href="https://github.com/danielsalexis-max/talkpilot-releases/releases/latest" target="_blank" rel="noreferrer"
+                        className="block w-full py-2.5 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors">
+                        Download for Mac
+                    </a>
+                </div>
+                <p className="text-xs text-[var(--color-muted)]">
+                    Think you should have manager access? Ask your workspace admin to change your role.
+                </p>
+                <button onClick={() => supabase.auth.signOut().then(() => { window.location.href = "/login" })}
+                    className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] underline">
+                    Sign out
+                </button>
+            </div>
+        </main>
+    )
 
     return (
         <div className="flex min-h-screen">

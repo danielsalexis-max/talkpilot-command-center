@@ -831,6 +831,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
     const [playbooks, setPlaybooks]     = useState<PbRow[]>([])
     const [loading, setLoading]         = useState(true)
     const [creating, setCreating]       = useState(false)
+    const [editingId, setEditingId]     = useState<string | null>(null)
     const [pbName, setPbName]           = useState("")
     const [methodology, setMethodology] = useState("custom")
     const [stages, setStages]           = useState<StageForm[]>([{ name: "", description: "", requiredItems: "", guardrails: [] }])
@@ -900,6 +901,24 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
     function addStage() { setStages(prev => [...prev, { name: "", description: "", requiredItems: "", guardrails: [] }]) }
     function removeStage(i: number) { setStages(prev => prev.filter((_, idx) => idx !== i)) }
 
+    /// Load an existing playbook into the editor. Stage shapes vary by origin —
+    /// the editor writes required/required_items, seeded and imported playbooks
+    /// may carry either — so read both (mirrors the client-side dual read, D-165).
+    function startEdit(p: PbRow) {
+        setEditingId(p.id)
+        setPbName(p.name)
+        setMethodology(p.methodology ?? "custom")
+        setStages((p.stages ?? []).map(st => ({
+            name: st.name ?? "",
+            description: st.description ?? "",
+            requiredItems: ((st.required ?? st.required_items) ?? []).join("\n"),
+            guardrails: (st.guardrail_rules ?? []).map(g => ({ keyword: g.keyword ?? "", action: g.action ?? "warn" })),
+        })))
+        setCreating(true)
+        setMsg(null)
+        window.scrollTo({ top: 0, behavior: "smooth" })
+    }
+
     async function savePlaybook() {
         if (!pbName.trim() || stages.some(s => !s.name.trim())) return
         setSaving(true); setMsg(null)
@@ -927,16 +946,25 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                 severity: g.action === "escalate" ? "critical" : "normal",
             }))
         )
-        const { error } = await supabase.from("org_playbooks").insert({
-            org_id: orgId, name: pbName.trim(), methodology, stages: stagesJson,
-            guardrails: guardrailsJson, status: "draft", version: 1
-        })
+        // Editing updates in place and bumps the version; the status is kept, so
+        // editing the live playbook stays live — reps see the change on their
+        // next call, which is the point of editing it.
+        const { error } = editingId
+            ? await supabase.from("org_playbooks").update({
+                name: pbName.trim(), methodology, stages: stagesJson,
+                guardrails: guardrailsJson,
+                version: (playbooks.find(p => p.id === editingId)?.version ?? 0) + 1,
+            }).eq("id", editingId)
+            : await supabase.from("org_playbooks").insert({
+                org_id: orgId, name: pbName.trim(), methodology, stages: stagesJson,
+                guardrails: guardrailsJson, status: "draft", version: 1
+            })
         setSaving(false)
         if (error) { setMsg(error.message); setIsErr(true) }
         else {
-            setMsg("Playbook created."); setIsErr(false)
+            setMsg(editingId ? "Playbook updated." : "Playbook created."); setIsErr(false)
             setPbName(""); setMethodology("custom"); setStages([{ name: "", description: "", requiredItems: "", guardrails: [] }])
-            setCreating(false); setExtractMsg(null); await load()
+            setCreating(false); setEditingId(null); setExtractMsg(null); await load()
         }
     }
 
@@ -966,7 +994,13 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                         <button className={BTN_GHOST} onClick={() => extractFileRef.current?.click()} disabled={extracting}>
                             {extracting ? "Extracting…" : "Import from doc"}
                         </button>
-                        <button className={BTN_PRIMARY} onClick={() => setCreating(!creating)}>
+                        <button className={BTN_PRIMARY} onClick={() => {
+                            if (creating) {
+                                setCreating(false); setEditingId(null)
+                                setPbName(""); setMethodology("custom")
+                                setStages([{ name: "", description: "", requiredItems: "", guardrails: [] }])
+                            } else setCreating(true)
+                        }}>
                             {creating ? "Cancel" : "+ New playbook"}
                         </button>
                     </div>
@@ -1047,7 +1081,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
 
                         <div className="flex items-center gap-3">
                             <button className={BTN_PRIMARY} onClick={savePlaybook} disabled={saving || !pbName.trim()}>
-                                {saving ? "Creating…" : "Create playbook"}
+                                {saving ? "Saving…" : editingId ? "Save changes" : "Create playbook"}
                             </button>
                             <Msg msg={msg} error={isErr} />
                         </div>
@@ -1070,6 +1104,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
+                                <button className={BTN_GHOST} onClick={() => startEdit(p)}>Edit</button>
                                 {p.status !== "active"   && <button className={BTN_GHOST} onClick={() => setStatus(p.id, "active")}>Activate</button>}
                                 {p.status === "active"   && <button className={BTN_GHOST} onClick={() => setStatus(p.id, "draft")}>Deactivate</button>}
                                 {p.status !== "archived" && <button className={BTN_GHOST} onClick={() => setStatus(p.id, "archived")}>Archive</button>}
@@ -1334,9 +1369,6 @@ export function MembersTab({ orgId, org, onNavigate }: { orgId: string; org: Org
 
     async function sendInvite() {
         if (!inviteEmail.trim()) return
-        if (!requiredMet) {
-            setMsg("Complete the required setup steps below before inviting reps."); setIsErr(true); return
-        }
         setInviting(true); setMsg(null)
         const { data: { session } } = await supabase.auth.getSession()
         const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/invite-member`, {
@@ -1414,7 +1446,7 @@ export function MembersTab({ orgId, org, onNavigate }: { orgId: string; org: Org
             <div className={CARD + " space-y-3"}>
                 <div className="flex items-center gap-2">
                     <h3 className="text-sm font-semibold text-[var(--color-text)]">Invite member</h3>
-                    {!requiredMet && <span className="text-xs text-amber-600">🔒 Locked until required setup is complete</span>}
+                    {!requiredMet && <span className="text-xs text-amber-600">Heads-up: reps who join before a playbook is active get generic coaching</span>}
                 </div>
                 <div className="flex gap-2">
                     <input
@@ -1422,20 +1454,18 @@ export function MembersTab({ orgId, org, onNavigate }: { orgId: string; org: Org
                         placeholder="colleague@company.com"
                         value={inviteEmail}
                         onChange={e => setInviteEmail(e.target.value)}
-                        disabled={!requiredMet}
                         className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <select
                         value={inviteRole}
                         onChange={e => setInviteRole(e.target.value)}
-                        disabled={!requiredMet}
                         className="w-32 flex-shrink-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <option value="member">Member</option>
                         <option value="manager">Manager</option>
                         <option value="admin">Admin</option>
                     </select>
-                    <button className={BTN_PRIMARY + " flex-shrink-0"} onClick={sendInvite} disabled={inviting || !inviteEmail.trim() || !requiredMet}>
+                    <button className={BTN_PRIMARY + " flex-shrink-0"} onClick={sendInvite} disabled={inviting || !inviteEmail.trim()}>
                         {inviting ? "Sending…" : "Send invite"}
                     </button>
                 </div>
