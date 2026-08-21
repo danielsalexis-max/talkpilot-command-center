@@ -14,6 +14,22 @@ const BTN   = "w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text
 
 type Platform = "mac" | "ios" | "android" | "windows" | "other"
 
+type InvitePreview = {
+    valid: boolean
+    reason?: "invalid" | "expired" | "used"
+    org_name?: string
+    role?: string
+    email_hint?: string
+}
+
+// Resolved before sign-up so nobody is asked to create an account for an
+// organization the page won't name, or for a link that is already dead.
+const PREVIEW_ERROR: Record<string, string> = {
+    invalid: "This invite link is invalid.",
+    expired: "This invite link has expired.",
+    used:    "This invite link has already been used.",
+}
+
 function detectPlatform(): Platform {
     if (typeof navigator === "undefined") return "other"
     const ua = navigator.userAgent
@@ -41,12 +57,44 @@ function AcceptInviteContent() {
     const [email, setEmail]     = useState("")
     const [password, setPassword] = useState("")
     const [busy, setBusy]       = useState(false)
+    const [preview, setPreview] = useState<InvitePreview | null>(null)
 
     useEffect(() => {
-        supabase.auth.getUser().then(({ data: { user } }) => {
+        let cancelled = false
+
+        async function boot() {
+            if (!token) { setStatus("error"); setMessage("Invalid invite link."); return }
+
+            // Who invited you, and to what — resolved before the sign-up form so the
+            // page can name the organization and stop a dead link early.
+            try {
+                const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+                const res = await fetch(`${supabaseUrl}/functions/v1/invite-preview`, {
+                    method:  "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body:    JSON.stringify({ token }),
+                })
+                const p = (await res.json()) as InvitePreview
+                if (cancelled) return
+                setPreview(p)
+                if (!p.valid) {
+                    setStatus("error")
+                    setMessage(PREVIEW_ERROR[p.reason ?? "invalid"] ?? PREVIEW_ERROR.invalid)
+                    return
+                }
+            } catch {
+                // The preview is context, not a gate. If it fails, carry on and let
+                // accept-invite stay the authority on whether the token is good.
+            }
+
+            const { data: { user } } = await supabase.auth.getUser()
+            if (cancelled) return
             if (!user) setStatus("auth_required")
             else acceptInvite()
-        })
+        }
+
+        boot()
+        return () => { cancelled = true }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [token])
 
@@ -122,6 +170,21 @@ function AcceptInviteContent() {
                     <div className="text-center space-y-3">
                         <p className="text-red-600 text-sm">{message}</p>
                         <p className="text-xs text-[var(--color-muted)]">Ask your admin to re-send the invite if the link expired.</p>
+                    </div>
+                )}
+
+                {preview?.valid && (status === "auth_required" || status === "confirm_email") && (
+                    <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 text-center space-y-1 shadow-sm">
+                        <p className="text-sm text-[var(--color-text)]">
+                            You&apos;ve been invited to join{" "}
+                            <span className="font-semibold">{preview.org_name}</span>
+                            {preview.role && <> as a <span className="font-semibold">{preview.role}</span></>}.
+                        </p>
+                        {preview.email_hint && (
+                            <p className="text-xs text-[var(--color-muted)]">
+                                Invite sent to {preview.email_hint} — use that address below.
+                            </p>
+                        )}
                     </div>
                 )}
 
