@@ -30,7 +30,7 @@ const PERSONAL_DOMAINS = new Set([
     "mac.com", "aol.com", "proton.me", "protonmail.com", "pm.me", "gmx.com",
     "gmx.de", "mail.com", "yandex.com", "yandex.ru", "zoho.com", "web.de",
 ])
-export function isPersonalEmail(email: string): boolean {
+function isPersonalEmail(email: string): boolean {
     const domain = email.trim().toLowerCase().split("@").pop() ?? ""
     return PERSONAL_DOMAINS.has(domain)
 }

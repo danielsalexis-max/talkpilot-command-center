@@ -25,7 +25,7 @@ export function useOrg() {
         if (!id) { setLoading(false); return }
         setOrgId(id)
         const { data } = await supabase.from("organizations")
-            .select("id, name, slug, plan, visibility, seats_purchased, status, cancel_at, trial_ends_at, voice_profile")
+            .select("id, name, slug, plan, visibility, seats_purchased, status, cancel_at, trial_ends_at, voice_profile, settings")
             .eq("id", id).single()
         setOrg(data as OrgInfo)
         setLoading(false)

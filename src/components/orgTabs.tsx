@@ -14,6 +14,7 @@ export interface OrgInfo {
     status: string; cancel_at: string | null
     trial_ends_at?: string | null
     voice_profile: { tone?: string; values?: string; self_reference?: string; banned_phrases?: string[]; required_phrases?: string[] }
+    settings?: { rep_visibility?: { playbook?: boolean; knowledge?: boolean } } & Record<string, unknown>
 }
 interface KbRow    { id: string; title: string; kind: string; status: string; summary: string | null; created_at: string }
 interface ObjRow   { id: string; objection: string; response_guidance: string | null; approved_responses: { text?: string }[] | null; severity: string; active: boolean; variants: string[] | null }
@@ -164,13 +165,19 @@ const TONE_PRESETS = [
 export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }) {
     const [name, setName]             = useState(org.name)
     const [visibility, setVisibility] = useState(org.visibility)
+    // Rep visibility (D-172): reps seeing the playbook and knowledge titles in
+    // their own app is the default — the fair-and-motivating setting. The
+    // opt-out exists but is deliberately quiet: small text, no big toggle UI.
+    const [repPlaybook, setRepPlaybook]   = useState(org.settings?.rep_visibility?.playbook !== false)
+    const [repKnowledge, setRepKnowledge] = useState(org.settings?.rep_visibility?.knowledge !== false)
     const [saving, setSaving]         = useState(false)
     const [msg, setMsg]               = useState<string | null>(null)
     const [isErr, setIsErr]           = useState(false)
 
     async function save() {
         setSaving(true); setMsg(null)
-        const { error } = await supabase.from("organizations").update({ name, visibility }).eq("id", org.id)
+        const settings = { ...(org.settings ?? {}), rep_visibility: { playbook: repPlaybook, knowledge: repKnowledge } }
+        const { error } = await supabase.from("organizations").update({ name, visibility, settings }).eq("id", org.id)
         setSaving(false)
         if (error) { setMsg(error.message); setIsErr(true) }
         else { setMsg("Saved."); setIsErr(false); onSaved() }
@@ -195,6 +202,24 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
                         Enforced in the database, not the interface. Reps always see their own scorecards in full,
                         whatever this is set to.
                     </p>
+                </div>
+                <div className="pt-1 space-y-1.5">
+                    <p className="text-xs text-[var(--color-text-secondary)]">
+                        Reps see the active playbook and your knowledge doc titles read-only in their app,
+                        so they know what they&apos;re coached from and graded against.
+                    </p>
+                    <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+                            <input type="checkbox" checked={repPlaybook} onChange={e => setRepPlaybook(e.target.checked)}
+                                className="accent-[var(--color-accent)] w-3.5 h-3.5" />
+                            Playbook visible to reps
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+                            <input type="checkbox" checked={repKnowledge} onChange={e => setRepKnowledge(e.target.checked)}
+                                className="accent-[var(--color-accent)] w-3.5 h-3.5" />
+                            Knowledge visible to reps
+                        </label>
+                    </div>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)] bg-[var(--color-bg)] rounded-lg px-3 py-2">
                     <span>Plan: <span className="text-[var(--color-text)] font-medium capitalize">{org.plan}</span></span>
