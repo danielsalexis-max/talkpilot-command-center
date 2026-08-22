@@ -6,6 +6,7 @@ import Link from "next/link"
 import { supabase, type Scorecard } from "@/lib/supabase"
 import { ScoreRing } from "@/components/ScoreRing"
 import { PracticeTab } from "@/components/orgTabs"
+import { PageSkeleton } from "@/components/homeStates"
 
 interface MemberInfo { user_id: string; email: string | null; full_name: string | null }
 
@@ -45,15 +46,15 @@ export default function CoachingPage() {
     const byUser = useMemo(() => new Map(members.map(m => [m.user_id, m])), [members])
     const label = (id: string) => byUser.get(id)?.full_name || byUser.get(id)?.email || "Rep"
 
-    if (loading) return <div className="text-sm text-[var(--color-muted)]">Loading…</div>
+    if (loading) return <PageSkeleton rows={2} />
     if (!orgId) return <div className="text-red-600 text-sm">No org membership found.</div>
 
     return (
         <div className="space-y-8">
             <div>
-                <h1 className="text-2xl font-bold text-[var(--color-text)]">Coaching</h1>
+                <h1 className="text-2xl font-bold text-[var(--color-text)]">Review</h1>
                 <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                    The loop: review flagged calls, leave notes reps see in their app, assign practice — grades roll back up here.
+                    Flagged calls worth your eyes, notes reps see in their app, and practice you assign — grades roll back up here.
                 </p>
             </div>
 
@@ -67,7 +68,8 @@ export default function CoachingPage() {
                 </div>
                 {queue.length === 0 && (
                     <p className="text-sm text-[var(--color-muted)] py-4 text-center">
-                        Nothing needs attention — no breaches or low-adherence calls in the last 30 days.
+                        Nothing needs review — no guardrail breaches or low-adherence calls in 30 days.
+                        That&apos;s the goal. <Link href="/playbook" className="text-[var(--color-accent-deep)] font-medium hover:underline">Tighten the playbook →</Link>
                     </p>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

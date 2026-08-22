@@ -102,10 +102,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         { href: "/",          label: "Home",     icon: ICONS.home,     match: p => p === "/" },
         { href: "/calls",     label: "Calls",    icon: ICONS.calls,    match: p => p.startsWith("/calls") || p.startsWith("/scorecard") },
         { href: "/team",      label: "Team",     icon: ICONS.team,     match: p => p.startsWith("/team") },
-        { href: "/coaching",  label: "Coaching", icon: ICONS.coaching, match: p => p.startsWith("/coaching") },
-        { href: "/insights",  label: "Insights", icon: ICONS.insights, match: p => p.startsWith("/insights") },
+        // "Coaching" next to "Playbook" read as two names for one thing; the page
+        // is a review queue, so it's called Review (D-175). Insights folded into
+        // Home the same change — five ways to look at the same scorecards was
+        // the "convoluted" feeling in one sentence.
+        { href: "/coaching",  label: "Review",   icon: ICONS.coaching, match: p => p.startsWith("/coaching") },
         { href: "/playbook",  label: "Playbook", icon: ICONS.playbook, match: p => p.startsWith("/playbook") },
-        { href: "/settings",  label: "Settings", icon: ICONS.settings, match: p => p.startsWith("/settings") || p.startsWith("/admin") },
+        // Managers can't edit org settings or billing (RLS would silently
+        // refuse) — don't show them doors they can't open.
+        ...(role === "manager" ? [] : [
+            { href: "/settings" as Route, label: "Settings", icon: ICONS.settings, match: (p: string) => p.startsWith("/settings") || p.startsWith("/admin") },
+        ]),
     ]
 
     const NavLink = ({ n }: { n: NavItem }) => {

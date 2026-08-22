@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { supabase, type Scorecard } from "@/lib/supabase"
 import { ScoreRing } from "@/components/ScoreRing"
+import { PageSkeleton } from "@/components/homeStates"
 import { SearchBox } from "@/components/SearchBox"
 
 interface MemberInfo { user_id: string; email: string | null; full_name: string | null }
@@ -61,7 +62,7 @@ export default function CallsPage() {
         return true
     })
 
-    if (loading) return <div className="text-sm text-[var(--color-muted)]">Loading…</div>
+    if (loading) return <PageSkeleton rows={2} />
 
     return (
         <div className="space-y-5">
@@ -69,7 +70,7 @@ export default function CallsPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-[var(--color-text)]">Calls</h1>
                     <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                        Every scored session across the org, last 90 days. Click a call to open its scorecard.
+                        Every scored call across the org, last 90 days — each one opens a full scorecard.
                     </p>
                 </div>
                 <SearchBox value={query} onChange={setQuery} placeholder="Search calls or reps…" />
@@ -104,7 +105,14 @@ export default function CallsPage() {
                     <tbody className="divide-y divide-[var(--color-line-soft)]">
                         {filtered.length === 0 && (
                             <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-[var(--color-muted)]">
-                                No calls match. Clear the search or filters.
+                                {cards.length === 0 ? (
+                                    <>
+                                        No scored calls yet — they land here minutes after a rep&apos;s call ends.{" "}
+                                        <Link href="/team?tab=members" className="text-[var(--color-accent-deep)] font-medium hover:underline">Check who&apos;s joined →</Link>
+                                    </>
+                                ) : (
+                                    "No calls match. Clear the search or filters."
+                                )}
                             </td></tr>
                         )}
                         {filtered.map(c => (

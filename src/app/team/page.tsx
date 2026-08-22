@@ -1,10 +1,15 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { supabase, askClaude, type TeamStats } from "@/lib/supabase"
 import { ScoreRing } from "@/components/ScoreRing"
 import { SearchBox } from "@/components/SearchBox"
 import { AskPanel } from "@/components/AskPanel"
+import { PageSkeleton } from "@/components/homeStates"
+import { MembersTab } from "@/components/orgTabs"
+import { useOrg, OrgBanners } from "@/lib/useOrg"
 import Link from "next/link"
 
 function buildTeamContext(members: TeamStats[], topGrowth: [string, number][]): string {
@@ -27,7 +32,61 @@ const TEAM_SUGGESTIONS = [
     "Where should I focus this week?",
 ]
 
+/// People live in ONE place now (D-175): performance and the roster/invites
+/// are tabs of the same page. They used to be split between here and
+/// Settings → Members, which is exactly where Alexis got lost looking for a
+/// pending invite.
+type TeamTab = "performance" | "members"
+
 export default function TeamPage() {
+    return (
+        <Suspense fallback={<PageSkeleton />}>
+            <TeamPageInner />
+        </Suspense>
+    )
+}
+
+function TeamPageInner() {
+    const router = useRouter()
+    const params = useSearchParams()
+    const { org, orgId, loading: orgLoading } = useOrg()
+    const tab: TeamTab = params.get("tab") === "members" ? "members" : "performance"
+    const setTab = (t: TeamTab) => router.replace(`/team?tab=${t}`, { scroll: false })
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-2xl font-semibold text-[var(--color-text)]">Team</h1>
+                <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+                    Who&apos;s improving, who needs you this week — and everyone&apos;s seat, role and invite in one place.
+                </p>
+            </div>
+
+            {org && <OrgBanners org={org} />}
+
+            <div className="border-b border-[var(--color-border)] flex gap-1">
+                {([["performance", "Performance"], ["members", "Members & invites"]] as const).map(([key, label]) => (
+                    <button key={key} onClick={() => setTab(key)}
+                        className={`px-4 py-2 text-sm border-b-2 transition-colors -mb-px whitespace-nowrap ${
+                            tab === key
+                                ? "border-[var(--color-accent)] text-[var(--color-accent-deep)] font-semibold"
+                                : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                        }`}
+                    >{label}</button>
+                ))}
+            </div>
+
+            {tab === "performance" && <PerformanceTab onSeeMembers={() => setTab("members")} />}
+            {tab === "members" && (
+                orgLoading ? <PageSkeleton rows={2} />
+                : orgId && org ? <MembersTab orgId={orgId} org={org} />
+                : <p className="text-sm text-[var(--color-text-secondary)]">Members are managed by workspace owners and admins.</p>
+            )}
+        </div>
+    )
+}
+
+function PerformanceTab({ onSeeMembers }: { onSeeMembers: () => void }) {
     const [members, setMembers]   = useState<TeamStats[]>([])
     const [loading, setLoading]   = useState(true)
     const [sortKey, setSortKey]   = useState<keyof TeamStats>("avg_overall")
@@ -141,7 +200,7 @@ export default function TeamPage() {
         </button>
     )
 
-    if (loading) return <div className="text-[var(--color-muted)] text-sm">Loading…</div>
+    if (loading) return <PageSkeleton rows={2} />
 
     // Rep + Sessions + Overall always show; Adherence/Objections/Accuracy are
     // reachable on a rep's own page, so they're progressively revealed as
@@ -151,17 +210,14 @@ export default function TeamPage() {
     return (
         <div className="space-y-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-semibold text-[var(--color-text)]">Team</h1>
-                    <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                        30-day performance averages. Click a rep to see their full scorecard history.
-                        {pendingInvites > 0 && (
-                            <>{" "}<Link href={"/settings?tab=members" as never} className="text-[var(--color-accent-deep)] font-medium hover:underline">
-                                {pendingInvites} invite{pendingInvites === 1 ? "" : "s"} pending →
-                            </Link></>
-                        )}
-                    </p>
-                </div>
+                <p className="text-sm text-[var(--color-text-secondary)]">
+                    30-day averages — click a rep for their full history.
+                    {pendingInvites > 0 && (
+                        <>{" "}<button onClick={onSeeMembers} className="text-[var(--color-accent-deep)] font-medium hover:underline">
+                            {pendingInvites} invite{pendingInvites === 1 ? "" : "s"} pending →
+                        </button></>
+                    )}
+                </p>
                 <SearchBox value={query} onChange={setQuery} placeholder="Search reps…" />
             </div>
 

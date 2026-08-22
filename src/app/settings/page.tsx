@@ -1,17 +1,18 @@
 "use client"
 
+import Link from "next/link"
 import { Suspense, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useOrg, OrgBanners } from "@/lib/useOrg"
-import { SettingsTab, MembersTab, BillingTab, type AdminTab } from "@/components/orgTabs"
+import { SettingsTab, BillingTab } from "@/components/orgTabs"
+import { PageSkeleton } from "@/components/homeStates"
 import { getSkinPref, setSkinPref, type SkinPref } from "@/lib/skin"
 import { useState } from "react"
 
-type Tab = "org" | "members" | "billing"
+type Tab = "org" | "billing"
 const TABS: { key: Tab; label: string }[] = [
     { key: "org",     label: "Organization" },
-    { key: "members", label: "Members"      },
     { key: "billing", label: "Billing"      },
 ]
 
@@ -45,24 +46,19 @@ function SettingsPageInner() {
     const { org, orgId, loading, reload } = useOrg()
 
     const raw = params.get("tab")
-    const tab: Tab = raw === "members" || raw === "billing" ? raw : "org"
+    const tab: Tab = raw === "billing" ? "billing" : "org"
     const setTab = (t: Tab) => router.replace(`/settings?tab=${t}`, { scroll: false })
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => { if (!data.user) router.replace("/login") })
     }, [router])
 
-    // MembersTab's readiness gate jumps to setup surfaces that now live under
-    // /playbook (voice included); "settings" (org basics) stays here.
-    const onNavigate = (t: AdminTab) => {
-        if (t === "settings") { setTab("org"); return }
-        const map: Partial<Record<AdminTab, string>> = {
-            playbooks: "playbooks", objections: "objections", knowledge: "knowledge", voice: "voice", dna: "dna",
-        }
-        router.push(`/playbook?tab=${map[t] ?? "playbooks"}`)
-    }
+    // People moved to Team → Members (D-175); old bookmarks keep working.
+    useEffect(() => {
+        if (raw === "members") router.replace("/team?tab=members")
+    }, [raw, router])
 
-    if (loading) return <div className="text-sm text-[var(--color-muted)]">Loading…</div>
+    if (loading) return <PageSkeleton rows={2} />
     if (!orgId || !org) return (
         <div className="text-red-600 text-sm">
             Admin access required. Make sure you&apos;re an org owner or admin.
@@ -74,7 +70,7 @@ function SettingsPageInner() {
             <div>
                 <h1 className="text-2xl font-bold text-[var(--color-text)]">Settings</h1>
                 <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                    {org.name} · <span className="capitalize">{org.plan}</span> plan
+                    {org.name} · <span className="capitalize">{org.plan}</span> plan — your team lives under <Link href="/team?tab=members" className="text-[var(--color-accent-deep)] font-medium hover:underline">Team</Link> now
                 </p>
             </div>
 
@@ -98,7 +94,6 @@ function SettingsPageInner() {
                     <AppearanceCard />
                 </div>
             )}
-            {tab === "members" && <MembersTab orgId={orgId} org={org} onNavigate={onNavigate} />}
             {tab === "billing" && <BillingTab orgId={orgId} trialEndsAt={org.trial_ends_at ?? null} />}
         </div>
     )

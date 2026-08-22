@@ -4,6 +4,7 @@ import { Suspense, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useOrg, OrgBanners } from "@/lib/useOrg"
+import { PageSkeleton } from "@/components/homeStates"
 import { PlaybooksTab, ObjectionsTab, KnowledgeTab, VoiceTab, TeamDNATab } from "@/components/orgTabs"
 
 type Tab = "playbooks" | "objections" | "knowledge" | "voice" | "dna"
@@ -16,7 +17,7 @@ const TABS: { key: Tab; label: string; featured?: boolean }[] = [
     { key: "playbooks",  label: "Playbooks"  },
     { key: "objections", label: "Objections" },
     { key: "knowledge",  label: "Knowledge"  },
-    { key: "voice",      label: "Voice"      },
+    { key: "voice",      label: "Company voice" },
     { key: "dna",        label: "Team DNA", featured: true },
 ]
 
@@ -33,7 +34,7 @@ function PlaybookPageInner() {
         supabase.auth.getUser().then(({ data }) => { if (!data.user) router.replace("/login") })
     }, [router])
 
-    if (loading) return <div className="text-sm text-[var(--color-muted)]">Loading…</div>
+    if (loading) return <PageSkeleton rows={2} />
     if (!orgId || !org) return (
         <div className="text-red-600 text-sm">
             Admin access required. Make sure you&apos;re an org owner or admin.

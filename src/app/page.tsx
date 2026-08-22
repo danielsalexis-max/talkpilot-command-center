@@ -6,11 +6,13 @@ import Link from "next/link"
 import type { Route } from "next"
 import { supabase, type Scorecard } from "@/lib/supabase"
 import { ScoreRing } from "@/components/ScoreRing"
+import { InsightsSections } from "@/components/InsightsSections"
+import { PageSkeleton, SetupChecklistCard, WaitingRoomCard, setupRequiredMet, type SetupState } from "@/components/homeStates"
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts"
 
-interface OrgInfo { id: string; name: string; visibility: string; seats_purchased: number; plan: string }
+interface OrgInfo { id: string; name: string; visibility: string; seats_purchased: number; plan: string; voice_profile?: { tone?: string } | null }
 interface MemberInfo { user_id: string; email: string | null; full_name: string | null; status: string }
 interface TrendPoint { week: string; overall: number | null; adherence: number | null }
 
@@ -43,6 +45,8 @@ export default function HomePage() {
     const [org, setOrg]           = useState<OrgInfo | null>(null)
     const [cards, setCards]       = useState<Scorecard[]>([])
     const [members, setMembers]   = useState<MemberInfo[]>([])
+    const [setup, setSetup]       = useState<SetupState | null>(null)
+    const [pendingInvites, setPendingInvites] = useState(0)
     const [loading, setLoading]   = useState(true)
     const [error, setError]       = useState<string | null>(null)
 
@@ -57,17 +61,36 @@ export default function HomePage() {
             if (!orgData?.org_id) { setError("No org membership found."); setLoading(false); return }
             const orgId = orgData.org_id
 
-            const [{ data: orgInfo }, { data: scorecards }, { data: mems }] = await Promise.all([
-                supabase.from("organizations").select("id, name, visibility, seats_purchased, plan").eq("id", orgId).single(),
+            const [{ data: orgInfo }, { data: scorecards }, { data: mems },
+                   { count: pbCount }, { count: objCount }, { count: kbCount }, { count: invCount }] = await Promise.all([
+                supabase.from("organizations").select("id, name, visibility, seats_purchased, plan, voice_profile").eq("id", orgId).single(),
                 supabase.from("session_scorecards").select("*")
                     .eq("org_id", orgId).eq("status", "scored")
                     .gte("started_at", new Date(Date.now() - 30 * 86400e3).toISOString())
                     .order("started_at", { ascending: false }).limit(200),
                 supabase.rpc("get_org_members_with_email", { p_org: orgId }),
+                // Setup + waiting-room state (D-175): Home owns the first-run
+                // journey, so it needs to know whether the brain is assembled
+                // and whether anyone is still en route.
+                supabase.from("org_playbooks").select("id", { count: "exact", head: true })
+                    .eq("org_id", orgId).eq("status", "active"),
+                supabase.from("org_objections").select("id", { count: "exact", head: true })
+                    .eq("org_id", orgId),
+                supabase.from("org_knowledge").select("id", { count: "exact", head: true })
+                    .eq("org_id", orgId),
+                supabase.from("org_invites").select("id", { count: "exact", head: true })
+                    .eq("org_id", orgId).is("accepted_at", null).gt("expires_at", new Date().toISOString()),
             ])
             setOrg(orgInfo)
             setCards((scorecards ?? []) as Scorecard[])
             setMembers(((mems ?? []) as MemberInfo[]).filter(m => m.status === "active" || !m.status))
+            setSetup({
+                activePlaybooks: pbCount ?? 0,
+                objections: objCount ?? 0,
+                knowledge: kbCount ?? 0,
+                voiceSet: !!(orgInfo?.voice_profile?.tone),
+            })
+            setPendingInvites(invCount ?? 0)
         } catch (e) {
             setError((e as Error).message)
         } finally {
@@ -75,7 +98,7 @@ export default function HomePage() {
         }
     }
 
-    if (loading) return <div className="text-sm text-[var(--color-muted)]">Loading…</div>
+    if (loading) return <PageSkeleton />
     if (error === "No org membership found.") return (
         <div className="max-w-md mx-auto mt-16 bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-8 text-center shadow-sm">
             <h1 className="font-display text-xl font-bold text-[var(--color-text)]">You&apos;re not in a workspace yet</h1>
@@ -170,11 +193,11 @@ export default function HomePage() {
     const activeMembers = members.length
     const sessionsPerRepWeek = activeMembers ? Math.round((cards.length / activeMembers / (30 / 7)) * 10) / 10 : 0
 
-    const kpis: { label: string; field: keyof Scorecard }[] = [
-        { label: "Overall",    field: "overall_score"   },
-        { label: "Adherence",  field: "adherence_score" },
-        { label: "Objections", field: "objection_score" },
-        { label: "Accuracy",   field: "accuracy_score"  },
+    const kpis: { label: string; field: keyof Scorecard; hint: string }[] = [
+        { label: "Overall",    field: "overall_score",   hint: "Average overall score across scored calls, 0–100." },
+        { label: "Adherence",  field: "adherence_score", hint: "How closely calls followed your playbook's stages." },
+        { label: "Objections", field: "objection_score", hint: "How well pushback was handled against your approved responses." },
+        { label: "Accuracy",   field: "accuracy_score",  hint: "Factual claims on calls, verified against your knowledge base." },
     ]
 
     const attnStyle: Record<Attention["kind"], string> = {
@@ -197,11 +220,24 @@ export default function HomePage() {
                         {org?.plan} plan · {org?.seats_purchased} seats · {org?.visibility?.replace(/_/g, " ")} visibility
                     </p>
                 </div>
-                <Link href="/settings?tab=members"
+                <Link href={"/team?tab=members" as Route}
                     className="px-4 py-2 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors">
                     Invite reps
                 </Link>
             </div>
+
+            {/* ── State 1: the brain isn't assembled — the checklist IS the page (D-175) ── */}
+            {setup && !setupRequiredMet(setup) && (
+                <SetupChecklistCard state={setup} />
+            )}
+
+            {/* ── State 2: set up, but nobody has made a call yet ── */}
+            {setup && setupRequiredMet(setup) && cards.length === 0 && (
+                <WaitingRoomCard activeMembers={members.length} pendingInvites={pendingInvites} />
+            )}
+
+            {/* ── State 3: the live dashboard ── */}
+            {cards.length > 0 && (<>
 
             {/* Attention feed */}
             {attention.length > 0 && (
@@ -224,7 +260,7 @@ export default function HomePage() {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {kpis.map(k => (
                             <div key={k.field} className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-4 shadow-sm">
-                                <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)]">{k.label}</p>
+                                <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)] cursor-help" title={k.hint}>{k.label}</p>
                                 <div className="flex items-baseline gap-2 mt-1">
                                     <span className="font-mono text-2xl text-[var(--color-text)]">{avgOf(cards, k.field) ?? "—"}</span>
                                     <Delta value={delta(k.field)} />
@@ -355,6 +391,10 @@ export default function HomePage() {
                     </div>
                 </div>
             </div>
+
+            {/* Deeper cuts — folded in from the old Insights page (D-175) */}
+            <InsightsSections />
+            </>)}
         </div>
     )
 }

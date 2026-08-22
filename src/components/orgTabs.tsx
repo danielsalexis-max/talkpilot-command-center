@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState, useCallback, useRef } from "react"
 import { embedObjections, reindexObjections, ingestKnowledgeInline, reindexKnowledge, approvedResponsesFrom, guidanceOf } from "@/lib/orgBrain"
 import { supabase } from "@/lib/supabase"
@@ -146,6 +147,21 @@ function UploadZone({
     )
 }
 
+/// Raw Postgres/PostgREST text ("violates check constraint …") reads as a
+/// crash to an owner (D-175). Our own edge functions already return humane
+/// messages — pass those through; translate anything that smells like the
+/// database, and keep the raw text in the console for debugging.
+function humanError(raw: string | null | undefined, doing: string): string {
+    const r = (raw ?? "").trim()
+    const dbSmell = /violates|constraint|relation |column |duplicate key|syntax error|permission denied|row-level security|foreign key|null value in/i
+    if (!r) return `Couldn't ${doing}. Try again — and contact us if it repeats.`
+    if (dbSmell.test(r)) {
+        console.error(`[${doing}]`, r)
+        return `Couldn't ${doing}. Try again — and contact us if it repeats.`
+    }
+    return r
+}
+
 function errStr(e: unknown): string {
     if (!e) return ""
     if (typeof e === "string") return e
@@ -179,7 +195,7 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
         const settings = { ...(org.settings ?? {}), rep_visibility: { playbook: repPlaybook, knowledge: repKnowledge } }
         const { error } = await supabase.from("organizations").update({ name, visibility, settings }).eq("id", org.id)
         setSaving(false)
-        if (error) { setMsg(error.message); setIsErr(true) }
+        if (error) { setMsg(humanError(error.message, "save your settings")); setIsErr(true) }
         else { setMsg("Saved."); setIsErr(false); onSaved() }
     }
 
@@ -278,7 +294,7 @@ export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }
             voice_profile: { tone: toneParts.join(", "), values, self_reference: selfRef, banned_phrases: banned, required_phrases: required },
         }).eq("id", org.id)
         setSaving(false)
-        if (error) { setMsg(error.message); setIsErr(true) }
+        if (error) { setMsg(humanError(error.message, "save your settings")); setIsErr(true) }
         else { setMsg("Saved."); setIsErr(false); onSaved() }
     }
 
@@ -678,7 +694,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
             variants: variants.split("\n").map(s => s.trim()).filter(Boolean),
             active: true,
         }).select("id").single()
-        if (error) { setSaving(false); setMsg(error.message); setIsErr(true); return }
+        if (error) { setSaving(false); setMsg(humanError(error.message, "save the playbook")); setIsErr(true); return }
         const r = await embedObjections(orgId, inserted ? [inserted.id as string] : [])
         setSaving(false)
         {
@@ -985,7 +1001,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                 guardrails: guardrailsJson, status: "draft", version: 1
             })
         setSaving(false)
-        if (error) { setMsg(error.message); setIsErr(true) }
+        if (error) { setMsg(humanError(error.message, "save that")); setIsErr(true) }
         else {
             setMsg(editingId ? "Playbook updated." : "Playbook created."); setIsErr(false)
             setPbName(""); setMethodology("custom"); setStages([{ name: "", description: "", requiredItems: "", guardrails: [] }])
@@ -998,6 +1014,11 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
             await supabase.from("org_playbooks").update({ status: "draft" }).eq("org_id", orgId).eq("status", "active")
         }
         await supabase.from("org_playbooks").update({ status }).eq("id", id)
+        // Every action answers "what happens now?" (D-175).
+        setIsErr(false)
+        setMsg(status === "active" ? "Live — your reps are coached from this on their next call."
+             : status === "draft"  ? "Deactivated — reps get generic coaching until another playbook is live."
+             : "Archived.")
         await load()
     }
 
@@ -1218,7 +1239,7 @@ export function PracticeTab({ orgId }: { orgId: string }) {
             assigned_by: user?.id,
         })
         setAssigning(false)
-        if (error) { setMsg(`Error: ${error.message}`); setIsErr(true) }
+        if (error) { setMsg(humanError(error.message, "save that")); setIsErr(true) }
         else {
             setMsg(`Assigned "${scenario.title}".`); setIsErr(false)
             setNote(""); setDueDate(""); setAssigneeId("")
@@ -1339,7 +1360,7 @@ export function PracticeTab({ orgId }: { orgId: string }) {
     )
 }
 
-export function MembersTab({ orgId, org, onNavigate }: { orgId: string; org: OrgInfo; onNavigate: (t: AdminTab) => void }) {
+export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     const [members, setMembers]         = useState<MemberRow[]>([])
     const [query, setQuery]             = useState("")
     const [invites, setInvites]         = useState<InviteRow[]>([])
@@ -1382,13 +1403,9 @@ export function MembersTab({ orgId, org, onNavigate }: { orgId: string; org: Org
     // ── Onboarding gate: an org must have its coaching foundation in place before
     //    reps can be invited, otherwise they'd sign in to an unconfigured product.
     const voiceSet = !!org.voice_profile?.tone?.trim()
-    const checks: { key: string; label: string; done: boolean; required: boolean; tab: AdminTab; hint: string }[] = [
-        { key: "playbook",   label: "Activate a playbook",             done: (readiness?.activePlaybooks ?? 0) >= 1, required: true,  tab: "playbooks",  hint: "Reps are guided in real-time by the active playbook and scored against it." },
-        { key: "objections", label: "Add at least 3 objections",       done: (readiness?.objections ?? 0) >= 3,      required: true,  tab: "objections", hint: "So the AI can coach reps through pushback the moment it happens." },
-        { key: "voice",      label: "Configure company voice & tone",   done: voiceSet,                               required: false, tab: "voice",      hint: "Keeps every rep on-brand in live suggestions." },
-        { key: "knowledge",  label: "Upload a knowledge document",      done: (readiness?.knowledge ?? 0) >= 1,       required: false, tab: "knowledge",  hint: "Grounds AI answers in your real product, pricing and case studies." },
-    ]
-    const requiredMet = checks.filter(c => c.required).every(c => c.done)
+    // The full setup checklist lives on Home now (D-175); this tab keeps only
+    // a slim nudge so inviting early is informed, not blocked.
+    const requiredMet = (readiness?.activePlaybooks ?? 0) >= 1 && (readiness?.objections ?? 0) >= 3
 
     useEffect(() => { load() }, [load])
 
@@ -1403,7 +1420,7 @@ export function MembersTab({ orgId, org, onNavigate }: { orgId: string; org: Org
         })
         setInviting(false)
         if (res.ok) {
-            setMsg("Invite sent."); setIsErr(false); setInviteEmail(""); await load()
+            setMsg("Invite sent — they'll show as Pending below, and appear in Performance after their first call."); setIsErr(false); setInviteEmail(""); await load()
         } else {
             const e = await res.json().catch(() => ({}))
             setMsg(`Error: ${errStr(e.error) || "Try again in a minute, or contact support."}`); setIsErr(true)
@@ -1423,55 +1440,16 @@ export function MembersTab({ orgId, org, onNavigate }: { orgId: string; org: Org
     const roleColor = (r: string): "indigo"|"yellow"|"slate" =>
         ({ owner: "indigo", admin: "indigo", manager: "yellow" }[r] ?? "slate") as "indigo"|"yellow"|"slate"
 
-    const requiredChecks = checks.filter(c => c.required)
-    const requiredDone   = requiredChecks.filter(c => c.done).length
-
     return (
         <div className="space-y-6">
-            {/* Onboarding readiness — gates inviting until the org is set up */}
-            <div className={CARD + " space-y-4"}>
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <h3 className="text-sm font-semibold text-[var(--color-text)]">Before you invite your team</h3>
-                        <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                            Set up your coaching foundation first — reps get a broken experience if they sign in to an empty org.
-                        </p>
-                    </div>
-                    {readiness && (
-                        requiredMet
-                            ? <StatusBadge label="Ready to invite" color="green" />
-                            : <StatusBadge label={`${requiredDone}/${requiredChecks.length} required`} color="yellow" />
-                    )}
-                </div>
-                <div className="space-y-2">
-                    {checks.map(c => (
-                        <div key={c.key} className="flex items-start gap-3">
-                            <span className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                                c.done ? "bg-emerald-500 text-white" : c.required ? "bg-amber-100 text-amber-600 border border-amber-300" : "bg-[var(--color-line-soft)] text-[var(--color-muted)] border border-[var(--color-border)]"
-                            }`}>
-                                {c.done ? "✓" : ""}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                    <span className={`text-sm ${c.done ? "text-[var(--color-muted)] line-through" : "text-[var(--color-text)] font-medium"}`}>{c.label}</span>
-                                    {c.required
-                                        ? <span className="text-[10px] uppercase tracking-wide text-amber-600 font-semibold">Required</span>
-                                        : <span className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold">Recommended</span>}
-                                </div>
-                                {!c.done && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{c.hint}</p>}
-                            </div>
-                            {!c.done && (
-                                <button className={BTN_GHOST + " flex-shrink-0"} onClick={() => onNavigate(c.tab)}>Set up →</button>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            </div>
-
             <div className={CARD + " space-y-3"}>
                 <div className="flex items-center gap-2">
                     <h3 className="text-sm font-semibold text-[var(--color-text)]">Invite member</h3>
-                    {!requiredMet && <span className="text-xs text-amber-600">Heads-up: reps who join before a playbook is active get generic coaching</span>}
+                    {!requiredMet && (
+                        <span className="text-xs text-amber-600">
+                            Setup isn&apos;t finished — reps who join now get generic coaching. <Link href="/" className="font-semibold underline">Finish on Home →</Link>
+                        </span>
+                    )}
                 </div>
                 <div className="flex gap-2">
                     <input

@@ -14,7 +14,7 @@ import { STARTER_KITS, applyStarterKit, type StarterKit } from "@/lib/starterKit
 type Step = "account" | "workspace" | "brain" | "invite" | "done"
 const STEPS: Step[] = ["account", "workspace", "brain", "invite", "done"]
 const STEP_LABELS: Record<Step, string> = {
-    account: "Account", workspace: "Workspace", brain: "Coaching brain", invite: "Your team", done: "Live",
+    account: "Account", workspace: "Workspace", brain: "Playbook", invite: "Your team", done: "Live",
 }
 
 const INPUT = "w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
