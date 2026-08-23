@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import type { OrgInfo } from "@/components/orgTabs"
+import { useT } from "@/i18n/LocaleProvider"
+import { intlLocale, clientLocale } from "@/i18n"
 
 /// Security & access, and the audit trail (D-176). These are the surfaces a
 /// procurement or security review asks to see. MFA and SCIM work on any plan;
@@ -28,6 +30,7 @@ function Msg({ msg, error }: { msg: string | null; error?: boolean }) {
 // question we don't have a buyer for yet, so it isn't built.
 
 function MfaCard() {
+    const t = useT()
     const [factors, setFactors] = useState<Array<{ id: string; status: string; friendly_name?: string }>>([])
     const [qr, setQr] = useState<string | null>(null)
     const [secret, setSecret] = useState<string | null>(null)
@@ -58,8 +61,8 @@ function MfaCard() {
         if (chErr) { setBusy(false); setMsg(chErr.message); setIsErr(true); return }
         const { error } = await supabase.auth.mfa.verify({ factorId, challengeId: ch.id, code: code.trim() })
         setBusy(false)
-        if (error) { setMsg("That code didn't match. Check your authenticator and try again."); setIsErr(true); return }
-        setMsg("Two-factor authentication is on for your account."); setIsErr(false)
+        if (error) { setMsg(t.security.mfaBadCode); setIsErr(true); return }
+        setMsg(t.security.mfaOn); setIsErr(false)
         setQr(null); setSecret(null); setFactorId(null); setCode("")
         await load()
     }
@@ -69,7 +72,7 @@ function MfaCard() {
         const { error } = await supabase.auth.mfa.unenroll({ factorId: id })
         setBusy(false)
         if (error) { setMsg(error.message); setIsErr(true); return }
-        setMsg("Two-factor removed."); setIsErr(false); await load()
+        setMsg(t.security.mfaOff); setIsErr(false); await load()
     }
 
     const active = factors.filter(f => f.status === "verified")
@@ -77,41 +80,40 @@ function MfaCard() {
     return (
         <div className={CARD + " space-y-4"}>
             <div>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">Two-factor authentication</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.security.mfaTitle}</h3>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                    An authenticator app (1Password, Authy, Google Authenticator) as a second factor on your own
-                    admin account. Recommended for anyone who can change the playbook or see call transcripts.
+{t.security.mfaSub}
                 </p>
             </div>
 
             {active.length > 0 ? (
                 <div className="flex items-center justify-between bg-[var(--color-bg)] rounded-lg px-4 py-3">
-                    <span className="text-sm text-emerald-600 font-medium">✓ Enabled on your account</span>
-                    <button className={BTN_DANGER} disabled={busy} onClick={() => remove(active[0].id)}>Turn off</button>
+                    <span className="text-sm text-emerald-600 font-medium">{t.security.mfaEnabled}</span>
+                    <button className={BTN_DANGER} disabled={busy} onClick={() => remove(active[0].id)}>{t.security.mfaTurnOff}</button>
                 </div>
             ) : qr ? (
                 <div className="space-y-3">
                     <p className="text-xs text-[var(--color-text-secondary)]">
-                        Scan this with your authenticator app, then enter the 6-digit code it shows.
+{t.security.mfaScan}
                     </p>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={qr} alt="Two-factor QR code" className="w-40 h-40 bg-white rounded-lg p-2" />
+                    <img src={qr} alt={t.security.mfaQrAlt} className="w-40 h-40 bg-white rounded-lg p-2" />
                     {secret && (
                         <p className="text-[11px] text-[var(--color-muted)] font-mono break-all">
-                            Can&apos;t scan? Enter this key manually: {secret}
+{t.security.mfaManualKey(secret)}
                         </p>
                     )}
                     <div className="flex gap-2">
                         <input className={INPUT + " max-w-[160px] font-mono"} placeholder="000000" inputMode="numeric"
                             value={code} onChange={e => setCode(e.target.value)} />
                         <button className={BTN_PRIMARY} disabled={busy || code.trim().length < 6} onClick={confirm}>
-                            {busy ? "Verifying…" : "Verify & enable"}
+                            {busy ? t.security.mfaVerifying : t.security.mfaVerify}
                         </button>
                     </div>
                 </div>
             ) : (
                 <button className={BTN_PRIMARY} disabled={busy} onClick={begin}>
-                    {busy ? "Starting…" : "Set up two-factor"}
+                    {busy ? t.security.mfaStarting : t.security.mfaSetUp}
                 </button>
             )}
             <Msg msg={msg} error={isErr} />
@@ -122,6 +124,7 @@ function MfaCard() {
 // ── SSO domains ─────────────────────────────────────────────────────────────
 
 function SsoCard({ orgId }: { orgId: string }) {
+    const t = useT()
     const [rows, setRows] = useState<Array<{ id: string; domain: string; provider_id: string | null; verified_at: string | null }>>([])
     const [domain, setDomain] = useState("")
     const [msg, setMsg] = useState<string | null>(null)
@@ -136,13 +139,13 @@ function SsoCard({ orgId }: { orgId: string }) {
 
     async function add() {
         const d = domain.trim().toLowerCase().replace(/^@/, "")
-        if (!d.includes(".")) { setMsg("Enter a domain like acme.com"); setIsErr(true); return }
+        if (!d.includes(".")) { setMsg(t.security.ssoBadDomain); setIsErr(true); return }
         const { error } = await supabase.from("org_sso_domains").insert({ org_id: orgId, domain: d })
         if (error) {
-            setMsg(error.message.includes("duplicate") ? "That domain is already claimed." : "Couldn't add that domain. Try again.")
+            setMsg(error.message.includes("duplicate") ? t.security.ssoDuplicate : t.security.ssoAddFailed)
             setIsErr(true); return
         }
-        setMsg("Domain claimed."); setIsErr(false); setDomain(""); await load()
+        setMsg(t.security.ssoClaimed); setIsErr(false); setDomain(""); await load()
     }
 
     async function remove(id: string) {
@@ -153,21 +156,19 @@ function SsoCard({ orgId }: { orgId: string }) {
     return (
         <div className={CARD + " space-y-4"}>
             <div>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">Single sign-on (SAML)</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.security.ssoTitle}</h3>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                    Claim the email domains your company owns. Anyone signing in from a claimed domain is sent to
-                    your identity provider instead of a password.
+{t.security.ssoSub}
                 </p>
                 {!SSO_ENABLED && (
                     <p className="text-xs text-amber-600 mt-2">
-                        Claims are saved now and take effect once SAML is switched on for this workspace —
-                        domains added here need no re-entry then.
+{t.security.ssoDormant}
                     </p>
                 )}
             </div>
             <div className="flex gap-2">
-                <input className={INPUT} placeholder="acme.com" value={domain} onChange={e => setDomain(e.target.value)} />
-                <button className={BTN_PRIMARY} onClick={add} disabled={!domain.trim()}>Claim</button>
+                <input className={INPUT} placeholder={t.security.ssoPlaceholder} value={domain} onChange={e => setDomain(e.target.value)} />
+                <button className={BTN_PRIMARY} onClick={add} disabled={!domain.trim()}>{t.security.ssoClaim}</button>
             </div>
             {rows.length > 0 && (
                 <div className="space-y-2">
@@ -176,9 +177,9 @@ function SsoCard({ orgId }: { orgId: string }) {
                             <span className="text-sm text-[var(--color-text)] font-mono">{r.domain}</span>
                             <div className="flex items-center gap-3">
                                 <span className={`text-[10px] uppercase tracking-wide font-semibold ${r.provider_id ? "text-emerald-600" : "text-[var(--color-muted)]"}`}>
-                                    {r.provider_id ? "Active" : "Pending activation"}
+                                    {r.provider_id ? t.security.ssoActive : t.security.ssoPending}
                                 </span>
-                                <button className={BTN_GHOST} onClick={() => remove(r.id)}>Remove</button>
+                                <button className={BTN_GHOST} onClick={() => remove(r.id)}>{t.security.ssoRemove}</button>
                             </div>
                         </div>
                     ))}
@@ -192,6 +193,7 @@ function SsoCard({ orgId }: { orgId: string }) {
 // ── SCIM tokens ─────────────────────────────────────────────────────────────
 
 function ScimCard({ orgId }: { orgId: string }) {
+    const t = useT()
     const [rows, setRows] = useState<Array<{ id: string; label: string | null; last_used_at: string | null; created_at: string }>>([])
     const [label, setLabel] = useState("")
     const [fresh, setFresh] = useState<string | null>(null)
@@ -215,8 +217,8 @@ function ScimCard({ orgId }: { orgId: string }) {
         const hash = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("")
 
         const { error } = await supabase.from("org_scim_tokens")
-            .insert({ org_id: orgId, token_hash: hash, label: label.trim() || "Provisioning token" })
-        if (error) { setMsg("Couldn't create the token. Try again."); setIsErr(true); return }
+            .insert({ org_id: orgId, token_hash: hash, label: label.trim() || t.security.scimDefaultLabel })
+        if (error) { setMsg(t.security.scimCreateFailed); setIsErr(true); return }
         setFresh(token); setLabel(""); setMsg(null); await load()
     }
 
@@ -230,25 +232,24 @@ function ScimCard({ orgId }: { orgId: string }) {
     return (
         <div className={CARD + " space-y-4"}>
             <div>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">Directory sync (SCIM)</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.security.scimTitle}</h3>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                    Let your identity provider add people automatically — and, more importantly, remove their access
-                    the moment they leave. Removing someone frees their seat; it never deletes their personal account.
+{t.security.scimSub}
                 </p>
-                <p className="text-[11px] text-[var(--color-muted)] mt-2 font-mono break-all">Endpoint: {scimUrl}</p>
+                <p className="text-[11px] text-[var(--color-muted)] mt-2 font-mono break-all">{t.security.scimEndpoint(scimUrl)}</p>
             </div>
 
             {fresh && (
                 <div className="bg-[var(--color-accent-subtle)] border border-[var(--color-accent-light)] rounded-lg p-4 space-y-2">
-                    <p className="text-xs font-semibold text-[var(--color-accent-deep)]">Copy this now — it isn&apos;t shown again.</p>
+                    <p className="text-xs font-semibold text-[var(--color-accent-deep)]">{t.security.scimCopyNow}</p>
                     <p className="font-mono text-[11px] text-[var(--color-text)] break-all select-all">{fresh}</p>
-                    <button className={BTN_GHOST} onClick={() => setFresh(null)}>Done</button>
+                    <button className={BTN_GHOST} onClick={() => setFresh(null)}>{t.security.scimDone}</button>
                 </div>
             )}
 
             <div className="flex gap-2">
-                <input className={INPUT} placeholder="Okta production" value={label} onChange={e => setLabel(e.target.value)} />
-                <button className={BTN_PRIMARY} onClick={create}>Create token</button>
+                <input className={INPUT} placeholder={t.security.scimPlaceholder} value={label} onChange={e => setLabel(e.target.value)} />
+                <button className={BTN_PRIMARY} onClick={create}>{t.security.scimCreate}</button>
             </div>
 
             {rows.map(r => (
@@ -256,10 +257,10 @@ function ScimCard({ orgId }: { orgId: string }) {
                     <div>
                         <p className="text-sm text-[var(--color-text)]">{r.label}</p>
                         <p className="text-[11px] text-[var(--color-muted)]">
-                            {r.last_used_at ? `Last used ${new Date(r.last_used_at).toLocaleString()}` : "Never used"}
+                            {r.last_used_at ? t.security.scimLastUsed(new Date(r.last_used_at).toLocaleString(intlLocale(clientLocale()))) : t.security.scimNeverUsed}
                         </p>
                     </div>
-                    <button className={BTN_DANGER} onClick={() => revoke(r.id)}>Revoke</button>
+                    <button className={BTN_DANGER} onClick={() => revoke(r.id)}>{t.security.scimRevoke}</button>
                 </div>
             ))}
             <Msg msg={msg} error={isErr} />
@@ -270,6 +271,7 @@ function ScimCard({ orgId }: { orgId: string }) {
 // ── Export ──────────────────────────────────────────────────────────────────
 
 function ExportCard({ org }: { org: OrgInfo }) {
+    const t = useT()
     const [busy, setBusy] = useState(false)
     const [msg, setMsg] = useState<string | null>(null)
     const [isErr, setIsErr] = useState(false)
@@ -283,7 +285,7 @@ function ExportCard({ org }: { org: OrgInfo }) {
             })
             if (!res.ok) {
                 const e = await res.json().catch(() => ({}))
-                setMsg(e?.error?.message ?? "Export failed. Try again."); setIsErr(true); return
+                setMsg(e?.error?.message ?? t.security.exportFailed); setIsErr(true); return
             }
             const blob = await res.blob()
             const url = URL.createObjectURL(blob)
@@ -292,25 +294,23 @@ function ExportCard({ org }: { org: OrgInfo }) {
             a.download = `talkpilot-${org.slug}-${new Date().toISOString().slice(0, 10)}.json`
             document.body.appendChild(a); a.click(); a.remove()
             URL.revokeObjectURL(url)
-            setMsg("Downloaded."); setIsErr(false)
+            setMsg(t.security.exportDone); setIsErr(false)
         } finally { setBusy(false) }
     }
 
     return (
         <div className={CARD + " space-y-3"}>
             <div>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">Export your data</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.security.exportTitle}</h3>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                    Everything this workspace owns — members, playbooks, objections, knowledge, scorecards and the
-                    audit trail — as one JSON file. Yours to keep, any time.
+{t.security.exportSub}
                     {org.visibility !== "full_transcripts" && (
-                        <> Transcript bodies are excluded, because your visibility setting doesn&apos;t give managers
-                        transcript access.</>
+<>{t.security.exportNoTranscripts}</>
                     )}
                 </p>
             </div>
             <button className={BTN_PRIMARY} onClick={run} disabled={busy}>
-                {busy ? "Preparing…" : "Download export"}
+                {busy ? t.security.exportPreparing : t.security.exportDownload}
             </button>
             <Msg msg={msg} error={isErr} />
         </div>
@@ -332,21 +332,10 @@ export function SecurityTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
 
 interface AuditRow { id: string; action: string; actor_id: string | null; meta: Record<string, unknown> | null; created_at: string }
 
-const ACTION_LABEL: Record<string, string> = {
-    "org.created": "Workspace created",
-    "org.exported": "Data exported",
-    "member.invite_sent": "Invite sent",
-    "member.joined": "Member joined",
-    "member.role_changed": "Role changed",
-    "member.removed": "Member removed",
-    "member.deprovisioned": "Deprovisioned via SCIM",
-    "member.reactivated": "Reactivated",
-    "billing.checkout_started": "Checkout started",
-    "billing.subscribed": "Subscribed",
-    "retention.purged": "Retention purge",
-}
+
 
 export function AuditTab({ orgId }: { orgId: string }) {
+    const t = useT()
     const [rows, setRows] = useState<AuditRow[]>([])
     const [dir, setDir] = useState<Map<string, string>>(new Map())
     const [q, setQ] = useState("")
@@ -369,7 +358,7 @@ export function AuditTab({ orgId }: { orgId: string }) {
     }, [orgId])
 
     const shown = q.trim()
-        ? rows.filter(r => (ACTION_LABEL[r.action] ?? r.action).toLowerCase().includes(q.toLowerCase())
+        ? rows.filter(r => (t.audit.actions[r.action] ?? r.action).toLowerCase().includes(q.toLowerCase())
                         || JSON.stringify(r.meta ?? {}).toLowerCase().includes(q.toLowerCase()))
         : rows
 
@@ -387,28 +376,28 @@ export function AuditTab({ orgId }: { orgId: string }) {
         document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
     }
 
-    if (loading) return <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+    if (loading) return <p className="text-sm text-[var(--color-muted)]">{t.audit.loading}</p>
 
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
                 <p className="text-sm text-[var(--color-text-secondary)]">
-                    Who changed what, and when. Written by the server — nothing here can be edited from the app.
+{t.audit.intro}
                 </p>
                 <div className="flex gap-2">
-                    <input className={INPUT + " w-56"} placeholder="Search actions…" value={q} onChange={e => setQ(e.target.value)} />
-                    <button className={BTN_GHOST} onClick={downloadCsv} disabled={shown.length === 0}>Export CSV</button>
+                    <input className={INPUT + " w-56"} placeholder={t.audit.search} value={q} onChange={e => setQ(e.target.value)} />
+                    <button className={BTN_GHOST} onClick={downloadCsv} disabled={shown.length === 0}>{t.audit.exportCsv}</button>
                 </div>
             </div>
 
             {shown.length === 0 ? (
                 <div className={CARD + " text-center py-10"}>
                     <p className="text-sm text-[var(--color-text-secondary)]">
-                        {rows.length === 0 ? "No activity recorded yet." : `Nothing matches “${q}”.`}
+                        {rows.length === 0 ? t.audit.emptyNone : t.audit.emptyFiltered(q)}
                     </p>
                     {rows.length === 0 && (
                         <p className="text-xs text-[var(--color-muted)] mt-1">
-                            Invites, role changes, deprovisioning, billing and retention purges all land here.
+{t.audit.emptyNoneHint}
                         </p>
                     )}
                 </div>
@@ -417,9 +406,9 @@ export function AuditTab({ orgId }: { orgId: string }) {
                     {shown.map(r => (
                         <div key={r.id} className="flex items-start justify-between gap-4 px-4 py-3">
                             <div className="min-w-0">
-                                <p className="text-sm font-medium text-[var(--color-text)]">{ACTION_LABEL[r.action] ?? r.action}</p>
+                                <p className="text-sm font-medium text-[var(--color-text)]">{t.audit.actions[r.action] ?? r.action}</p>
                                 <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                                    {r.actor_id ? (dir.get(r.actor_id) ?? "Someone no longer in this workspace") : "System"}
+                                    {r.actor_id ? (dir.get(r.actor_id) ?? t.audit.actorGone) : t.audit.actorSystem}
                                     {r.meta && Object.keys(r.meta).length > 0 && (
                                         <> · <span className="font-mono text-[10.5px]">
                                             {Object.entries(r.meta).slice(0, 3).map(([k, v]) => `${k}=${String(v)}`).join(" ")}
@@ -428,7 +417,7 @@ export function AuditTab({ orgId }: { orgId: string }) {
                                 </p>
                             </div>
                             <span className="text-[11px] text-[var(--color-muted)] shrink-0 tabular-nums">
-                                {new Date(r.created_at).toLocaleString()}
+                                {new Date(r.created_at).toLocaleString(intlLocale(clientLocale()))}
                             </span>
                         </div>
                     ))}
