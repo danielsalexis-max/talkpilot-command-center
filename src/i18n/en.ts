@@ -3,6 +3,11 @@
 /// missing from the Spanish dictionary is a compile error, not a runtime hole.
 /// Values may be plain strings or small template functions for interpolation.
 
+/// NEVER name the underlying AI model in user-facing copy — not "Claude",
+/// "Opus", "GPT", "Deepgram", "ElevenLabs", nor any version of them. The
+/// customer buys TalkPilot; which model runs underneath is our implementation
+/// detail and changes without notice. Say "TalkPilot" or just describe what
+/// happens ("Analyzing…").
 export const en = {
     langName: "English",
     /// BCP-47-ish tag for Open Graph's `og:locale` (underscored form).
@@ -799,7 +804,7 @@ export const en = {
 
         dna: {
             title: "Team DNA",
-            sub: "Upload transcripts from your best performers. Claude Opus analyzes their tone, key phrases, objection handling, and conversation flow — then translates it into coaching your whole team can use.",
+            sub: "Upload transcripts from your best performers. TalkPilot analyzes their tone, key phrases, objection handling, and conversation flow — then translates it into coaching your whole team can use.",
             playbookName: "Playbook name (optional)",
             playbookNamePlaceholder: "e.g. Sarah's Playbook, or Top Performers",
             playbookNameHint: "How the extracted playbook will be named. Each transcript below can be from a different expert — you'll pick the expert speaker in each one.",
@@ -822,7 +827,7 @@ export const en = {
             analyzeN: (n: number) => `Analyze ${n > 0 ? n : ""} transcript${n !== 1 ? "s" : ""}`,
             need3: "Add at least 3 complete transcripts and select the expert speaker in each.",
             analysisFailed: "Analysis failed.",
-            analyzingTitle: "Analyzing with Claude Opus…",
+            analyzingTitle: "Analyzing your top rep…",
             analyzingSub: "This can take 30–60 seconds for multiple transcripts.",
             analysisComplete: "Team DNA · Analysis complete",
             startOver: "Start over",

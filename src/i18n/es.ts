@@ -6,6 +6,10 @@
 
 import type { Dict } from "./en"
 
+/// NUNCA nombres el modelo de IA en textos visibles al usuario — ni "Claude",
+/// "Opus", "GPT", "Deepgram" ni "ElevenLabs". El cliente compra TalkPilot; qué
+/// modelo corre por debajo es un detalle de implementación que cambia sin
+/// aviso. Di "TalkPilot" o describe la acción ("Analizando…").
 export const es: Dict = {
     langName: "Español",
     ogLocale: "es_419",
@@ -787,7 +791,7 @@ export const es: Dict = {
 
         dna: {
             title: "Team DNA",
-            sub: "Sube transcripciones de tus mejores reps. Claude Opus analiza su tono, frases clave, manejo de objeciones y flujo de conversación — y lo convierte en coaching que todo tu equipo puede usar.",
+            sub: "Sube transcripciones de tus mejores reps. TalkPilot analiza su tono, frases clave, manejo de objeciones y flujo de conversación — y lo convierte en coaching que todo tu equipo puede usar.",
             playbookName: "Nombre del playbook (opcional)",
             playbookNamePlaceholder: "p. ej. El playbook de Sara, o Top Performers",
             playbookNameHint: "Así se llamará el playbook extraído. Cada transcripción de abajo puede ser de un experto distinto — en cada una eliges quién es el experto.",
@@ -810,7 +814,7 @@ export const es: Dict = {
             analyzeN: (n: number) => `Analizar ${n > 0 ? n : ""} ${n === 1 ? "transcripción" : "transcripciones"}`,
             need3: "Agrega al menos 3 transcripciones completas y selecciona al experto en cada una.",
             analysisFailed: "El análisis falló.",
-            analyzingTitle: "Analizando con Claude Opus…",
+            analyzingTitle: "Analizando a tu mejor rep…",
             analyzingSub: "Puede tomar de 30 a 60 segundos con varias transcripciones.",
             analysisComplete: "Team DNA · Análisis completo",
             startOver: "Empezar de nuevo",
