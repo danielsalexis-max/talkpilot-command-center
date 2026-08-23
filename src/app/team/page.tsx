@@ -10,6 +10,7 @@ import { AskPanel } from "@/components/AskPanel"
 import { PageSkeleton } from "@/components/homeStates"
 import { MembersTab } from "@/components/orgTabs"
 import { useOrg, OrgBanners } from "@/lib/useOrg"
+import { useT } from "@/i18n/LocaleProvider"
 import Link from "next/link"
 
 function buildTeamContext(members: TeamStats[], topGrowth: [string, number][]): string {
@@ -24,13 +25,6 @@ function buildTeamContext(members: TeamStats[], topGrowth: [string, number][]): 
         "name specific reps/teams. Be concise and actionable.\n\nSCORES ARE 0–100. PER-REP 30-DAY AVERAGES:\n" + rows +
         (growth ? "\n\nMOST COMMON GROWTH AREAS FLAGGED ACROSS THE TEAM (with counts):\n" + growth : "")
 }
-
-const TEAM_SUGGESTIONS = [
-    "Who needs coaching attention most?",
-    "What's the team's biggest weakness?",
-    "Which team is strongest, and why?",
-    "Where should I focus this week?",
-]
 
 /// People live in ONE place now (D-175): performance and the roster/invites
 /// are tabs of the same page. They used to be split between here and
@@ -49,23 +43,24 @@ export default function TeamPage() {
 function TeamPageInner() {
     const router = useRouter()
     const params = useSearchParams()
+    const t = useT()
     const { org, orgId, loading: orgLoading } = useOrg()
     const tab: TeamTab = params.get("tab") === "members" ? "members" : "performance"
-    const setTab = (t: TeamTab) => router.replace(`/team?tab=${t}`, { scroll: false })
+    const setTab = (next: TeamTab) => router.replace(`/team?tab=${next}`, { scroll: false })
 
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-semibold text-[var(--color-text)]">Team</h1>
+                <h1 className="text-2xl font-semibold text-[var(--color-text)]">{t.team.title}</h1>
                 <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                    Who&apos;s improving, who needs you this week — and everyone&apos;s seat, role and invite in one place.
+                    {t.team.sub}
                 </p>
             </div>
 
             {org && <OrgBanners org={org} />}
 
             <div className="border-b border-[var(--color-border)] flex gap-1">
-                {([["performance", "Performance"], ["members", "Members & invites"]] as const).map(([key, label]) => (
+                {([["performance", t.team.tabPerformance], ["members", t.team.tabMembers]] as const).map(([key, label]) => (
                     <button key={key} onClick={() => setTab(key)}
                         className={`px-4 py-2 text-sm border-b-2 transition-colors -mb-px whitespace-nowrap ${
                             tab === key
@@ -80,13 +75,14 @@ function TeamPageInner() {
             {tab === "members" && (
                 orgLoading ? <PageSkeleton rows={2} />
                 : orgId && org ? <MembersTab orgId={orgId} org={org} />
-                : <p className="text-sm text-[var(--color-text-secondary)]">Members are managed by workspace owners and admins.</p>
+                : <p className="text-sm text-[var(--color-text-secondary)]">{t.team.membersManagedBy}</p>
             )}
         </div>
     )
 }
 
 function PerformanceTab({ onSeeMembers }: { onSeeMembers: () => void }) {
+    const t = useT()
     const [members, setMembers]   = useState<TeamStats[]>([])
     const [loading, setLoading]   = useState(true)
     const [sortKey, setSortKey]   = useState<keyof TeamStats>("avg_overall")
@@ -211,38 +207,38 @@ function PerformanceTab({ onSeeMembers }: { onSeeMembers: () => void }) {
         <div className="space-y-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <p className="text-sm text-[var(--color-text-secondary)]">
-                    30-day averages — click a rep for their full history.
+                    {t.team.thirtyDayAvg}
                     {pendingInvites > 0 && (
                         <>{" "}<button onClick={onSeeMembers} className="text-[var(--color-accent-deep)] font-medium hover:underline">
-                            {pendingInvites} invite{pendingInvites === 1 ? "" : "s"} pending →
+                            {t.team.invitesPending(pendingInvites)}
                         </button></>
                     )}
                 </p>
-                <SearchBox value={query} onChange={setQuery} placeholder="Search reps…" />
+                <SearchBox value={query} onChange={setQuery} placeholder={t.team.searchReps} />
             </div>
 
             {members.length > 0 && (
                 <AskPanel
-                    heading="Ask about the team"
-                    placeholder="Ask about team patterns, who needs coaching, weak spots…"
-                    suggestions={TEAM_SUGGESTIONS}
+                    heading={t.team.askHeading}
+                    placeholder={t.team.askPlaceholder}
+                    suggestions={t.team.suggestions}
                     onAsk={(q, h) => askClaude(buildTeamContext(members, topGrowth), q, h)}
                 />
             )}
 
             <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] overflow-hidden shadow-sm overflow-x-auto">
                 <div className={`grid ${gridCols} items-center gap-2 px-4 py-2.5 border-b border-[var(--color-border)] bg-[var(--color-bg)] min-w-[360px]`}>
-                    <span className="text-xs font-medium text-[var(--color-text-secondary)]">Rep</span>
-                    <ColHeader field="session_count" label="Sessions"   />
-                    <ColHeader field="avg_overall"   label="Overall"    />
-                    <ColHeader field="avg_adherence" label="Adherence"  className="hidden sm:block" />
-                    <ColHeader field="avg_objection" label="Objections" className="hidden md:block" />
-                    <ColHeader field="avg_accuracy"  label="Accuracy"   className="hidden md:block" />
+                    <span className="text-xs font-medium text-[var(--color-text-secondary)]">{t.common.rep}</span>
+                    <ColHeader field="session_count" label={t.team.colSessions}   />
+                    <ColHeader field="avg_overall"   label={t.common.overall}     />
+                    <ColHeader field="avg_adherence" label={t.common.adherence}   className="hidden sm:block" />
+                    <ColHeader field="avg_objection" label={t.common.objections}  className="hidden md:block" />
+                    <ColHeader field="avg_accuracy"  label={t.common.accuracy}    className="hidden md:block" />
                     <span />
                 </div>
                 {sorted.length === 0 && (
                     <div className="px-4 py-8 text-sm text-[var(--color-text-secondary)] text-center">
-                        {q ? `No reps match “${query}”.` : "No active members with scored sessions."}
+                        {q ? t.team.noRepsMatch(query) : t.team.noActiveMembers}
                     </div>
                 )}
                 {sorted.map(m => (

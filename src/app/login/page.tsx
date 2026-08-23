@@ -3,9 +3,11 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { useT } from "@/i18n/LocaleProvider"
 
 export default function LoginPage() {
     const router = useRouter()
+    const t = useT()
     const [mode, setMode]         = useState<"signin" | "signup">("signin")
     const [email, setEmail]       = useState("")
     const [password, setPassword] = useState("")
@@ -19,7 +21,7 @@ export default function LoginPage() {
         setError(null); setInfo(null)
 
         if (mode === "signup" && password !== confirm) {
-            setError("Passwords don't match.")
+            setError(t.common.passwordsDontMatch)
             return
         }
 
@@ -42,12 +44,12 @@ export default function LoginPage() {
 
     async function forgotPassword() {
         setError(null); setInfo(null)
-        if (!email) { setError("Enter your email above first, then tap Forgot password."); return }
+        if (!email) { setError(t.login.forgotNeedsEmail); return }
         const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
             redirectTo: `${window.location.origin}/reset-password`,
         })
         if (err) setError(err.message)
-        else setInfo("Reset link sent — check your email.")
+        else setInfo(t.login.resetLinkSent)
     }
 
     return (
@@ -69,7 +71,7 @@ export default function LoginPage() {
                     <form onSubmit={handleSubmit} className="space-y-3">
                         <input
                             type="email"
-                            placeholder="Email"
+                            placeholder={t.common.email}
                             value={email}
                             onChange={e => setEmail(e.target.value)}
                             required
@@ -77,7 +79,7 @@ export default function LoginPage() {
                         />
                         <input
                             type="password"
-                            placeholder="Password"
+                            placeholder={t.common.password}
                             value={password}
                             onChange={e => setPassword(e.target.value)}
                             required
@@ -86,7 +88,7 @@ export default function LoginPage() {
                         {mode === "signup" && (
                             <input
                                 type="password"
-                                placeholder="Confirm password"
+                                placeholder={t.common.confirmPassword}
                                 value={confirm}
                                 onChange={e => setConfirm(e.target.value)}
                                 required
@@ -101,8 +103,8 @@ export default function LoginPage() {
                             className="w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors"
                         >
                             {loading
-                                ? (mode === "signin" ? "Signing in…" : "Creating account…")
-                                : (mode === "signin" ? "Sign in" : "Create account")}
+                                ? (mode === "signin" ? t.login.signingIn : t.login.creatingAccount)
+                                : (mode === "signin" ? t.common.signIn : t.common.createAccount)}
                         </button>
                         {mode === "signin" && (
                             <button type="button" onClick={forgotPassword}
@@ -126,12 +128,12 @@ export default function LoginPage() {
                     </button>
 
                     <p className="text-center text-xs text-[var(--color-text-secondary)]">
-                        {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
+                        {mode === "signin" ? t.login.noAccount : t.login.haveAccount}
                         <button
                             onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); setInfo(null) }}
                             className="text-[var(--color-accent)] hover:underline font-medium"
                         >
-                            {mode === "signin" ? "Create one" : "Sign in"}
+                            {mode === "signin" ? t.common.createOne : t.common.signIn}
                         </button>
                     </p>
                 </div>

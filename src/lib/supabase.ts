@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr"
+import { clientDict } from "@/i18n"
 
 const supabaseUrl  = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -17,6 +18,10 @@ export async function askClaude(
     question: string,
     history: ChatTurn[] = [],
 ): Promise<string> {
+    // The persona/context prompts stay English (they're grounded in English
+    // column names and coaching vocabulary); only the reply language follows
+    // the manager's chosen locale.
+    const t = clientDict()
     const { data: { session } } = await supabase.auth.getSession()
     const res = await fetch(`${supabaseUrl}/functions/v1/claude-proxy`, {
         method: "POST",
@@ -27,13 +32,13 @@ export async function askClaude(
         body: JSON.stringify({
             model: "claude-haiku-4-5-20251001",
             max_tokens: 800,
-            system,
+            system: `${system}\n\n${t.askPanel.answerLanguage}`,
             messages: [...history, { role: "user", content: question }],
         }),
     })
-    if (!res.ok) throw new Error(`Assistant error: ${res.status}`)
+    if (!res.ok) throw new Error(t.askPanel.assistantError(res.status))
     const data = await res.json()
-    return data?.content?.[0]?.text?.trim() || "(no answer)"
+    return data?.content?.[0]?.text?.trim() || t.askPanel.noAnswer
 }
 
 export function askAboutTranscript(transcriptText: string, question: string, history: ChatTurn[] = []) {

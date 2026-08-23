@@ -1,5 +1,7 @@
 "use client"
 
+import { useT } from "@/i18n/LocaleProvider"
+
 export function SearchBox({
     value, onChange, placeholder, className,
 }: {
@@ -8,6 +10,7 @@ export function SearchBox({
     placeholder?: string
     className?: string
 }) {
+    const t = useT()
     return (
         <div className={`relative ${className ?? "w-full sm:w-72"}`}>
             <svg
@@ -20,13 +23,13 @@ export function SearchBox({
                 type="text"
                 value={value}
                 onChange={e => onChange(e.target.value)}
-                placeholder={placeholder ?? "Search…"}
+                placeholder={placeholder ?? t.common.search}
                 className="w-full pl-9 pr-8 py-2 text-sm bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
             />
             {value && (
                 <button
                     onClick={() => onChange("")}
-                    aria-label="Clear search"
+                    aria-label={t.common.clearSearch}
                     className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)] transition-colors"
                 >×</button>
             )}

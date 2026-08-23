@@ -6,6 +6,9 @@ import { embedObjections, reindexObjections, ingestKnowledgeInline, reindexKnowl
 import { supabase } from "@/lib/supabase"
 import { SearchBox } from "@/components/SearchBox"
 import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
+import { rollUpGuardrails } from "@/lib/guardrails"
+import { useLocale, useT } from "@/i18n/LocaleProvider"
+import type { Dict } from "@/i18n"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -112,6 +115,7 @@ function UploadZone({
     title: string
     subtitle: string
 }) {
+    const t = useT()
     return (
         <button
             type="button"
@@ -134,13 +138,13 @@ function UploadZone({
             </div>
             <div className="text-center">
                 <p className="text-sm font-semibold text-[var(--color-accent)]">
-                    {loading ? "Analyzing with AI…" : title}
+                    {loading ? t.tabs.analyzing : title}
                 </p>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-1">{subtitle}</p>
             </div>
             {!loading && (
                 <span className="text-xs text-[var(--color-accent)] border border-[var(--color-accent)] rounded-lg px-3 py-1.5 font-medium">
-                    Choose file
+                    {t.tabs.chooseFile}
                 </span>
             )}
         </button>
@@ -151,13 +155,13 @@ function UploadZone({
 /// crash to an owner (D-175). Our own edge functions already return humane
 /// messages — pass those through; translate anything that smells like the
 /// database, and keep the raw text in the console for debugging.
-function humanError(raw: string | null | undefined, doing: string): string {
+function humanError(raw: string | null | undefined, doing: string, t: Dict): string {
     const r = (raw ?? "").trim()
     const dbSmell = /violates|constraint|relation |column |duplicate key|syntax error|permission denied|row-level security|foreign key|null value in/i
-    if (!r) return `Couldn't ${doing}. Try again — and contact us if it repeats.`
+    if (!r) return t.tabs.cantDo(doing)
     if (dbSmell.test(r)) {
         console.error(`[${doing}]`, r)
-        return `Couldn't ${doing}. Try again — and contact us if it repeats.`
+        return t.tabs.cantDo(doing)
     }
     return r
 }
@@ -179,6 +183,7 @@ const TONE_PRESETS = [
 ]
 
 export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }) {
+    const t = useT()
     const [name, setName]             = useState(org.name)
     const [visibility, setVisibility] = useState(org.visibility)
     // Rep visibility (D-172): reps seeing the playbook and knowledge titles in
@@ -195,59 +200,57 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
         const settings = { ...(org.settings ?? {}), rep_visibility: { playbook: repPlaybook, knowledge: repKnowledge } }
         const { error } = await supabase.from("organizations").update({ name, visibility, settings }).eq("id", org.id)
         setSaving(false)
-        if (error) { setMsg(humanError(error.message, "save your settings")); setIsErr(true) }
-        else { setMsg("Saved."); setIsErr(false); onSaved() }
+        if (error) { setMsg(humanError(error.message, t.tabs.doingSaveSettings, t)); setIsErr(true) }
+        else { setMsg(t.common.saved); setIsErr(false); onSaved() }
     }
 
     return (
         <div className="space-y-6 max-w-2xl">
             <div className={CARD + " space-y-4"}>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">Organization</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.settings.orgTitle}</h3>
                 <div className="space-y-1">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">Name</label>
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.settings.name}</label>
                     <input className={INPUT} value={name} onChange={e => setName(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">Transcript visibility for managers</label>
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.settings.transcriptVisibility}</label>
                     <select className={INPUT} value={visibility} onChange={e => setVisibility(e.target.value)}>
-                        <option value="scores_only">Scores only — no transcript access</option>
-                        <option value="flagged_moments">Flagged moments — highlights only</option>
-                        <option value="full_transcripts">Full transcripts — unrestricted</option>
+                        <option value="scores_only">{t.tabs.settings.visScores}</option>
+                        <option value="flagged_moments">{t.tabs.settings.visFlagged}</option>
+                        <option value="full_transcripts">{t.tabs.settings.visFull}</option>
                     </select>
                     <p className="text-xs text-[var(--color-text-secondary)] pt-1">
-                        Enforced in the database, not the interface. Reps always see their own scorecards in full,
-                        whatever this is set to.
+                        {t.tabs.settings.visEnforced}
                     </p>
                 </div>
                 <div className="pt-1 space-y-1.5">
                     <p className="text-xs text-[var(--color-text-secondary)]">
-                        Reps see the active playbook and your knowledge doc titles read-only in their app,
-                        so they know what they&apos;re coached from and graded against.
+                        {t.tabs.settings.repVisibilityIntro}
                     </p>
                     <div className="flex items-center gap-4">
                         <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
                             <input type="checkbox" checked={repPlaybook} onChange={e => setRepPlaybook(e.target.checked)}
                                 className="accent-[var(--color-accent)] w-3.5 h-3.5" />
-                            Playbook visible to reps
+                            {t.tabs.settings.playbookVisible}
                         </label>
                         <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
                             <input type="checkbox" checked={repKnowledge} onChange={e => setRepKnowledge(e.target.checked)}
                                 className="accent-[var(--color-accent)] w-3.5 h-3.5" />
-                            Knowledge visible to reps
+                            {t.tabs.settings.knowledgeVisible}
                         </label>
                     </div>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)] bg-[var(--color-bg)] rounded-lg px-3 py-2">
-                    <span>Plan: <span className="text-[var(--color-text)] font-medium capitalize">{org.plan}</span></span>
+                    <span>{t.tabs.settings.plan} <span className="text-[var(--color-text)] font-medium capitalize">{org.plan}</span></span>
                     <span>·</span>
-                    <span>Seats: <span className="text-[var(--color-text)] font-medium">{org.seats_purchased}</span></span>
+                    <span>{t.tabs.settings.seats} <span className="text-[var(--color-text)] font-medium">{org.seats_purchased}</span></span>
                     <span>·</span>
-                    <span>Slug: <span className="text-[var(--color-text)] font-medium">{org.slug}</span></span>
+                    <span>{t.tabs.settings.slug} <span className="text-[var(--color-text)] font-medium">{org.slug}</span></span>
                 </div>
             </div>
             <div className="flex items-center gap-3">
                 <button className={BTN_PRIMARY} onClick={save} disabled={saving}>
-                    {saving ? "Saving…" : "Save settings"}
+                    {saving ? t.common.saving : t.tabs.settings.saveSettings}
                 </button>
                 <Msg msg={msg} error={isErr} />
             </div>
@@ -258,6 +261,7 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
 // ─── Voice Tab (company voice & culture — lives under Playbook) ───────────────
 
 export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }) {
+    const t = useT()
     const existingTone = org.voice_profile?.tone ?? ""
     const matchedChips = TONE_PRESETS.filter(p => existingTone.toLowerCase().includes(p.toLowerCase()))
     const customRemainder = TONE_PRESETS.reduce(
@@ -294,21 +298,21 @@ export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }
             voice_profile: { tone: toneParts.join(", "), values, self_reference: selfRef, banned_phrases: banned, required_phrases: required },
         }).eq("id", org.id)
         setSaving(false)
-        if (error) { setMsg(humanError(error.message, "save your settings")); setIsErr(true) }
-        else { setMsg("Saved."); setIsErr(false); onSaved() }
+        if (error) { setMsg(humanError(error.message, t.tabs.doingSaveSettings, t)); setIsErr(true) }
+        else { setMsg(t.common.saved); setIsErr(false); onSaved() }
     }
 
     return (
         <div className="space-y-6 max-w-2xl">
             <div className={CARD + " space-y-5"}>
                 <div>
-                    <h3 className="text-sm font-semibold text-[var(--color-text)]">Company Voice & Culture</h3>
-                    <p className="text-xs text-[var(--color-text-secondary)] mt-1">Injected into every rep&apos;s AI coaching prompts to enforce your brand identity.</p>
+                    <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.voice.title}</h3>
+                    <p className="text-xs text-[var(--color-text-secondary)] mt-1">{t.tabs.voice.sub}</p>
                 </div>
 
                 {/* Tone of voice */}
                 <div className="space-y-2">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">Tone of voice</label>
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.voice.tone}</label>
                     <div className="flex flex-wrap gap-2">
                         {TONE_PRESETS.map(chip => (
                             <button key={chip} type="button" onClick={() => toggleChip(chip)}
@@ -320,18 +324,18 @@ export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }
                             >{chip}</button>
                         ))}
                     </div>
-                    <input className={INPUT} placeholder="Add custom tone descriptor…"
+                    <input className={INPUT} placeholder={t.tabs.voice.customTone}
                         value={toneCustom} onChange={e => setToneCustom(e.target.value)} />
                 </div>
 
                 <div className="space-y-1">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">Company values</label>
-                    <textarea className={TEXTAREA} rows={2} placeholder="e.g. We believe sales is about solving problems, not closing deals."
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.voice.values}</label>
+                    <textarea className={TEXTAREA} rows={2} placeholder={t.tabs.voice.valuesPlaceholder}
                         value={values} onChange={e => setValues(e.target.value)} />
                 </div>
                 <div className="space-y-1">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">Self-reference (how reps should name the company)</label>
-                    <input className={INPUT} placeholder='"TalkPilot" — not "we" or "the company"'
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.voice.selfRef}</label>
+                    <input className={INPUT} placeholder={t.tabs.voice.selfRefPlaceholder}
                         value={selfRef} onChange={e => setSelfRef(e.target.value)} />
                 </div>
 
@@ -339,7 +343,7 @@ export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Banned */}
                     <div className="space-y-2">
-                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">Banned phrases</label>
+                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.voice.banned}</label>
                         <div className="space-y-1.5 min-h-[2rem]">
                             {banned.map((p, i) => (
                                 <div key={i} className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-lg px-3 py-1.5">
@@ -348,22 +352,22 @@ export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }
                                         className="text-red-400 hover:text-red-600 flex-shrink-0 leading-none">×</button>
                                 </div>
                             ))}
-                            {banned.length === 0 && <p className="text-xs text-[var(--color-muted)]">No banned phrases yet.</p>}
+                            {banned.length === 0 && <p className="text-xs text-[var(--color-muted)]">{t.tabs.voice.noBanned}</p>}
                         </div>
                         <div className="flex gap-2">
                             <input
                                 className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-                                placeholder="e.g. cheap, sorry to bother"
+                                placeholder={t.tabs.voice.bannedPlaceholder}
                                 value={bannedInput}
                                 onChange={e => setBannedInput(e.target.value)}
                                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addPhrase(banned, setBanned, bannedInput, setBannedInput) } }}
                             />
-                            <button type="button" className={BTN_GHOST} onClick={() => addPhrase(banned, setBanned, bannedInput, setBannedInput)}>Add</button>
+                            <button type="button" className={BTN_GHOST} onClick={() => addPhrase(banned, setBanned, bannedInput, setBannedInput)}>{t.common.add}</button>
                         </div>
                     </div>
                     {/* Required */}
                     <div className="space-y-2">
-                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">Required language</label>
+                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.voice.required}</label>
                         <div className="space-y-1.5 min-h-[2rem]">
                             {required.map((p, i) => (
                                 <div key={i} className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-1.5">
@@ -372,17 +376,17 @@ export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }
                                         className="text-emerald-400 hover:text-emerald-600 flex-shrink-0 leading-none">×</button>
                                 </div>
                             ))}
-                            {required.length === 0 && <p className="text-xs text-[var(--color-muted)]">No required phrases yet.</p>}
+                            {required.length === 0 && <p className="text-xs text-[var(--color-muted)]">{t.tabs.voice.noRequired}</p>}
                         </div>
                         <div className="flex gap-2">
                             <input
                                 className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-                                placeholder="e.g. ROI, success team"
+                                placeholder={t.tabs.voice.requiredPlaceholder}
                                 value={requiredInput}
                                 onChange={e => setRequiredInput(e.target.value)}
                                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addPhrase(required, setRequired, requiredInput, setRequiredInput) } }}
                             />
-                            <button type="button" className={BTN_GHOST} onClick={() => addPhrase(required, setRequired, requiredInput, setRequiredInput)}>Add</button>
+                            <button type="button" className={BTN_GHOST} onClick={() => addPhrase(required, setRequired, requiredInput, setRequiredInput)}>{t.common.add}</button>
                         </div>
                     </div>
                 </div>
@@ -390,7 +394,7 @@ export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }
 
             <div className="flex items-center gap-3">
                 <button className={BTN_PRIMARY} onClick={save} disabled={saving}>
-                    {saving ? "Saving…" : "Save voice profile"}
+                    {saving ? t.common.saving : t.tabs.voice.saveProfile}
                 </button>
                 <Msg msg={msg} error={isErr} />
             </div>
@@ -401,6 +405,7 @@ export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }
 // ─── Knowledge Tab ────────────────────────────────────────────────────────────
 
 export function KnowledgeTab({ orgId }: { orgId: string }) {
+    const t = useT()
     const [docs, setDocs]           = useState<KbRow[]>([])
     const [query, setQuery]         = useState("")
     const [loading, setLoading]     = useState(true)
@@ -439,9 +444,9 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
         try {
             const failure = await ingestKnowledgeInline(orgId, title.trim(), kind, content.trim())
             if (failure) {
-                setMsg(`Error: ${failure}`); setIsErr(true)
+                setMsg(t.tabs.knowledge.errorPrefix(failure)); setIsErr(true)
             } else {
-                setMsg("Document added — indexed and searchable in live calls."); setIsErr(false)
+                setMsg(t.tabs.knowledge.added); setIsErr(false)
                 setTitle(""); setContent(""); setKind("product")
             }
             await load()
@@ -462,7 +467,7 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
         setReindexing(id); setMsg(null)
         try {
             const failure = await reindexKnowledge(orgId, id)
-            setMsg(failure ? `Re-index failed: ${failure}` : "Re-indexed — searchable in live calls.")
+            setMsg(failure ? t.tabs.knowledge.reindexFailed(failure) : t.tabs.knowledge.reindexed)
             setIsErr(!!failure)
             await load()
         } finally { setReindexing(null) }
@@ -484,42 +489,42 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                 onChange={handleFile}
                 loading={false}
                 accept=".txt,.md,.csv,.json"
-                title="Upload a document"
-                subtitle="Drop your pricing sheets, case studies, product docs, or battle cards. We'll read the file and let you review before saving."
+                title={t.tabs.knowledge.uploadTitle}
+                subtitle={t.tabs.knowledge.uploadSub}
             />
 
             <div className={CARD + " space-y-4"}>
                 <div>
                     <h3 className="text-sm font-semibold text-[var(--color-text)]">
-                        {content ? "Review & save" : "Or add manually"}
+                        {content ? t.tabs.knowledge.reviewSave : t.tabs.knowledge.orAddManually}
                     </h3>
-                    {content && <p className="text-xs text-emerald-600 mt-0.5">File loaded — fill in the title and type, then save.</p>}
+                    {content && <p className="text-xs text-emerald-600 mt-0.5">{t.tabs.knowledge.fileLoaded}</p>}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="col-span-2 space-y-1">
-                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">Title</label>
-                        <input className={INPUT} placeholder="Q3 Pricing Sheet" value={title} onChange={e => setTitle(e.target.value)} />
+                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.title}</label>
+                        <input className={INPUT} placeholder={t.tabs.knowledge.titlePlaceholder} value={title} onChange={e => setTitle(e.target.value)} />
                     </div>
                     <div className="space-y-1">
-                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">Type</label>
+                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.type}</label>
                         <select className={INPUT} value={kind} onChange={e => setKind(e.target.value)}>
-                            <option value="product">Product</option>
-                            <option value="case_study">Case study</option>
-                            <option value="competitive">Competitive intel</option>
-                            <option value="methodology">Methodology</option>
-                            <option value="objection_playbook">Objection playbook</option>
-                            <option value="other">Other</option>
+                            <option value="product">{t.tabs.knowledge.kindProduct}</option>
+                            <option value="case_study">{t.tabs.knowledge.kindCaseStudy}</option>
+                            <option value="competitive">{t.tabs.knowledge.kindCompetitive}</option>
+                            <option value="methodology">{t.tabs.knowledge.kindMethodology}</option>
+                            <option value="objection_playbook">{t.tabs.knowledge.kindObjectionPlaybook}</option>
+                            <option value="other">{t.tabs.knowledge.kindOther}</option>
                         </select>
                     </div>
                 </div>
                 <div className="space-y-1">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">Content</label>
-                    <textarea className={TEXTAREA} rows={8} placeholder="Paste text here, or upload a file above…"
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.content}</label>
+                    <textarea className={TEXTAREA} rows={8} placeholder={t.tabs.knowledge.contentPlaceholder}
                         value={content} onChange={e => setContent(e.target.value)} />
                 </div>
                 <div className="flex items-center gap-3">
                     <button className={BTN_PRIMARY} onClick={upload} disabled={uploading || !title.trim() || !content.trim()}>
-                        {uploading ? "Uploading…" : "Save document"}
+                        {uploading ? t.tabs.knowledge.uploading : t.tabs.knowledge.saveDocument}
                     </button>
                     <Msg msg={msg} error={isErr} />
                 </div>
@@ -527,10 +532,10 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
 
             <div>
                 <div className="flex items-center justify-between gap-4 mb-3">
-                    <SectionHeader title={`Knowledge base (${docs.length})`} />
-                    {docs.length > 4 && <SearchBox value={query} onChange={setQuery} placeholder="Search documents…" className="w-56" />}
+                    <SectionHeader title={t.tabs.knowledge.libraryTitle(docs.length)} />
+                    {docs.length > 4 && <SearchBox value={query} onChange={setQuery} placeholder={t.tabs.knowledge.searchDocs} className="w-56" />}
                 </div>
-                {loading && <p className="text-sm text-[var(--color-text-secondary)]">Loading…</p>}
+                {loading && <p className="text-sm text-[var(--color-text-secondary)]">{t.common.loading}</p>}
                 <div className="space-y-2">
                     {docs.filter(d => {
                         const s = query.trim().toLowerCase()
@@ -542,16 +547,16 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                                 {d.summary && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 truncate">{d.summary}</p>}
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
-                                <StatusBadge label={d.kind.replace("_"," ")} color={kindColor(d.kind)} />
-                                <StatusBadge label={d.status} color={d.status === "ready" ? "green" : d.status === "error" ? "red" : "yellow"} />
+                                <StatusBadge label={t.data.kinds[d.kind] ?? d.kind.replace("_"," ")} color={kindColor(d.kind)} />
+                                <StatusBadge label={t.data.statuses[d.status] ?? d.status} color={d.status === "ready" ? "green" : d.status === "error" ? "red" : "yellow"} />
                                 <button className={BTN_GHOST} disabled={reindexing === d.id} onClick={() => reindexDoc(d.id)}>
-                                    {reindexing === d.id ? "Re-indexing…" : "Re-index"}
+                                    {reindexing === d.id ? t.tabs.knowledge.reindexing : t.tabs.knowledge.reindex}
                                 </button>
-                                <button className={BTN_DANGER} onClick={() => deleteDoc(d.id)}>Delete</button>
+                                <button className={BTN_DANGER} onClick={() => deleteDoc(d.id)}>{t.common.delete}</button>
                             </div>
                         </div>
                     ))}
-                    {!loading && docs.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">No documents yet. Upload your first one above.</p>}
+                    {!loading && docs.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">{t.tabs.knowledge.noDocs}</p>}
                 </div>
             </div>
         </div>
@@ -561,6 +566,7 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
 // ─── Objections Tab ───────────────────────────────────────────────────────────
 
 export function ObjectionsTab({ orgId }: { orgId: string }) {
+    const t = useT()
     const [objs, setObjs]                     = useState<ObjRow[]>([])
     const [query, setQuery]                   = useState("")
     const [loading, setLoading]               = useState(true)
@@ -580,6 +586,9 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
     const [reindexing, setReindexing]         = useState(false)
     const [importing, setImporting]           = useState(false)
     const [extractMsg, setExtractMsg]         = useState<string | null>(null)
+    // Tracked explicitly rather than sniffing the message text — the copy is
+    // translated, so "starts with Error" is not a reliable signal.
+    const [extractErr, setExtractErr]         = useState(false)
     const extractFileRef = useRef<HTMLInputElement>(null)
 
     const load = useCallback(async () => {
@@ -603,8 +612,8 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
         try {
             const r = await reindexObjections(orgId)
             setMsg(r.failed > 0
-                ? `Indexed ${r.embedded} of ${r.pending}; ${r.failed} failed. Try again in a moment.`
-                : `Indexed ${r.embedded} objection${r.embedded === 1 ? "" : "s"} — live matching is on.`)
+                ? t.tabs.objections.indexPartial(r.embedded, r.pending, r.failed)
+                : t.tabs.objections.indexDone(r.embedded))
             setIsErr(r.failed > 0)
             await load()
         } finally { setReindexing(false) }
@@ -616,7 +625,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
         const file = e.target.files?.[0]
         if (!file) return
         e.target.value = ""
-        setExtracting(true); setExtractMsg(null); setExtracted([]); setSelected(new Set())
+        setExtracting(true); setExtractMsg(null); setExtractErr(false); setExtracted([]); setSelected(new Set())
         const text = await file.text()
         try {
             const { data: { session } } = await supabase.auth.getSession()
@@ -626,13 +635,13 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                 body: JSON.stringify({ text, type: "objections" }),
             })
             const json = await res.json().catch(() => ({}))
-            if (!res.ok) { setExtractMsg(`Error: ${errStr(json.error) || res.statusText}`); return }
+            if (!res.ok) { setExtractMsg(t.tabs.objections.errorPrefix(errStr(json.error) || res.statusText)); setExtractErr(true); return }
             const items: ExtractedObjection[] = json.objections ?? []
             setExtracted(items)
             setSelected(new Set(items.map((_, i) => i)))
-            setExtractMsg(items.length > 0 ? `Found ${items.length} objections — review and import below.` : "No objections found in document.")
+            setExtractMsg(items.length > 0 ? t.tabs.objections.extractFound(items.length) : t.tabs.objections.extractNone)
         } catch (e) {
-            setExtractMsg(`Error: ${errStr(e)}`)
+            setExtractMsg(t.tabs.objections.errorPrefix(errStr(e))); setExtractErr(true)
         } finally {
             setExtracting(false)
         }
@@ -652,14 +661,15 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
             active: true,
         }))
         const { data: inserted, error } = await supabase.from("org_objections").insert(rows).select("id")
-        if (error) { setImporting(false); setExtractMsg(`Import error: ${error.message}`); return }
+        if (error) { setImporting(false); setExtractMsg(t.tabs.objections.importErrorPrefix(error.message)); setExtractErr(true); return }
         // Embed before reporting success — an unembedded objection can never match.
         const r = await embedObjections(orgId, (inserted ?? []).map(x => x.id as string))
         setImporting(false)
         setExtracted([]); setSelected(new Set())
+        setExtractErr(false)
         setExtractMsg(r.failed > 0
-            ? `Imported ${toImport.length}, but ${r.failed} couldn't be indexed for live matching — use Re-index.`
-            : `Imported ${toImport.length} objections — all searchable in live calls.`)
+            ? t.tabs.objections.importPartial(toImport.length, r.failed)
+            : t.tabs.objections.importDone(toImport.length))
         await load()
     }
 
@@ -694,13 +704,13 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
             variants: variants.split("\n").map(s => s.trim()).filter(Boolean),
             active: true,
         }).select("id").single()
-        if (error) { setSaving(false); setMsg(humanError(error.message, "save the playbook")); setIsErr(true); return }
+        if (error) { setSaving(false); setMsg(humanError(error.message, t.tabs.doingSavePlaybook, t)); setIsErr(true); return }
         const r = await embedObjections(orgId, inserted ? [inserted.id as string] : [])
         setSaving(false)
         {
             setMsg(r.failed > 0
-                ? "Objection saved, but it couldn't be indexed for live matching yet — use Re-index."
-                : "Objection added — live coaching can match it now.")
+                ? t.tabs.objections.savedNotIndexed
+                : t.tabs.objections.addedIndexed)
             setIsErr(r.failed > 0)
             setObjText(""); setGuidance(""); setVariants(""); setSeverity("medium")
             await load()
@@ -725,11 +735,11 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
             {unindexed > 0 && (
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
                     <p className="text-xs text-amber-900">
-                        <span className="font-semibold">{unindexed} objection{unindexed === 1 ? " isn't" : "s aren't"} indexed yet.</span>{" "}
-                        Live coaching can only match objections that have been indexed — these won&apos;t fire on calls until you re-index.
+                        <span className="font-semibold">{t.tabs.objections.unindexedWarn(unindexed)}</span>{" "}
+                        {t.tabs.objections.unindexedBody}
                     </p>
                     <button className={BTN_GHOST} disabled={reindexing} onClick={runReindex}>
-                        {reindexing ? "Indexing…" : "Re-index now"}
+                        {reindexing ? t.tabs.objections.indexing : t.tabs.objections.reindexNow}
                     </button>
                 </div>
             )}
@@ -740,22 +750,22 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                     onChange={handleExtractFile}
                     loading={extracting}
                     accept=".txt,.md,.csv,.pdf"
-                    title="Import objections from a document"
-                    subtitle="Upload any sales playbook, objection guide, or battle card. AI will extract every objection and let you pick which ones to import."
+                    title={t.tabs.objections.importTitle}
+                    subtitle={t.tabs.objections.importSub}
                 />
                 {extractMsg && (
-                    <p className={`text-sm text-center ${extracted.length > 0 ? "text-emerald-600" : extractMsg.startsWith("Error") ? "text-red-600" : "text-[var(--color-text-secondary)]"}`}>{extractMsg}</p>
+                    <p className={`text-sm text-center ${extracted.length > 0 ? "text-emerald-600" : extractErr ? "text-red-600" : "text-[var(--color-text-secondary)]"}`}>{extractMsg}</p>
                 )}
             </div>
             {extracted.length > 0 && (
                 <div className={CARD + " space-y-3"}>
                     <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-[var(--color-text)]">Review extracted objections</p>
+                        <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.objections.reviewExtracted}</p>
                         <div className="flex gap-2">
-                            <button className={BTN_GHOST} onClick={() => setSelected(new Set(extracted.map((_, i) => i)))}>Select all</button>
-                            <button className={BTN_GHOST} onClick={() => setSelected(new Set())}>None</button>
+                            <button className={BTN_GHOST} onClick={() => setSelected(new Set(extracted.map((_, i) => i)))}>{t.tabs.objections.selectAll}</button>
+                            <button className={BTN_GHOST} onClick={() => setSelected(new Set())}>{t.tabs.objections.none}</button>
                             <button className={BTN_PRIMARY} onClick={importSelected} disabled={importing || selected.size === 0}>
-                                {importing ? "Importing…" : `Import ${selected.size}`}
+                                {importing ? t.tabs.objections.importing : t.tabs.objections.importN(selected.size)}
                             </button>
                         </div>
                     </div>
@@ -769,8 +779,8 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                                     <p className="text-sm text-[var(--color-text)] font-medium">{o.objection}</p>
                                     {guidanceOf(o) && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{guidanceOf(o)}</p>}
                                     <div className="flex items-center gap-2 mt-1">
-                                        <StatusBadge label={o.severity || "medium"} color={sevColor(o.severity || "medium")} />
-                                        {o.variants?.length > 0 && <span className="text-xs text-[var(--color-muted)]">+{o.variants.length} variants</span>}
+                                        <StatusBadge label={t.data.severities[o.severity || "medium"] ?? o.severity} color={sevColor(o.severity || "medium")} />
+                                        {o.variants?.length > 0 && <span className="text-xs text-[var(--color-muted)]">{t.tabs.objections.nVariants(o.variants.length)}</span>}
                                     </div>
                                 </div>
                             </label>
@@ -782,49 +792,49 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
             {/* Manual add */}
             <div className={CARD + " space-y-4"}>
                 <div>
-                    <h3 className="text-sm font-semibold text-[var(--color-text)]">Add objection manually</h3>
+                    <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.objections.addManually}</h3>
                     <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                        AI matches by <span className="font-medium text-[var(--color-text-secondary)]">meaning, not exact words</span> — write it naturally, the way a prospect usually raises it.
+                        {t.tabs.objections.addManuallySub1}<span className="font-medium text-[var(--color-text-secondary)]">{t.tabs.objections.addManuallySubBold}</span>{t.tabs.objections.addManuallySub2}
                     </p>
                 </div>
                 <div className="space-y-1">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">The objection</label>
-                    <input className={INPUT} placeholder="This is too expensive for our budget right now"
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.objections.theObjection}</label>
+                    <input className={INPUT} placeholder={t.tabs.objections.objectionPlaceholder}
                         value={objText} onChange={e => setObjText(e.target.value)} />
-                    <p className="text-xs text-[var(--color-muted)]">No quotes needed — any phrasing that means the same thing will be detected automatically.</p>
+                    <p className="text-xs text-[var(--color-muted)]">{t.tabs.objections.noQuotesNeeded}</p>
                 </div>
                 <div className="space-y-1">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">Ideal response guidance</label>
-                    <textarea className={TEXTAREA} rows={3} placeholder="Acknowledge the concern, pivot to ROI. Ask: what would achieving X be worth to you?"
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.objections.guidance}</label>
+                    <textarea className={TEXTAREA} rows={3} placeholder={t.tabs.objections.guidancePlaceholder}
                         value={guidance} onChange={e => setGuidance(e.target.value)} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">Severity</label>
+                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.objections.severity}</label>
                         <select className={INPUT} value={severity} onChange={e => setSeverity(e.target.value)}>
-                            <option value="low">Low — minor friction</option>
-                            <option value="medium">Medium — common objection</option>
-                            <option value="high">High — deal-threatening</option>
-                            <option value="critical">Critical — must handle perfectly</option>
+                            <option value="low">{t.tabs.objections.sevLow}</option>
+                            <option value="medium">{t.tabs.objections.sevMedium}</option>
+                            <option value="high">{t.tabs.objections.sevHigh}</option>
+                            <option value="critical">{t.tabs.objections.sevCritical}</option>
                         </select>
                     </div>
                     <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">Variants <span className="text-[var(--color-muted)] font-normal">(optional)</span></label>
+                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.objections.variants} <span className="text-[var(--color-muted)] font-normal">{t.tabs.objections.optional}</span></label>
                             <button type="button" className={BTN_GHOST} onClick={suggestVariants}
                                 disabled={suggestingVariants || !objText.trim()}>
-                                {suggestingVariants ? "Generating…" : "✦ AI suggest"}
+                                {suggestingVariants ? t.tabs.objections.generatingVariants : t.tabs.objections.aiSuggest}
                             </button>
                         </div>
                         <textarea className={TEXTAREA} rows={3}
-                            placeholder={"It's too pricey\nWe don't have budget\nCan you do it cheaper?"}
+                            placeholder={t.tabs.objections.variantsPlaceholder}
                             value={variants} onChange={e => setVariants(e.target.value)} />
-                        <p className="text-xs text-[var(--color-muted)]">AI matches by meaning — variants only help for very unusual phrasings.</p>
+                        <p className="text-xs text-[var(--color-muted)]">{t.tabs.objections.variantsHint}</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
                     <button className={BTN_PRIMARY} onClick={addObjection} disabled={saving || !objText.trim()}>
-                        {saving ? "Adding…" : "Add objection"}
+                        {saving ? t.tabs.objections.adding : t.tabs.objections.addObjection}
                     </button>
                     <Msg msg={msg} error={isErr} />
                 </div>
@@ -832,10 +842,10 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
 
             <div>
                 <div className="flex items-center justify-between gap-4 mb-3">
-                    <SectionHeader title={`Objection library (${objs.length})`} />
-                    {objs.length > 4 && <SearchBox value={query} onChange={setQuery} placeholder="Search objections…" className="w-56" />}
+                    <SectionHeader title={t.tabs.objections.libraryTitle(objs.length)} />
+                    {objs.length > 4 && <SearchBox value={query} onChange={setQuery} placeholder={t.tabs.objections.searchObjections} className="w-56" />}
                 </div>
-                {loading && <p className="text-sm text-[var(--color-text-secondary)]">Loading…</p>}
+                {loading && <p className="text-sm text-[var(--color-text-secondary)]">{t.common.loading}</p>}
                 <div className="space-y-2">
                     {objs.filter(o => {
                         const s = query.trim().toLowerCase()
@@ -845,21 +855,21 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                     <p className="text-sm text-[var(--color-text)] font-medium">{o.objection}</p>
-                                    {!o.active && <StatusBadge label="disabled" color="slate" />}
+                                    {!o.active && <StatusBadge label={t.data.statuses.disabled} color="slate" />}
                                 </div>
                                 {guidanceOf(o) && <p className="text-xs text-[var(--color-text-secondary)] mt-1">{guidanceOf(o)}</p>}
                                 {o.variants && o.variants.length > 0 && (
-                                    <p className="text-xs text-[var(--color-muted)] mt-0.5">+{o.variants.length} variant{o.variants.length !== 1 ? "s" : ""}</p>
+                                    <p className="text-xs text-[var(--color-muted)] mt-0.5">{t.tabs.objections.nVariants(o.variants.length)}</p>
                                 )}
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
-                                <StatusBadge label={o.severity} color={sevColor(o.severity)} />
-                                <button className={BTN_GHOST} onClick={() => toggle(o)}>{o.active ? "Disable" : "Enable"}</button>
-                                <button className={BTN_DANGER} onClick={() => deleteObj(o.id)}>Delete</button>
+                                <StatusBadge label={t.data.severities[o.severity] ?? o.severity} color={sevColor(o.severity)} />
+                                <button className={BTN_GHOST} onClick={() => toggle(o)}>{o.active ? t.tabs.objections.disable : t.tabs.objections.enable}</button>
+                                <button className={BTN_DANGER} onClick={() => deleteObj(o.id)}>{t.common.delete}</button>
                             </div>
                         </div>
                     ))}
-                    {!loading && objs.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">No objections yet.</p>}
+                    {!loading && objs.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">{t.tabs.objections.noObjections}</p>}
                 </div>
             </div>
         </div>
@@ -869,6 +879,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
 // ─── Playbooks Tab ────────────────────────────────────────────────────────────
 
 export function PlaybooksTab({ orgId }: { orgId: string }) {
+    const { locale, t } = useLocale()
     const [playbooks, setPlaybooks]     = useState<PbRow[]>([])
     const [loading, setLoading]         = useState(true)
     const [creating, setCreating]       = useState(false)
@@ -881,6 +892,8 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
     const [isErr, setIsErr]             = useState(false)
     const [extracting, setExtracting]   = useState(false)
     const [extractMsg, setExtractMsg]   = useState<string | null>(null)
+    // Tracked explicitly — the copy is translated, so sniffing for "Error" fails.
+    const [extractErr, setExtractErr]   = useState(false)
     const extractFileRef = useRef<HTMLInputElement>(null)
 
     const load = useCallback(async () => {
@@ -897,7 +910,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
         const file = e.target.files?.[0]
         if (!file) return
         e.target.value = ""
-        setExtracting(true); setExtractMsg(null)
+        setExtracting(true); setExtractMsg(null); setExtractErr(false)
         const text = await file.text()
         try {
             const { data: { session } } = await supabase.auth.getSession()
@@ -907,7 +920,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                 body: JSON.stringify({ text, type: "playbook" }),
             })
             const json = await res.json().catch(() => ({}))
-            if (!res.ok) { setExtractMsg(`Error: ${errStr(json.error) || res.statusText}`); return }
+            if (!res.ok) { setExtractMsg(t.tabs.playbooks.errorPrefix(errStr(json.error) || res.statusText)); setExtractErr(true); return }
             if (json.name) setPbName(json.name)
             if (json.methodology) setMethodology(json.methodology)
             if (json.stages?.length) {
@@ -919,9 +932,9 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                 })))
             }
             setCreating(true)
-            setExtractMsg(`Extracted ${json.stages?.length ?? 0} stages — review and save below.`)
+            setExtractMsg(t.tabs.playbooks.extractedStages(json.stages?.length ?? 0))
         } catch (e) {
-            setExtractMsg(`Error: ${errStr(e)}`)
+            setExtractMsg(t.tabs.playbooks.errorPrefix(errStr(e))); setExtractErr(true)
         } finally {
             setExtracting(false)
         }
@@ -978,15 +991,12 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                 }))
             }
         })
-        // Stage-level forbidden phrases were only ever stored inside stages[],
-        // which nothing reads. Roll them up into the top-level `guardrails`
-        // column, which is what reaches the model during a call.
-        const guardrailsJson = stages.flatMap(st =>
-            st.guardrails.filter(g => g.keyword.trim()).map(g => ({
-                rule: `Do not say "${g.keyword.trim()}" during ${st.name.trim() || "this call"}`,
-                severity: g.action === "escalate" ? "critical" : "normal",
-            }))
-        )
+        // Stage-level forbidden phrases are the authoring shape; the top-level
+        // `guardrails` rollup is the runtime contract that reaches the model,
+        // the breach detector, and the scorecard grader (D-181). One shared
+        // helper generates it here and in the starter kits so the sentence
+        // (and its language) can't drift between the two writers.
+        const guardrailsJson = rollUpGuardrails(stagesJson, locale)
         // Editing updates in place and bumps the version; the status is kept, so
         // editing the live playbook stays live — reps see the change on their
         // next call, which is the point of editing it.
@@ -1001,9 +1011,9 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                 guardrails: guardrailsJson, status: "draft", version: 1
             })
         setSaving(false)
-        if (error) { setMsg(humanError(error.message, "save that")); setIsErr(true) }
+        if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true) }
         else {
-            setMsg(editingId ? "Playbook updated." : "Playbook created."); setIsErr(false)
+            setMsg(editingId ? t.tabs.playbooks.updated : t.tabs.playbooks.created); setIsErr(false)
             setPbName(""); setMethodology("custom"); setStages([{ name: "", description: "", requiredItems: "", guardrails: [] }])
             setCreating(false); setEditingId(null); setExtractMsg(null); await load()
         }
@@ -1016,9 +1026,9 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
         await supabase.from("org_playbooks").update({ status }).eq("id", id)
         // Every action answers "what happens now?" (D-175).
         setIsErr(false)
-        setMsg(status === "active" ? "Live — your reps are coached from this on their next call."
-             : status === "draft"  ? "Deactivated — reps get generic coaching until another playbook is live."
-             : "Archived.")
+        setMsg(status === "active" ? t.tabs.playbooks.statusLive
+             : status === "draft"  ? t.tabs.playbooks.statusDraft
+             : t.tabs.playbooks.statusArchived)
         await load()
     }
 
@@ -1032,13 +1042,13 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
             <div className={CARD}>
                 <div className="flex items-center justify-between">
                     <div>
-                        <h3 className="text-sm font-semibold text-[var(--color-text)]">Playbooks</h3>
-                        <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">The active playbook guides reps in real-time and is scored against after each call.</p>
+                        <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.playbooks.title}</h3>
+                        <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.tabs.playbooks.sub}</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <input ref={extractFileRef} type="file" accept=".txt,.md,.csv,.pdf" className="hidden" onChange={handleExtractFile} />
                         <button className={BTN_GHOST} onClick={() => extractFileRef.current?.click()} disabled={extracting}>
-                            {extracting ? "Extracting…" : "Import from doc"}
+                            {extracting ? t.tabs.playbooks.extracting : t.tabs.playbooks.importFromDoc}
                         </button>
                         <button className={BTN_PRIMARY} onClick={() => {
                             if (creating) {
@@ -1047,26 +1057,26 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                                 setStages([{ name: "", description: "", requiredItems: "", guardrails: [] }])
                             } else setCreating(true)
                         }}>
-                            {creating ? "Cancel" : "+ New playbook"}
+                            {creating ? t.common.cancel : t.tabs.playbooks.newPlaybook}
                         </button>
                     </div>
                 </div>
 
                 {extractMsg && (
-                    <p className={`mt-3 text-xs ${extractMsg.startsWith("Error") ? "text-red-600" : "text-emerald-600"}`}>{extractMsg}</p>
+                    <p className={`mt-3 text-xs ${extractErr ? "text-red-600" : "text-emerald-600"}`}>{extractMsg}</p>
                 )}
 
                 {creating && (
                     <div className="mt-5 space-y-5 pt-5 border-t border-[var(--color-border)]">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div className="col-span-2 space-y-1">
-                                <label className="text-xs text-[var(--color-text-secondary)] font-medium">Playbook name</label>
-                                <input className={INPUT} placeholder="Enterprise SaaS Sales Flow" value={pbName} onChange={e => setPbName(e.target.value)} />
+                                <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.playbooks.name}</label>
+                                <input className={INPUT} placeholder={t.tabs.playbooks.namePlaceholder} value={pbName} onChange={e => setPbName(e.target.value)} />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs text-[var(--color-text-secondary)] font-medium">Methodology</label>
+                                <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.playbooks.methodology}</label>
                                 <select className={INPUT} value={methodology} onChange={e => setMethodology(e.target.value)}>
-                                    <option value="custom">Custom</option>
+                                    <option value="custom">{t.tabs.playbooks.methodologyCustom}</option>
                                     <option value="SPIN">SPIN Selling</option>
                                     <option value="Challenger">Challenger Sale</option>
                                     <option value="MEDDIC">MEDDIC</option>
@@ -1078,44 +1088,44 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
 
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
-                                <p className="text-xs font-medium text-[var(--color-text-secondary)]">Stages ({stages.length})</p>
-                                <button className={BTN_GHOST} onClick={addStage}>+ Add stage</button>
+                                <p className="text-xs font-medium text-[var(--color-text-secondary)]">{t.tabs.playbooks.stagesN(stages.length)}</p>
+                                <button className={BTN_GHOST} onClick={addStage}>{t.tabs.playbooks.addStage}</button>
                             </div>
 
                             {stages.map((stage, si) => (
                                 <div key={si} className="bg-[var(--color-bg)] rounded-lg border border-[var(--color-border)] p-4 space-y-3">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-xs font-semibold text-[var(--color-accent)]">Stage {si + 1}</span>
-                                        {stages.length > 1 && <button className={BTN_DANGER} onClick={() => removeStage(si)}>Remove</button>}
+                                        <span className="text-xs font-semibold text-[var(--color-accent)]">{t.tabs.playbooks.stageN(si + 1)}</span>
+                                        {stages.length > 1 && <button className={BTN_DANGER} onClick={() => removeStage(si)}>{t.common.remove}</button>}
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div className="space-y-1">
-                                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">Stage name</label>
-                                            <input className={INPUT} placeholder="Discovery" value={stage.name} onChange={e => updateStage(si, { name: e.target.value })} />
+                                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.playbooks.stageName}</label>
+                                            <input className={INPUT} placeholder={t.tabs.playbooks.stageNamePlaceholder} value={stage.name} onChange={e => updateStage(si, { name: e.target.value })} />
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">Description</label>
-                                            <input className={INPUT} placeholder="Understand the prospect's pain points" value={stage.description} onChange={e => updateStage(si, { description: e.target.value })} />
+                                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.playbooks.description}</label>
+                                            <input className={INPUT} placeholder={t.tabs.playbooks.descriptionPlaceholder} value={stage.description} onChange={e => updateStage(si, { description: e.target.value })} />
                                         </div>
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">Required items (one per line — rep must cover all of these)</label>
-                                        <textarea className={TEXTAREA} rows={3} placeholder={"Ask about current solution\nIdentify main pain point\nUnderstand timeline"}
+                                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.playbooks.requiredItems}</label>
+                                        <textarea className={TEXTAREA} rows={3} placeholder={t.tabs.playbooks.requiredItemsPlaceholder}
                                             value={stage.requiredItems} onChange={e => updateStage(si, { requiredItems: e.target.value })} />
                                     </div>
                                     <div className="space-y-2">
                                         <div className="flex items-center justify-between">
-                                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">Guardrails (forbidden words/phrases)</label>
-                                            <button className={BTN_GHOST} onClick={() => addGuardrail(si)}>+ Add rule</button>
+                                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.playbooks.guardrails}</label>
+                                            <button className={BTN_GHOST} onClick={() => addGuardrail(si)}>{t.tabs.playbooks.addRule}</button>
                                         </div>
                                         {stage.guardrails.map((g, gi) => (
                                             <div key={gi} className="flex gap-2 items-center">
-                                                <input className={INPUT} placeholder='e.g. "contract"' value={g.keyword} onChange={e => updateGuardrail(si, gi, { keyword: e.target.value })} />
+                                                <input className={INPUT} placeholder={t.tabs.playbooks.guardrailPlaceholder} value={g.keyword} onChange={e => updateGuardrail(si, gi, { keyword: e.target.value })} />
                                                 <select className="w-32 flex-shrink-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                                                     value={g.action} onChange={e => updateGuardrail(si, gi, { action: e.target.value })}>
-                                                    <option value="warn">Warn</option>
-                                                    <option value="flag">Flag</option>
-                                                    <option value="escalate">Escalate</option>
+                                                    <option value="warn">{t.tabs.playbooks.actionWarn}</option>
+                                                    <option value="flag">{t.tabs.playbooks.actionFlag}</option>
+                                                    <option value="escalate">{t.tabs.playbooks.actionEscalate}</option>
                                                 </select>
                                                 <button className="text-[var(--color-muted)] hover:text-red-600 flex-shrink-0 transition-colors" onClick={() => removeGuardrail(si, gi)}>×</button>
                                             </div>
@@ -1127,7 +1137,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
 
                         <div className="flex items-center gap-3">
                             <button className={BTN_PRIMARY} onClick={savePlaybook} disabled={saving || !pbName.trim()}>
-                                {saving ? "Saving…" : editingId ? "Save changes" : "Create playbook"}
+                                {saving ? t.common.saving : editingId ? t.tabs.playbooks.saveChanges : t.tabs.playbooks.createPlaybook}
                             </button>
                             <Msg msg={msg} error={isErr} />
                         </div>
@@ -1135,7 +1145,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                 )}
             </div>
 
-            {loading && <p className="text-sm text-[var(--color-text-secondary)]">Loading…</p>}
+            {loading && <p className="text-sm text-[var(--color-text-secondary)]">{t.common.loading}</p>}
             <div className="space-y-3">
                 {playbooks.map(p => (
                     <div key={p.id} className={CARD}>
@@ -1143,18 +1153,18 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                             <div>
                                 <div className="flex items-center gap-2">
                                     <p className="text-sm font-semibold text-[var(--color-text)]">{p.name}</p>
-                                    <StatusBadge label={p.status} color={p.status === "active" ? "green" : p.status === "draft" ? "yellow" : "slate"} />
+                                    <StatusBadge label={t.data.statuses[p.status] ?? p.status} color={p.status === "active" ? "green" : p.status === "draft" ? "yellow" : "slate"} />
                                 </div>
                                 <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                                    {p.methodology ?? "Custom"} · {p.stages?.length ?? 0} stages · v{p.version}
+                                    {t.tabs.playbooks.metaLine(p.methodology ?? t.tabs.playbooks.methodologyCustom, p.stages?.length ?? 0, p.version)}
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
-                                <button className={BTN_GHOST} onClick={() => startEdit(p)}>Edit</button>
-                                {p.status !== "active"   && <button className={BTN_GHOST} onClick={() => setStatus(p.id, "active")}>Activate</button>}
-                                {p.status === "active"   && <button className={BTN_GHOST} onClick={() => setStatus(p.id, "draft")}>Deactivate</button>}
-                                {p.status !== "archived" && <button className={BTN_GHOST} onClick={() => setStatus(p.id, "archived")}>Archive</button>}
-                                <button className={BTN_DANGER} onClick={() => deletePlaybook(p.id)}>Delete</button>
+                                <button className={BTN_GHOST} onClick={() => startEdit(p)}>{t.common.edit}</button>
+                                {p.status !== "active"   && <button className={BTN_GHOST} onClick={() => setStatus(p.id, "active")}>{t.tabs.playbooks.activate}</button>}
+                                {p.status === "active"   && <button className={BTN_GHOST} onClick={() => setStatus(p.id, "draft")}>{t.tabs.playbooks.deactivate}</button>}
+                                {p.status !== "archived" && <button className={BTN_GHOST} onClick={() => setStatus(p.id, "archived")}>{t.tabs.playbooks.archive}</button>}
+                                <button className={BTN_DANGER} onClick={() => deletePlaybook(p.id)}>{t.common.delete}</button>
                             </div>
                         </div>
                         {p.stages && p.stages.length > 0 && (
@@ -1169,7 +1179,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                     </div>
                 ))}
                 {!loading && playbooks.length === 0 && !creating && (
-                    <p className="text-sm text-[var(--color-text-secondary)]">No playbooks yet. Create one above or import from a document.</p>
+                    <p className="text-sm text-[var(--color-text-secondary)]">{t.tabs.playbooks.noPlaybooks}</p>
                 )}
             </div>
         </div>
@@ -1181,6 +1191,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
 interface Readiness { activePlaybooks: number; objections: number; knowledge: number }
 
 export function PracticeTab({ orgId }: { orgId: string }) {
+    const { t, intl } = useLocale()
     const [assignments, setAssignments] = useState<PracticeAssignmentRow[]>([])
     const [members, setMembers]         = useState<MemberRow[]>([])
     const [teams, setTeams]              = useState<TeamRow[]>([])
@@ -1221,7 +1232,7 @@ export function PracticeTab({ orgId }: { orgId: string }) {
     useEffect(() => { load() }, [load])
 
     async function assign() {
-        if (!assigneeId) { setMsg("Pick a rep or a team."); setIsErr(true); return }
+        if (!assigneeId) { setMsg(t.tabs.practice.pickAssignee); setIsErr(true); return }
         const scenario = STOCK_PRACTICE_SCENARIOS.find(s => s.id === scenarioId)
         if (!scenario) return
 
@@ -1239,9 +1250,9 @@ export function PracticeTab({ orgId }: { orgId: string }) {
             assigned_by: user?.id,
         })
         setAssigning(false)
-        if (error) { setMsg(humanError(error.message, "save that")); setIsErr(true) }
+        if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true) }
         else {
-            setMsg(`Assigned "${scenario.title}".`); setIsErr(false)
+            setMsg(t.tabs.practice.assigned(scenario.title)); setIsErr(false)
             setNote(""); setDueDate(""); setAssigneeId("")
             await load()
         }
@@ -1255,28 +1266,28 @@ export function PracticeTab({ orgId }: { orgId: string }) {
     function assigneeLabel(a: PracticeAssignmentRow): string {
         if (a.assignee_user_id) {
             const m = members.find(m => m.user_id === a.assignee_user_id)
-            return m?.email ?? "A rep"
+            return m?.email ?? t.tabs.practice.aRep
         }
         if (a.assignee_team_id) {
-            const t = teams.find(t => t.id === a.assignee_team_id)
-            return t ? `Team: ${t.name}` : "A team"
+            const team = teams.find(x => x.id === a.assignee_team_id)
+            return team ? t.tabs.practice.teamPrefix(team.name) : t.tabs.practice.aTeamFallback
         }
         return "—"
     }
 
-    if (loading) return <div className="text-[var(--color-text-secondary)] text-sm">Loading…</div>
+    if (loading) return <div className="text-[var(--color-text-secondary)] text-sm">{t.common.loading}</div>
 
     return (
         <div className="space-y-6">
             <div className={CARD}>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">Assign a practice</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.practice.assignTitle}</h3>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                    The rep runs it against an AI character in the TalkPilot app and gets a graded scorecard — the grade rolls up here automatically.
+                    {t.tabs.practice.assignSub}
                 </p>
 
                 <div className="mt-5 space-y-4">
                     <div className="space-y-1">
-                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">Scenario</label>
+                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.practice.scenario}</label>
                         <select className={INPUT} value={scenarioId} onChange={e => setScenarioId(e.target.value)}>
                             {STOCK_PRACTICE_SCENARIOS.map(s => (
                                 <option key={s.id} value={s.id}>{s.title} · {s.category} · {s.difficulty}</option>
@@ -1289,37 +1300,37 @@ export function PracticeTab({ orgId }: { orgId: string }) {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1">
-                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">Assign to</label>
+                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.practice.assignTo}</label>
                             <select className={INPUT} value={assigneeKind}
                                 onChange={e => { setAssigneeKind(e.target.value as "member" | "team"); setAssigneeId("") }}>
-                                <option value="member">A person</option>
-                                <option value="team">A team</option>
+                                <option value="member">{t.tabs.practice.aPerson}</option>
+                                <option value="team">{t.tabs.practice.aTeam}</option>
                             </select>
                         </div>
                         <div className="space-y-1">
                             <label className="text-xs text-[var(--color-text-secondary)] font-medium">
-                                {assigneeKind === "member" ? "Rep" : "Team"}
+                                {assigneeKind === "member" ? t.common.rep : t.tabs.practice.team}
                             </label>
                             <select className={INPUT} value={assigneeId} onChange={e => setAssigneeId(e.target.value)}>
-                                <option value="">Select…</option>
+                                <option value="">{t.tabs.practice.select}</option>
                                 {assigneeKind === "member"
                                     ? members.map(m => <option key={m.user_id} value={m.user_id}>{m.email ?? m.user_id}</option>)
                                     : teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)
                                 }
                             </select>
                             {assigneeKind === "team" && teams.length === 0 && (
-                                <p className="text-xs text-[var(--color-muted)] mt-1">No teams yet — assign to a person instead.</p>
+                                <p className="text-xs text-[var(--color-muted)] mt-1">{t.tabs.practice.noTeamsYet}</p>
                             )}
                         </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1">
-                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">Coach&apos;s note (optional)</label>
-                            <input className={INPUT} placeholder="Focus on holding price, not discounting" value={note} onChange={e => setNote(e.target.value)} />
+                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.practice.coachNote}</label>
+                            <input className={INPUT} placeholder={t.tabs.practice.coachNotePlaceholder} value={note} onChange={e => setNote(e.target.value)} />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">Due date (optional)</label>
+                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.practice.dueDate}</label>
                             <input type="date" className={INPUT} value={dueDate} onChange={e => setDueDate(e.target.value)} />
                         </div>
                     </div>
@@ -1328,16 +1339,16 @@ export function PracticeTab({ orgId }: { orgId: string }) {
 
                     <div className="flex justify-end">
                         <button className={BTN_PRIMARY} onClick={assign} disabled={assigning || !assigneeId}>
-                            {assigning ? "Assigning…" : "Assign"}
+                            {assigning ? t.tabs.practice.assigning : t.tabs.practice.assign}
                         </button>
                     </div>
                 </div>
             </div>
 
             <div className={CARD}>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">Recent assignments</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.practice.recent}</h3>
                 {assignments.length === 0 ? (
-                    <p className="text-xs text-[var(--color-text-secondary)] mt-2">No practices assigned yet.</p>
+                    <p className="text-xs text-[var(--color-text-secondary)] mt-2">{t.tabs.practice.noAssignments}</p>
                 ) : (
                     <div className="mt-3 space-y-2">
                         {assignments.map(a => (
@@ -1346,11 +1357,11 @@ export function PracticeTab({ orgId }: { orgId: string }) {
                                     <p className="text-sm text-[var(--color-text)] truncate">{a.title}</p>
                                     <p className="text-xs text-[var(--color-text-secondary)]">
                                         {assigneeLabel(a)}
-                                        {a.due_at && ` · Due ${new Date(a.due_at).toLocaleDateString()}`}
+                                        {a.due_at && ` · ${t.tabs.practice.due(new Date(a.due_at).toLocaleDateString(intl))}`}
                                         {a.note && ` · "${a.note}"`}
                                     </p>
                                 </div>
-                                <button className={BTN_GHOST + " flex-shrink-0"} onClick={() => unassign(a.id)}>Remove</button>
+                                <button className={BTN_GHOST + " flex-shrink-0"} onClick={() => unassign(a.id)}>{t.common.remove}</button>
                             </div>
                         ))}
                     </div>
@@ -1361,6 +1372,7 @@ export function PracticeTab({ orgId }: { orgId: string }) {
 }
 
 export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
+    const { t, intl } = useLocale()
     const [members, setMembers]         = useState<MemberRow[]>([])
     const [query, setQuery]             = useState("")
     const [invites, setInvites]         = useState<InviteRow[]>([])
@@ -1420,10 +1432,10 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
         })
         setInviting(false)
         if (res.ok) {
-            setMsg("Invite sent — they'll show as Pending below, and appear in Performance after their first call."); setIsErr(false); setInviteEmail(""); await load()
+            setMsg(t.tabs.members.inviteSent); setIsErr(false); setInviteEmail(""); await load()
         } else {
             const e = await res.json().catch(() => ({}))
-            setMsg(`Error: ${errStr(e.error) || "Try again in a minute, or contact support."}`); setIsErr(true)
+            setMsg(t.tabs.members.inviteError(errStr(e.error))); setIsErr(true)
         }
     }
 
@@ -1444,17 +1456,17 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
         <div className="space-y-6">
             <div className={CARD + " space-y-3"}>
                 <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-[var(--color-text)]">Invite member</h3>
+                    <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.members.inviteTitle}</h3>
                     {!requiredMet && (
                         <span className="text-xs text-amber-600">
-                            Setup isn&apos;t finished — reps who join now get generic coaching. <Link href="/" className="font-semibold underline">Finish on Home →</Link>
+                            {t.tabs.members.setupUnfinished} <Link href="/" className="font-semibold underline">{t.tabs.members.finishOnHome}</Link>
                         </span>
                     )}
                 </div>
                 <div className="flex gap-2">
                     <input
                         type="email"
-                        placeholder="colleague@company.com"
+                        placeholder={t.tabs.members.invitePlaceholder}
                         value={inviteEmail}
                         onChange={e => setInviteEmail(e.target.value)}
                         className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1464,12 +1476,12 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                         onChange={e => setInviteRole(e.target.value)}
                         className="w-32 flex-shrink-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <option value="member">Member</option>
-                        <option value="manager">Manager</option>
-                        <option value="admin">Admin</option>
+                        <option value="member">{t.data.roles.member}</option>
+                        <option value="manager">{t.data.roles.manager}</option>
+                        <option value="admin">{t.data.roles.admin}</option>
                     </select>
                     <button className={BTN_PRIMARY + " flex-shrink-0"} onClick={sendInvite} disabled={inviting || !inviteEmail.trim()}>
-                        {inviting ? "Sending…" : "Send invite"}
+                        {inviting ? t.tabs.members.sendingInvite : t.tabs.members.sendInvite}
                     </button>
                 </div>
                 <Msg msg={msg} error={isErr} />
@@ -1477,37 +1489,37 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
 
             <div>
                 <div className="flex items-center justify-between gap-4 mb-3">
-                    <SectionHeader title={`Active members (${members.length})`} />
-                    {members.length > 5 && <SearchBox value={query} onChange={setQuery} placeholder="Search members…" className="w-56" />}
+                    <SectionHeader title={t.tabs.members.activeMembers(members.length)} />
+                    {members.length > 5 && <SearchBox value={query} onChange={setQuery} placeholder={t.tabs.members.searchMembers} className="w-56" />}
                 </div>
-                {loading && <p className="text-sm text-[var(--color-text-secondary)]">Loading…</p>}
+                {loading && <p className="text-sm text-[var(--color-text-secondary)]">{t.common.loading}</p>}
                 {(() => {
                     const s = query.trim().toLowerCase()
                     const shown = s ? members.filter(m => (m.email ?? "").toLowerCase().includes(s) || m.role.toLowerCase().includes(s) || m.user_id.toLowerCase().includes(s)) : members
                     return (
                 <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] overflow-hidden shadow-sm">
                     {shown.length === 0 && !loading && (
-                        <div className="px-4 py-6 text-sm text-[var(--color-text-secondary)]">{s ? `No members match “${query}”.` : "No members yet."}</div>
+                        <div className="px-4 py-6 text-sm text-[var(--color-text-secondary)]">{s ? t.tabs.members.noMembersMatch(query) : t.tabs.members.noMembers}</div>
                     )}
                     {shown.map((m, i) => (
                         <div key={m.user_id} className={`flex items-center justify-between px-4 py-3 gap-4 ${i < shown.length - 1 ? "border-b border-[var(--color-border)]" : ""}`}>
                             <div>
                                 <p className="text-sm text-[var(--color-text)] font-medium">{m.email ?? m.user_id.slice(0, 8) + "…"}</p>
-                                <p className="text-xs text-[var(--color-muted)]">Joined {new Date(m.joined_at).toLocaleDateString()}</p>
+                                <p className="text-xs text-[var(--color-muted)]">{t.tabs.members.joined(new Date(m.joined_at).toLocaleDateString(intl))}</p>
                             </div>
                             <div className="flex items-center gap-2">
-                                <StatusBadge label={m.role} color={roleColor(m.role)} />
+                                <StatusBadge label={t.data.roles[m.role] ?? m.role} color={roleColor(m.role)} />
                                 <select
                                     value={m.role}
                                     onChange={e => changeRole(m.user_id, e.target.value)}
                                     className="w-24 text-xs bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-2 py-1 text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent)]"
                                 >
-                                    <option value="member">Member</option>
-                                    <option value="manager">Manager</option>
-                                    <option value="admin">Admin</option>
-                                    <option value="owner">Owner</option>
+                                    <option value="member">{t.data.roles.member}</option>
+                                    <option value="manager">{t.data.roles.manager}</option>
+                                    <option value="admin">{t.data.roles.admin}</option>
+                                    <option value="owner">{t.data.roles.owner}</option>
                                 </select>
-                                <button className={BTN_DANGER} onClick={() => removeMember(m.user_id)}>Remove</button>
+                                <button className={BTN_DANGER} onClick={() => removeMember(m.user_id)}>{t.common.remove}</button>
                             </div>
                         </div>
                     ))}
@@ -1518,19 +1530,19 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
 
             {invites.length > 0 && (
                 <div>
-                    <SectionHeader title="Invites" />
+                    <SectionHeader title={t.tabs.members.invites} />
                     <div className="space-y-1.5">
                         {invites.map(inv => (
                             <div key={inv.id} className="flex items-center justify-between text-sm px-4 py-2.5 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)] shadow-sm">
                                 <span className="text-[var(--color-text-secondary)]">{inv.email}</span>
                                 <div className="flex items-center gap-3 text-xs">
-                                    <span className="text-[var(--color-text-secondary)] capitalize">{inv.role}</span>
+                                    <span className="text-[var(--color-text-secondary)] capitalize">{t.data.roles[inv.role] ?? inv.role}</span>
                                     {inv.accepted_at ? (
-                                        <StatusBadge label="Accepted" color="green" />
+                                        <StatusBadge label={t.tabs.members.accepted} color="green" />
                                     ) : new Date(inv.expires_at) < new Date() ? (
-                                        <StatusBadge label="Expired" color="red" />
+                                        <StatusBadge label={t.tabs.members.expired} color="red" />
                                     ) : (
-                                        <StatusBadge label="Pending" color="yellow" />
+                                        <StatusBadge label={t.tabs.members.pending} color="yellow" />
                                     )}
                                 </div>
                             </div>
@@ -1559,6 +1571,7 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
     onChange: (field: "text" | "expertSpeaker", val: string) => void
     onRemove?: () => void
 }) {
+    const { t, intl } = useLocale()
     const fileRef = useRef<HTMLInputElement>(null)
     const [loadingFile, setLoadingFile] = useState(false)
     const [fileError, setFileError]     = useState("")
@@ -1569,7 +1582,7 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
         setFileError("")
         const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
         if (ext === "pdf") {
-            setFileError("PDF can't be read directly — export as .txt from your transcript app, or copy-paste.")
+            setFileError(t.tabs.dna.pdfError)
             e.target.value = ""; return
         }
         setLoadingFile(true)
@@ -1577,7 +1590,7 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
             const text = await file.text()
             onChange("text", text)
         } catch {
-            setFileError("Couldn't read this file. Try copy-pasting the transcript instead.")
+            setFileError(t.tabs.dna.fileError)
         } finally {
             setLoadingFile(false)
             e.target.value = ""
@@ -1590,9 +1603,9 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
     return (
         <div className={CARD + " space-y-3"}>
             <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-[var(--color-text)]">Transcript {index + 1}</p>
+                <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.transcriptN(index + 1)}</p>
                 {onRemove && (
-                    <button onClick={onRemove} className="text-xs text-[var(--color-muted)] hover:text-red-500 transition-colors">Remove</button>
+                    <button onClick={onRemove} className="text-xs text-[var(--color-muted)] hover:text-red-500 transition-colors">{t.common.remove}</button>
                 )}
             </div>
 
@@ -1608,16 +1621,16 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
                                 : <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
                             }
                         </div>
-                        <p className="text-sm font-semibold text-[var(--color-accent)]">{loadingFile ? "Reading…" : "Upload file"}</p>
-                        <p className="text-xs text-[var(--color-text-secondary)]">.txt · .md · .srt — Otter, Fireflies, Granola, Gemini, Read AI…</p>
+                        <p className="text-sm font-semibold text-[var(--color-accent)]">{loadingFile ? t.tabs.dna.reading : t.tabs.dna.uploadFile}</p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">{t.tabs.dna.uploadFormats}</p>
                     </button>
                     <div className="relative flex items-center gap-3">
                         <div className="flex-1 border-t border-[var(--color-border)]" />
-                        <span className="text-xs text-[var(--color-muted)]">or paste directly</span>
+                        <span className="text-xs text-[var(--color-muted)]">{t.tabs.dna.orPaste}</span>
                         <div className="flex-1 border-t border-[var(--color-border)]" />
                     </div>
                     <textarea rows={5}
-                        placeholder={"Paste transcript here…\n\nLines should start with the speaker's name:\nAlex: We've been struggling with response times…\nJordan: I understand — here's how I think about that…"}
+                        placeholder={t.tabs.dna.pastePlaceholder}
                         value={entry.text}
                         onChange={e => onChange("text", e.target.value)}
                         className={INPUT + " resize-y"} />
@@ -1629,9 +1642,9 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
             {hasText && (
                 <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                        <p className="text-xs text-[var(--color-muted)]">{wordCount.toLocaleString()} words</p>
+                        <p className="text-xs text-[var(--color-muted)]">{t.tabs.dna.nWords(wordCount.toLocaleString(intl))}</p>
                         <button onClick={() => { onChange("text", ""); onChange("expertSpeaker", "") }}
-                            className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">Clear &amp; replace</button>
+                            className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">{t.tabs.dna.clearReplace}</button>
                     </div>
                     <textarea rows={3} value={entry.text}
                         onChange={e => onChange("text", e.target.value)}
@@ -1643,7 +1656,7 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
             {hasText && (
                 <div className="border-t border-[var(--color-border)] pt-3 space-y-2">
                     <label className="text-xs font-semibold text-[var(--color-text-secondary)] block">
-                        Who is the expert in this conversation?
+                        {t.tabs.dna.whoIsExpert}
                     </label>
                     {entry.detectedSpeakers.length > 0 ? (
                         <>
@@ -1661,13 +1674,13 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
                                 ))}
                             </div>
                             {entry.expertSpeaker
-                                ? <p className="text-xs text-green-600">✓ Learning from: <span className="font-medium">{entry.expertSpeaker}</span></p>
-                                : <p className="text-xs text-amber-600">Tap a name — this is who we learn from in this transcript.</p>
+                                ? <p className="text-xs text-green-600">✓ {t.tabs.dna.learningFrom} <span className="font-medium">{entry.expertSpeaker}</span></p>
+                                : <p className="text-xs text-amber-600">{t.tabs.dna.tapAName}</p>
                             }
                         </>
                     ) : (
                         <p className="text-xs text-amber-600">
-                            No speaker labels found. Lines should start with "Name: " (e.g. "Alex: ") for auto-detection, or export as .txt from your transcript app.
+                            {t.tabs.dna.noSpeakers}
                         </p>
                     )}
                 </div>
@@ -1677,6 +1690,7 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
 }
 
 export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgInfo; onApplied: () => void }) {
+    const t = useT()
     const [step, setStep]               = useState<DNAStep>("collect")
     const [expertName, setExpertName]   = useState("")
     const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([
@@ -1709,7 +1723,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         setError("")
         const valid = transcripts.filter(t => t.text.trim().length > 100 && t.expertSpeaker)
         if (valid.length < 3) {
-            setError("Add at least 3 complete transcripts and select the expert speaker in each.")
+            setError(t.tabs.dna.need3)
             return
         }
         setStep("analyzing")
@@ -1727,7 +1741,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 }
             )
             const json = await res.json().catch(() => ({}))
-            if (!res.ok) { setError(errStr((json as Record<string, unknown>).error) || "Analysis failed."); setStep("collect"); return }
+            if (!res.ok) { setError(errStr((json as Record<string, unknown>).error) || t.tabs.dna.analysisFailed); setStep("collect"); return }
             setDnaResult(json as DNAResult)
             setStep("review")
         } catch (e) {
@@ -1815,8 +1829,8 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
             <div className={CARD + " flex flex-col items-center justify-center gap-6 py-20"}>
                 <div className="w-14 h-14 border-4 border-teal-200 border-t-[var(--color-accent)] rounded-full animate-spin" />
                 <div className="text-center">
-                    <p className="text-[var(--color-text)] font-semibold text-lg">Analyzing with Claude Opus…</p>
-                    <p className="text-[var(--color-text-secondary)] text-sm mt-1">This can take 30–60 seconds for multiple transcripts.</p>
+                    <p className="text-[var(--color-text)] font-semibold text-lg">{t.tabs.dna.analyzingTitle}</p>
+                    <p className="text-[var(--color-text-secondary)] text-sm mt-1">{t.tabs.dna.analyzingSub}</p>
                 </div>
             </div>
         )
@@ -1824,35 +1838,35 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
 
     if (step === "review" && dnaResult) {
         const reviewTabs: { key: DNAReviewTab; label: string }[] = [
-            { key: "tone",       label: "Tone"       },
-            { key: "phrases",    label: "Phrases"    },
-            { key: "objections", label: "Objections" },
-            { key: "flow",       label: "Conv. Flow" },
+            { key: "tone",       label: t.tabs.dna.reviewTabs.tone       },
+            { key: "phrases",    label: t.tabs.dna.reviewTabs.phrases    },
+            { key: "objections", label: t.tabs.dna.reviewTabs.objections },
+            { key: "flow",       label: t.tabs.dna.reviewTabs.flow       },
         ]
         return (
             <div className="space-y-4">
                 <div className={CARD}>
                     <div className="flex items-start justify-between gap-4">
                         <div>
-                            <p className="text-xs font-medium text-[var(--color-accent)] uppercase tracking-wide mb-1">Team DNA · Analysis complete</p>
+                            <p className="text-xs font-medium text-[var(--color-accent)] uppercase tracking-wide mb-1">{t.tabs.dna.analysisComplete}</p>
                             <p className="text-[var(--color-text)] text-sm leading-relaxed">{dnaResult.summary}</p>
                         </div>
                         <button onClick={() => { setStep("collect"); setDnaResult(null); setAppliedSections(new Set()) }}
                             className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] whitespace-nowrap flex-shrink-0">
-                            Start over
+                            {t.tabs.dna.startOver}
                         </button>
                     </div>
                 </div>
                 <div className="border-b border-[var(--color-border)] flex gap-1">
-                    {reviewTabs.map(t => (
-                        <button key={t.key} onClick={() => setReviewTab(t.key)}
+                    {reviewTabs.map(rt => (
+                        <button key={rt.key} onClick={() => setReviewTab(rt.key)}
                             className={`px-4 py-2 text-sm border-b-2 transition-colors -mb-px flex items-center gap-1.5 ${
-                                reviewTab === t.key
+                                reviewTab === rt.key
                                     ? "border-[var(--color-accent)] text-[var(--color-accent)] font-medium"
                                     : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
                             }`}>
-                            {t.label}
-                            {appliedSections.has(t.key) && <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />}
+                            {rt.label}
+                            {appliedSections.has(rt.key) && <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />}
                         </button>
                     ))}
                 </div>
@@ -1860,7 +1874,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 {reviewTab === "tone" && (
                     <div className={CARD + " space-y-4"}>
                         <div>
-                            <p className="text-sm font-semibold text-[var(--color-text)] mb-1">Detected communication style</p>
+                            <p className="text-sm font-semibold text-[var(--color-text)] mb-1">{t.tabs.dna.detectedStyle}</p>
                             <p className="text-xs text-[var(--color-text-secondary)]">{dnaResult.tone.evidence}</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -1870,14 +1884,14 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                         </div>
                         {org.voice_profile?.tone && (
                             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                                <p className="text-xs font-medium text-amber-700 mb-1">Current tone setting</p>
+                                <p className="text-xs font-medium text-amber-700 mb-1">{t.tabs.dna.currentTone}</p>
                                 <p className="text-xs text-amber-600">{org.voice_profile.tone}</p>
-                                <p className="text-xs text-amber-500 mt-1">Applying will merge — existing tones are preserved.</p>
+                                <p className="text-xs text-amber-500 mt-1">{t.tabs.dna.mergeNote}</p>
                             </div>
                         )}
                         <button onClick={applyTone} disabled={applyingTone || appliedSections.has("tone")}
                             className={BTN_PRIMARY + (appliedSections.has("tone") ? " opacity-60" : "")}>
-                            {appliedSections.has("tone") ? "✓ Applied" : applyingTone ? "Applying…" : "Apply to team settings"}
+                            {appliedSections.has("tone") ? t.tabs.dna.applied : applyingTone ? t.tabs.dna.applying : t.tabs.dna.applyTone}
                         </button>
                     </div>
                 )}
@@ -1885,8 +1899,8 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 {reviewTab === "phrases" && (
                     <div className="space-y-4">
                         <div className={CARD + " space-y-3"}>
-                            <p className="text-sm font-semibold text-[var(--color-text)]">Power phrases ({dnaResult.power_phrases.length})</p>
-                            <p className="text-xs text-[var(--color-text-secondary)]">Phrases this expert uses consistently — will be added as required phrases.</p>
+                            <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.powerPhrases(dnaResult.power_phrases.length)}</p>
+                            <p className="text-xs text-[var(--color-text-secondary)]">{t.tabs.dna.powerPhrasesSub}</p>
                             <div className="divide-y divide-[var(--color-border)]">
                                 {dnaResult.power_phrases.map((p, i) => (
                                     <div key={i} className="py-3 first:pt-0 last:pb-0">
@@ -1897,29 +1911,29 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                             </div>
                         </div>
                         <div className={CARD + " space-y-3"}>
-                            <p className="text-sm font-semibold text-[var(--color-text)]">Phrases to avoid ({dnaResult.phrases_to_avoid.length})</p>
-                            <p className="text-xs text-[var(--color-text-secondary)]">Patterns NOT used by this expert — will be added as banned phrases.</p>
+                            <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.avoidPhrases(dnaResult.phrases_to_avoid.length)}</p>
+                            <p className="text-xs text-[var(--color-text-secondary)]">{t.tabs.dna.avoidPhrasesSub}</p>
                             <div className="divide-y divide-[var(--color-border)]">
                                 {dnaResult.phrases_to_avoid.map((p, i) => (
                                     <div key={i} className="py-3 first:pt-0 last:pb-0">
                                         <p className="text-sm text-[var(--color-text)] font-medium">{p.pattern}</p>
                                         <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{p.why}</p>
-                                        <p className="text-xs text-teal-600 mt-0.5">Instead: {p.better_alternative}</p>
+                                        <p className="text-xs text-teal-600 mt-0.5">{t.tabs.dna.instead} {p.better_alternative}</p>
                                     </div>
                                 ))}
                             </div>
                         </div>
                         {(org.voice_profile?.required_phrases?.length || org.voice_profile?.banned_phrases?.length) && (
                             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                                <p className="text-xs font-medium text-amber-700 mb-1">Existing phrase settings</p>
+                                <p className="text-xs font-medium text-amber-700 mb-1">{t.tabs.dna.existingPhrases}</p>
                                 <p className="text-xs text-amber-600">
-                                    {org.voice_profile.required_phrases?.length ?? 0} required · {org.voice_profile.banned_phrases?.length ?? 0} banned. Applying adds to these lists, not replaces.
+                                    {t.tabs.dna.existingPhrasesBody(org.voice_profile.required_phrases?.length ?? 0, org.voice_profile.banned_phrases?.length ?? 0)}
                                 </p>
                             </div>
                         )}
                         <button onClick={applyPhrases} disabled={applyingPhrases || appliedSections.has("phrases")}
                             className={BTN_PRIMARY + (appliedSections.has("phrases") ? " opacity-60" : "")}>
-                            {appliedSections.has("phrases") ? "✓ Applied" : applyingPhrases ? "Applying…" : "Apply phrases to team"}
+                            {appliedSections.has("phrases") ? t.tabs.dna.applied : applyingPhrases ? t.tabs.dna.applying : t.tabs.dna.applyPhrases}
                         </button>
                     </div>
                 )}
@@ -1927,8 +1941,8 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 {reviewTab === "objections" && (
                     <div className={CARD + " space-y-4"}>
                         <div>
-                            <p className="text-sm font-semibold text-[var(--color-text)]">Objection handlers ({dnaResult.objections.length})</p>
-                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">How the expert handled real pushback — will be added to your Objections tab.</p>
+                            <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.objectionHandlers(dnaResult.objections.length)}</p>
+                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.tabs.dna.objectionHandlersSub}</p>
                         </div>
                         <div className="space-y-3">
                             {dnaResult.objections.map((o, i) => (
@@ -1940,7 +1954,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                                             o.severity === "high"     ? "bg-orange-100 text-orange-700" :
                                             o.severity === "medium"   ? "bg-amber-100 text-amber-700" :
                                                                         "bg-[var(--color-line-soft)] text-[var(--color-text-secondary)]"
-                                        }`}>{o.severity}</span>
+                                        }`}>{t.data.severities[o.severity] ?? o.severity}</span>
                                     </div>
                                     <p className="text-xs text-[var(--color-text-secondary)]">{o.expert_response_summary}</p>
                                     {o.example_quote && (
@@ -1952,7 +1966,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                         </div>
                         <button onClick={applyObjections} disabled={applyingObjections || appliedSections.has("objections")}
                             className={BTN_PRIMARY + (appliedSections.has("objections") ? " opacity-60" : "")}>
-                            {appliedSections.has("objections") ? "✓ Applied" : applyingObjections ? "Adding…" : `Add ${dnaResult.objections.length} objections to team`}
+                            {appliedSections.has("objections") ? t.tabs.dna.applied : applyingObjections ? t.tabs.dna.addingObjections : t.tabs.dna.addObjections(dnaResult.objections.length)}
                         </button>
                     </div>
                 )}
@@ -1960,9 +1974,9 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 {reviewTab === "flow" && (
                     <div className={CARD + " space-y-4"}>
                         <div>
-                            <p className="text-sm font-semibold text-[var(--color-text)]">Conversation framework</p>
+                            <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.convFramework}</p>
                             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                                Detected methodology: <span className="font-medium text-[var(--color-text-secondary)]">{dnaResult.conversation_flow.methodology_guess}</span> · Will be saved as a new playbook.
+                                {t.tabs.dna.detectedMethodology} <span className="font-medium text-[var(--color-text-secondary)]">{dnaResult.conversation_flow.methodology_guess}</span> {t.tabs.dna.savedAsPlaybook}
                             </p>
                         </div>
                         <div className="space-y-3">
@@ -1984,7 +1998,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                                     )}
                                     {s.transition_signal && (
                                         <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-1.5 pl-8">
-                                            <span className="font-medium">Move on when:</span> {s.transition_signal}
+                                            <span className="font-medium">{t.tabs.dna.moveOnWhen}</span> {s.transition_signal}
                                         </p>
                                     )}
                                 </div>
@@ -1992,7 +2006,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                         </div>
                         <button onClick={applyFlow} disabled={applyingFlow || appliedSections.has("flow")}
                             className={BTN_PRIMARY + (appliedSections.has("flow") ? " opacity-60" : "")}>
-                            {appliedSections.has("flow") ? "✓ Applied" : applyingFlow ? "Saving…" : "Add as playbook"}
+                            {appliedSections.has("flow") ? t.tabs.dna.applied : applyingFlow ? t.tabs.dna.savingFlow : t.tabs.dna.addAsPlaybook}
                         </button>
                     </div>
                 )}
@@ -2005,17 +2019,17 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         <div className="space-y-4">
             <div className={CARD + " space-y-4"}>
                 <div>
-                    <p className="text-sm font-semibold text-[var(--color-text)]">Team DNA</p>
+                    <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.title}</p>
                     <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                        Upload transcripts from your best performers. Claude Opus analyzes their tone, key phrases, objection handling, and conversation flow — then translates it into coaching your whole team can use.
+                        {t.tabs.dna.sub}
                     </p>
                 </div>
                 <div>
-                    <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1">Playbook name (optional)</label>
-                    <input type="text" placeholder="e.g. Sarah's Playbook, or Top Performers"
+                    <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1">{t.tabs.dna.playbookName}</label>
+                    <input type="text" placeholder={t.tabs.dna.playbookNamePlaceholder}
                         value={expertName} onChange={e => setExpertName(e.target.value)}
                         className={INPUT} />
-                    <p className="text-xs text-[var(--color-muted)] mt-1">How the extracted playbook will be named. Each transcript below can be from a different expert — you'll pick the expert speaker in each one.</p>
+                    <p className="text-xs text-[var(--color-muted)] mt-1">{t.tabs.dna.playbookNameHint}</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex-1 h-2 bg-[var(--color-line-soft)] rounded-full overflow-hidden">
@@ -2023,26 +2037,26 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                             style={{ width: `${Math.min((completedCount / 5) * 100, 100)}%` }} />
                     </div>
                     <span className="text-xs text-[var(--color-text-secondary)] whitespace-nowrap">
-                        {completedCount} of 5 {completedCount >= MIN ? "· ready to analyze" : `· need ${MIN - completedCount} more`}
+                        {t.tabs.dna.progress(completedCount, MIN)}
                     </span>
                 </div>
             </div>
 
-            {transcripts.map((t, i) => (
-                <TranscriptCard key={t.id} index={i} entry={t}
-                    onChange={(field, val) => updateTranscript(t.id, field, val)}
-                    onRemove={transcripts.length > 1 ? () => removeTranscript(t.id) : undefined}
+            {transcripts.map((tr, i) => (
+                <TranscriptCard key={tr.id} index={i} entry={tr}
+                    onChange={(field, val) => updateTranscript(tr.id, field, val)}
+                    onRemove={transcripts.length > 1 ? () => removeTranscript(tr.id) : undefined}
                 />
             ))}
 
             <div className="flex gap-3">
                 <button onClick={addTranscript}
                     className="flex-1 border-2 border-dashed border-[var(--color-border)] rounded-xl py-3 text-sm text-[var(--color-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors">
-                    + Add transcript
+                    {t.tabs.dna.addTranscript}
                 </button>
                 <button onClick={analyze} disabled={completedCount < MIN}
                     className={BTN_PRIMARY + " flex-shrink-0" + (completedCount < MIN ? " opacity-50 cursor-not-allowed" : "")}>
-                    Analyze {completedCount > 0 ? completedCount : ""} transcript{completedCount !== 1 ? "s" : ""}
+                    {t.tabs.dna.analyzeN(completedCount)}
                 </button>
             </div>
 
@@ -2072,6 +2086,7 @@ interface BillingInfo {
 }
 
 export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?: string | null }) {
+    const { t, intl } = useLocale()
     const [info, setInfo]         = useState<BillingInfo | null>(null)
     const [loading, setLoading]   = useState(true)
     const [seatDraft, setSeatDraft] = useState<number>(0)
@@ -2085,9 +2100,9 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
     // Back from Stripe Checkout: the webhook finalizes the org within seconds.
     useEffect(() => {
         const q = new URLSearchParams(window.location.search)
-        if (q.get("checkout") === "success") { setMsg("Payment received — your subscription is active. Welcome aboard."); setIsErr(false) }
-        if (q.get("checkout") === "canceled") { setMsg("Checkout canceled — your trial continues unchanged."); setIsErr(false) }
-    }, [])
+        if (q.get("checkout") === "success") { setMsg(t.tabs.billing.checkoutSuccess); setIsErr(false) }
+        if (q.get("checkout") === "canceled") { setMsg(t.tabs.billing.checkoutCanceled); setIsErr(false) }
+    }, [t])
 
     const call = useCallback(async (action: string, extra: Record<string, unknown> = {}) => {
         const { data: { session } } = await supabase.auth.getSession()
@@ -2121,8 +2136,8 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
         try {
             await call("set_seats", { seats: seatDraft })
             setMsg(seatDraft > info.seats_purchased
-                ? `Updated to ${seatDraft} seats — the difference is prorated onto your next invoice.`
-                : `Updated to ${seatDraft} seats — the credit is prorated onto your next invoice.`)
+                ? t.tabs.billing.seatsUpdatedUp(seatDraft)
+                : t.tabs.billing.seatsUpdatedDown(seatDraft))
             setIsErr(false)
             await load()
         } catch (e) {
@@ -2155,18 +2170,18 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
         }
     }
 
-    if (loading) return <div className="text-[var(--color-text-secondary)] text-sm">Loading billing…</div>
-    if (!info)   return <div className="text-red-600 text-sm">{msg ?? "Couldn't load billing."}</div>
+    if (loading) return <div className="text-[var(--color-text-secondary)] text-sm">{t.tabs.billing.loadingBilling}</div>
+    if (!info)   return <div className="text-red-600 text-sm">{msg ?? t.tabs.billing.couldntLoad}</div>
 
     const used   = info.seats_members + info.seats_pending
     const total  = Math.max(info.seats_purchased, used, 1)
     const memberPct  = Math.min(100, (info.seats_members / total) * 100)
     const pendingPct = Math.min(100 - memberPct, (info.seats_pending / total) * 100)
     const perSeat = info.stripe?.unit_amount != null
-        ? `${(info.stripe.unit_amount / 100).toLocaleString(undefined, { style: "currency", currency: info.stripe.currency.toUpperCase() })}/seat/${info.stripe.interval}`
+        ? `${(info.stripe.unit_amount / 100).toLocaleString(intl, { style: "currency", currency: info.stripe.currency.toUpperCase() })}/seat/${info.stripe.interval}`
         : null
     const renewal = info.stripe?.current_period_end
-        ? new Date(info.stripe.current_period_end * 1000).toLocaleDateString(undefined, { dateStyle: "long" })
+        ? new Date(info.stripe.current_period_end * 1000).toLocaleDateString(intl, { dateStyle: "long" })
         : null
 
     return (
@@ -2175,14 +2190,12 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
             <div className={CARD}>
                 <div className="flex items-start justify-between gap-4">
                     <div>
-                        <h3 className="text-sm font-semibold text-[var(--color-text)]">Seats</h3>
+                        <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.billing.seats}</h3>
                         <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                            {info.seats_members} member{info.seats_members !== 1 ? "s" : ""}
-                            {info.seats_pending > 0 && <> + {info.seats_pending} pending invite{info.seats_pending !== 1 ? "s" : ""}</>}
-                            {" of "}{info.seats_purchased} seat{info.seats_purchased !== 1 ? "s" : ""}
+                            {t.tabs.billing.seatUsage(info.seats_members, info.seats_pending, info.seats_purchased)}
                         </p>
                     </div>
-                    <StatusBadge label={`${info.plan} plan`} color="indigo" />
+                    <StatusBadge label={t.tabs.billing.planBadge(info.plan)} color="indigo" />
                 </div>
 
                 <div className="mt-4 h-2.5 rounded-full bg-[var(--color-line-soft)] overflow-hidden flex">
@@ -2191,14 +2204,14 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                 </div>
                 {used >= info.seats_purchased && (
                     <p className="text-xs text-amber-700 mt-2">
-                        All seats are in use — new invites are blocked until you add seats.
+                        {t.tabs.billing.allSeatsUsed}
                     </p>
                 )}
 
                 {info.has_stripe ? (
                     <div className="mt-5 pt-4 border-t border-[var(--color-border)] flex flex-wrap items-end gap-3">
                         <div className="space-y-1">
-                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">Seats</label>
+                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.billing.seats}</label>
                             <div className="flex items-center gap-1">
                                 <button className={BTN_GHOST} onClick={() => setSeatDraft(s => Math.max(info.seats_members, s - 1))} disabled={saving || seatDraft <= info.seats_members}>−</button>
                                 <input
@@ -2213,9 +2226,9 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                             </div>
                         </div>
                         <button className={BTN_PRIMARY} onClick={updateSeats} disabled={saving || seatDraft === info.seats_purchased}>
-                            {saving ? "Updating…" : seatDraft > info.seats_purchased ? `Add ${seatDraft - info.seats_purchased} seat${seatDraft - info.seats_purchased !== 1 ? "s" : ""}` : seatDraft < info.seats_purchased ? `Reduce to ${seatDraft}` : "Update seats"}
+                            {saving ? t.tabs.billing.updating : seatDraft > info.seats_purchased ? t.tabs.billing.addSeats(seatDraft - info.seats_purchased) : seatDraft < info.seats_purchased ? t.tabs.billing.reduceTo(seatDraft) : t.tabs.billing.updateSeats}
                         </button>
-                        {perSeat && <span className="text-xs text-[var(--color-text-secondary)] pb-2.5">{perSeat} · changes are prorated automatically</span>}
+                        {perSeat && <span className="text-xs text-[var(--color-text-secondary)] pb-2.5">{t.tabs.billing.perSeatNote(perSeat)}</span>}
                     </div>
                 ) : trialEndsAt ? (
                     <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
@@ -2224,8 +2237,8 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                             return (
                                 <p className="text-sm text-[var(--color-text-secondary)]">
                                     {days > 0
-                                        ? <>Free trial — <strong className="text-[var(--color-text)]">{days} day{days === 1 ? "" : "s"} left</strong>. Every feature is on; add billing below and nothing changes at the switch.</>
-                                        : <>Your trial has ended. <strong className="text-[var(--color-text)]">Subscribe to reactivate</strong> — your playbook, knowledge base and scorecards are all saved exactly as you left them.</>}
+                                        ? <>{t.tabs.billing.trialActive1} <strong className="text-[var(--color-text)]">{t.tabs.billing.trialDaysLeft(days)}</strong>{t.tabs.billing.trialActive2}</>
+                                        : <>{t.tabs.billing.trialEnded1} <strong className="text-[var(--color-text)]">{t.tabs.billing.trialEnded2}</strong> {t.tabs.billing.trialEnded3}</>}
                                 </p>
                             )
                         })()}
@@ -2233,28 +2246,27 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                             <div className="flex rounded-lg border border-[var(--color-border)] overflow-hidden text-xs font-medium">
                                 <button onClick={() => setInterval_("month")}
                                     className={`px-3.5 py-2 transition-colors ${interval_ === "month" ? "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-semibold" : "text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]"}`}>
-                                    Monthly · $40/seat
+                                    {t.tabs.billing.monthly}
                                 </button>
                                 <button onClick={() => setInterval_("year")}
                                     className={`px-3.5 py-2 transition-colors border-l border-[var(--color-border)] ${interval_ === "year" ? "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-semibold" : "text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]"}`}>
-                                    Annual · $32/seat
+                                    {t.tabs.billing.annual}
                                 </button>
                             </div>
                             <button className={BTN_PRIMARY} onClick={startCheckout} disabled={checkoutBusy}>
-                                {checkoutBusy ? "Opening checkout…" : "Start subscription"}
+                                {checkoutBusy ? t.tabs.billing.openingCheckout : t.tabs.billing.startSubscription}
                             </button>
                             <span className="text-xs text-[var(--color-muted)]">
-                                {info.seats_purchased} seats · secure Stripe checkout
+                                {t.tabs.billing.secureCheckout(info.seats_purchased)}
                             </span>
                         </div>
                     </div>
                 ) : (
                     <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
                         <p className="text-sm text-[var(--color-text-secondary)]">
-                            This workspace is billed directly by TalkPilot (invoice / ACH).
-                            To add or remove seats, email{" "}
+                            {t.tabs.billing.invoiceBilled1}{" "}
                             <a className="text-[var(--color-accent)] hover:underline" href="mailto:alexis@talkpilot.co?subject=Seat change request">alexis@talkpilot.co</a>
-                            {" "}— changes usually land the same day.
+                            {" "}{t.tabs.billing.invoiceBilled2}
                         </p>
                     </div>
                 )}
@@ -2265,19 +2277,19 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                 <div className={CARD}>
                     <div className="flex items-start justify-between gap-4">
                         <div>
-                            <h3 className="text-sm font-semibold text-[var(--color-text)]">Subscription</h3>
+                            <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.billing.subscription}</h3>
                             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                                Status: <span className="capitalize">{info.stripe.status}</span>
-                                {renewal && <> · renews {renewal}</>}
-                                {info.stripe.cancel_at_period_end && <> · <span className="text-red-600">cancels at period end</span></>}
+                                {t.tabs.billing.status} <span className="capitalize">{t.data.statuses[info.stripe.status] ?? info.stripe.status}</span>
+                                {renewal && <> {t.tabs.billing.renews(renewal)}</>}
+                                {info.stripe.cancel_at_period_end && <> · <span className="text-red-600">{t.tabs.billing.cancelsAtEnd}</span></>}
                             </p>
                         </div>
                         <button className={BTN_GHOST} onClick={openPortal} disabled={portalBusy}>
-                            {portalBusy ? "Opening…" : "Manage billing ↗"}
+                            {portalBusy ? t.tabs.billing.opening : t.tabs.billing.manageBilling}
                         </button>
                     </div>
                     <p className="text-xs text-[var(--color-muted)] mt-3">
-                        Payment method, invoices, and cancellation are handled in the secure Stripe portal.
+                        {t.tabs.billing.portalNote}
                     </p>
                 </div>
             )}

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import type { OrgInfo } from "@/components/orgTabs"
+import { useLocale } from "@/i18n/LocaleProvider"
 
 /// Shared org loader for the config surfaces (/playbook, /settings).
 /// Mirrors the old Admin page's bootstrap: get_org_context first, then a
@@ -38,14 +39,14 @@ export function useOrg() {
 
 /// Suspension / cancellation banners shared by the config surfaces.
 export function OrgBanners({ org }: { org: OrgInfo }) {
+    const { t, intl } = useLocale()
     return (
         <>
             {org.status === "suspended" && (
                 <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                    <p className="text-sm font-medium text-red-700">This workspace is suspended — the subscription has ended.</p>
+                    <p className="text-sm font-medium text-red-700">{t.orgBanners.suspendedTitle}</p>
                     <p className="text-xs text-red-600 mt-1">
-                        Members have reverted to personal TalkPilot. All your data (playbooks, knowledge,
-                        scorecards) is retained. To reactivate, email{" "}
+                        {t.orgBanners.suspendedBody1}{" "}
                         <a className="underline" href="mailto:alexis@talkpilot.co?subject=Reactivate workspace">alexis@talkpilot.co</a>.
                     </p>
                 </div>
@@ -53,11 +54,10 @@ export function OrgBanners({ org }: { org: OrgInfo }) {
             {org.status === "active" && org.cancel_at && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                     <p className="text-sm font-medium text-amber-800">
-                        Subscription ends {new Date(org.cancel_at).toLocaleDateString(undefined, { dateStyle: "long" })}.
+                        {t.orgBanners.endsTitle(new Date(org.cancel_at).toLocaleDateString(intl, { dateStyle: "long" }))}
                     </p>
                     <p className="text-xs text-amber-700 mt-1">
-                        Team features pause after that date and members revert to personal TalkPilot.
-                        You can resume any time before then in Settings → Billing → Manage billing.
+                        {t.orgBanners.endsBody}
                     </p>
                 </div>
             )}

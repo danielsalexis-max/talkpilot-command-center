@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useEffect, useState } from "react"
 import { applySkin, getSkinPref, setSkinPref, watchSystemSkin } from "@/lib/skin"
+import { useT } from "@/i18n/LocaleProvider"
+import { LocaleSwitcher } from "@/components/LocaleSwitcher"
 
 /// Client-side chrome — the Boardroom sidebar. Split out of the root layout so
 /// layout.tsx can stay a server component and export metadata.
@@ -41,14 +43,9 @@ const ICONS = {
     ),
 }
 
-const VISIBILITY_LABELS: Record<string, string> = {
-    scores_only: "Scores only",
-    flagged_moments: "Flagged moments",
-    full_transcripts: "Full transcripts",
-}
-
 export default function AppShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname()
+    const t = useT()
     const [email, setEmail]           = useState<string | null>(null)
     const [orgName, setOrgName]       = useState<string | null>(null)
     const [visibility, setVisibility] = useState<string | null>(null)
@@ -99,19 +96,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
 
     const nav: NavItem[] = [
-        { href: "/",          label: "Home",     icon: ICONS.home,     match: p => p === "/" },
-        { href: "/calls",     label: "Calls",    icon: ICONS.calls,    match: p => p.startsWith("/calls") || p.startsWith("/scorecard") },
-        { href: "/team",      label: "Team",     icon: ICONS.team,     match: p => p.startsWith("/team") },
+        { href: "/",          label: t.nav.home,     icon: ICONS.home,     match: p => p === "/" },
+        { href: "/calls",     label: t.nav.calls,    icon: ICONS.calls,    match: p => p.startsWith("/calls") || p.startsWith("/scorecard") },
+        { href: "/team",      label: t.nav.team,     icon: ICONS.team,     match: p => p.startsWith("/team") },
         // "Coaching" next to "Playbook" read as two names for one thing; the page
         // is a review queue, so it's called Review (D-175). Insights folded into
         // Home the same change — five ways to look at the same scorecards was
         // the "convoluted" feeling in one sentence.
-        { href: "/coaching",  label: "Review",   icon: ICONS.coaching, match: p => p.startsWith("/coaching") },
-        { href: "/playbook",  label: "Playbook", icon: ICONS.playbook, match: p => p.startsWith("/playbook") },
+        { href: "/coaching",  label: t.nav.review,   icon: ICONS.coaching, match: p => p.startsWith("/coaching") },
+        { href: "/playbook",  label: t.nav.playbook, icon: ICONS.playbook, match: p => p.startsWith("/playbook") },
         // Managers can't edit org settings or billing (RLS would silently
         // refuse) — don't show them doors they can't open.
         ...(role === "manager" ? [] : [
-            { href: "/settings" as Route, label: "Settings", icon: ICONS.settings, match: (p: string) => p.startsWith("/settings") || p.startsWith("/admin") },
+            { href: "/settings" as Route, label: t.nav.settings, icon: ICONS.settings, match: (p: string) => p.startsWith("/settings") || p.startsWith("/admin") },
         ]),
     ]
 
@@ -145,7 +142,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     ? <><circle cx="12" cy="12" r="4" /><path strokeLinecap="round" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>
                     : <path strokeLinecap="round" strokeLinejoin="round" d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" />}
             </svg>
-            {dark ? "Light mode" : "Dark mode"}
+            {dark ? t.nav.lightMode : t.nav.darkMode}
         </button>
     )
 
@@ -154,7 +151,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             onClick={() => supabase.auth.signOut().then(() => { window.location.href = "/login" })}
             className={`text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors ${className}`}
         >
-            Sign out
+            {t.common.signOut}
         </button>
     )
 
@@ -171,7 +168,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
     )
 
-    if (isPublic) return <main>{children}</main>
+    if (isPublic) return (
+        <main>
+            {children}
+            <LocaleSwitcher variant="floating" />
+        </main>
+    )
 
     // Members get coached in the app, not administered here. Managers, admins
     // and owners pass through; everyone else gets pointed at the right door.
@@ -182,31 +184,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <img src="/brand-mark.png" alt="" className="w-12 h-12 object-contain mx-auto" />
                 <div>
                     <h1 className="text-xl font-semibold text-[var(--color-text)]">
-                        The Command Center is for managers
+                        {t.memberGate.title}
                     </h1>
                     <p className="text-sm text-[var(--color-text-secondary)] mt-2">
-                        You&apos;re a member of <span className="font-medium text-[var(--color-text)]">{orgName ?? "your workspace"}</span> —
-                        your coaching happens in the TalkPilot app, and your scorecards live there too.
+                        {t.memberGate.body1} <span className="font-medium text-[var(--color-text)]">{orgName ?? t.memberGate.yourWorkspace}</span>{" "}
+                        {t.memberGate.body2}
                     </p>
                 </div>
                 <div className="space-y-2">
                     <a href="https://apps.apple.com/app/id6763953639" target="_blank" rel="noreferrer"
                         className="block w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-medium rounded-lg transition-colors">
-                        Get TalkPilot for iPhone
+                        {t.memberGate.getIphone}
                     </a>
                     <a href="https://github.com/danielsalexis-max/talkpilot-releases/releases/latest" target="_blank" rel="noreferrer"
                         className="block w-full py-2.5 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors">
-                        Download for Mac
+                        {t.memberGate.getMac}
                     </a>
                 </div>
                 <p className="text-xs text-[var(--color-muted)]">
-                    Think you should have manager access? Ask your workspace admin to change your role.
+                    {t.memberGate.askAdmin}
                 </p>
                 <button onClick={() => supabase.auth.signOut().then(() => { window.location.href = "/login" })}
                     className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] underline">
-                    Sign out
+                    {t.common.signOut}
                 </button>
             </div>
+            <LocaleSwitcher variant="floating" />
         </main>
     )
 
@@ -220,6 +223,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </nav>
                 <div className="mt-auto flex flex-col gap-2.5">
                     <SkinToggle />
+                    <div className="px-3"><LocaleSwitcher /></div>
                     {trialEndsAt && (() => {
                         const days = Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400e3))
                         return (
@@ -227,8 +231,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                                 className={`flex items-center justify-between rounded-lg px-2.5 py-2 text-[11px] font-medium transition-colors ${
                                     days <= 3 ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
                                               : "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] hover:bg-[var(--color-hover)]"}`}>
-                                <span>Trial · {days} day{days === 1 ? "" : "s"} left</span>
-                                <span className="font-semibold">Add billing →</span>
+                                <span>{t.nav.trialChip(days)}</span>
+                                <span className="font-semibold">{t.nav.addBilling}</span>
                             </Link>
                         )
                     })()}
@@ -238,8 +242,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z" />
                             </svg>
                             <p className="text-[10.5px] leading-snug text-[var(--color-accent-deep)]">
-                                <strong>{VISIBILITY_LABELS[visibility] ?? visibility}</strong> visibility<br />
-                                Reps always see their own scorecards
+                                <strong>{t.nav.visibilityCardTitle(t.data.visibility[visibility] ?? visibility)}</strong><br />
+                                {t.nav.visibilityCardSub}
                             </p>
                         </div>
                     )}
@@ -257,7 +261,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         <Brand />
                         <button
                             onClick={() => setMenuOpen(o => !o)}
-                            aria-label="Toggle menu"
+                            aria-label={t.nav.toggleMenu}
                             aria-expanded={menuOpen}
                             className="inline-flex items-center justify-center w-9 h-9 rounded-md text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] transition-colors"
                         >
@@ -272,6 +276,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         <nav className="border-t border-[var(--color-border)] px-3 py-3 space-y-0.5">
                             {nav.map(n => <NavLink key={n.href} n={n} />)}
                             <SkinToggle />
+                            <div className="px-3 py-1"><LocaleSwitcher /></div>
                             <div className="pt-2 mt-2 border-t border-[var(--color-border)] flex items-center justify-between px-3">
                                 {email && <span className="text-[11px] text-[var(--color-muted)] truncate">{email}</span>}
                                 <SignOut className="shrink-0" />

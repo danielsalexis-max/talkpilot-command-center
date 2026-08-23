@@ -4,6 +4,8 @@ import { useEffect, useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { useT } from "@/i18n/LocaleProvider"
+import type { Dict } from "@/i18n"
 
 const MAC_RELEASES_API  = "https://api.github.com/repos/danielsalexis-max/talkpilot-releases/releases/latest"
 const MAC_RELEASES_PAGE = "https://github.com/danielsalexis-max/talkpilot-releases/releases/latest"
@@ -24,10 +26,12 @@ type InvitePreview = {
 
 // Resolved before sign-up so nobody is asked to create an account for an
 // organization the page won't name, or for a link that is already dead.
-const PREVIEW_ERROR: Record<string, string> = {
-    invalid: "This invite link is invalid.",
-    expired: "This invite link has expired.",
-    used:    "This invite link has already been used.",
+function previewError(t: Dict, reason: InvitePreview["reason"]): string {
+    switch (reason) {
+        case "expired": return t.acceptInvite.expiredLink
+        case "used":    return t.acceptInvite.usedLink
+        default:        return t.acceptInvite.invalidLink
+    }
 }
 
 function detectPlatform(): Platform {
@@ -42,14 +46,20 @@ function detectPlatform(): Platform {
 
 export default function AcceptInvitePage() {
     return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[var(--color-text-secondary)] text-sm">Checking invite…</div>}>
+        <Suspense fallback={<AcceptInviteFallback />}>
             <AcceptInviteContent />
         </Suspense>
     )
 }
 
+function AcceptInviteFallback() {
+    const t = useT()
+    return <div className="min-h-screen flex items-center justify-center text-[var(--color-text-secondary)] text-sm">{t.acceptInvite.checking}</div>
+}
+
 function AcceptInviteContent() {
     const params = useSearchParams()
+    const t = useT()
     const token  = params.get("token") ?? ""
     const [status, setStatus]   = useState<"loading" | "auth_required" | "confirm_email" | "accepting" | "done" | "error">("loading")
     const [message, setMessage] = useState("")
@@ -63,7 +73,7 @@ function AcceptInviteContent() {
         let cancelled = false
 
         async function boot() {
-            if (!token) { setStatus("error"); setMessage("Invalid invite link."); return }
+            if (!token) { setStatus("error"); setMessage(t.acceptInvite.invalidLink); return }
 
             // Who invited you, and to what — resolved before the sign-up form so the
             // page can name the organization and stop a dead link early.
@@ -79,7 +89,7 @@ function AcceptInviteContent() {
                 setPreview(p)
                 if (!p.valid) {
                     setStatus("error")
-                    setMessage(PREVIEW_ERROR[p.reason ?? "invalid"] ?? PREVIEW_ERROR.invalid)
+                    setMessage(previewError(t, p.reason))
                     return
                 }
             } catch {
@@ -99,7 +109,7 @@ function AcceptInviteContent() {
     }, [token])
 
     async function acceptInvite() {
-        if (!token) { setStatus("error"); setMessage("Invalid invite link."); return }
+        if (!token) { setStatus("error"); setMessage(t.acceptInvite.invalidLink); return }
         setStatus("accepting")
         try {
             const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -117,7 +127,7 @@ function AcceptInviteContent() {
                 setStatus("done")
             } else {
                 setStatus("error")
-                setMessage(body.error?.message ?? body.error ?? "Failed to accept invite.")
+                setMessage(body.error?.message ?? body.error ?? t.acceptInvite.acceptFailed)
             }
         } catch (e) {
             setStatus("error")
@@ -168,26 +178,26 @@ function AcceptInviteContent() {
                     </h1>
                 </div>
 
-                {status === "loading"   && <p className="text-[var(--color-text-secondary)] text-sm text-center">Checking invite…</p>}
-                {status === "accepting" && <p className="text-[var(--color-text-secondary)] text-sm text-center">Accepting invite…</p>}
+                {status === "loading"   && <p className="text-[var(--color-text-secondary)] text-sm text-center">{t.acceptInvite.checking}</p>}
+                {status === "accepting" && <p className="text-[var(--color-text-secondary)] text-sm text-center">{t.acceptInvite.accepting}</p>}
 
                 {status === "error" && (
                     <div className="text-center space-y-3">
                         <p className="text-red-600 text-sm">{message}</p>
-                        <p className="text-xs text-[var(--color-muted)]">Ask your admin to re-send the invite if the link expired.</p>
+                        <p className="text-xs text-[var(--color-muted)]">{t.acceptInvite.askResend}</p>
                     </div>
                 )}
 
                 {preview?.valid && (status === "auth_required" || status === "confirm_email") && (
                     <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 text-center space-y-1 shadow-sm">
                         <p className="text-sm text-[var(--color-text)]">
-                            You&apos;ve been invited to join{" "}
+                            {t.acceptInvite.invitedTo1}{" "}
                             <span className="font-semibold">{preview.org_name}</span>
-                            {preview.role && <> as a <span className="font-semibold">{preview.role}</span></>}.
+                            {preview.role && <> {t.acceptInvite.invitedAs} <span className="font-semibold">{t.data.roles[preview.role] ?? preview.role}</span></>}.
                         </p>
                         {preview.email_hint && (
                             <p className="text-xs text-[var(--color-muted)]">
-                                Invite sent to {preview.email_hint} — use that address below.
+                                {t.acceptInvite.sentTo(preview.email_hint)}
                             </p>
                         )}
                     </div>
@@ -195,10 +205,9 @@ function AcceptInviteContent() {
 
                 {status === "confirm_email" && (
                     <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 text-center space-y-2 shadow-sm">
-                        <p className="text-sm font-semibold text-[var(--color-text)]">Confirm your email</p>
+                        <p className="text-sm font-semibold text-[var(--color-text)]">{t.acceptInvite.confirmEmailTitle}</p>
                         <p className="text-sm text-[var(--color-text-secondary)]">
-                            We sent a confirmation link to <span className="font-medium text-[var(--color-text-secondary)]">{email}</span>.
-                            Confirm it, then open this invite link again to join your team.
+                            {t.acceptInvite.confirmEmailBody1} <span className="font-medium text-[var(--color-text-secondary)]">{email}</span>{t.acceptInvite.confirmEmailBody2}
                         </p>
                     </div>
                 )}
@@ -211,38 +220,36 @@ function AcceptInviteContent() {
                                     className={`flex-1 py-1.5 text-sm rounded-md transition-colors ${
                                         mode === m ? "bg-[var(--color-surface)] text-[var(--color-text)] font-medium shadow-sm" : "text-[var(--color-text-secondary)]"
                                     }`}>
-                                    {m === "signup" ? "Create account" : "Sign in"}
+                                    {m === "signup" ? t.common.createAccount : t.common.signIn}
                                 </button>
                             ))}
                         </div>
                         <p className="text-xs text-[var(--color-text-secondary)] text-center">
-                            {mode === "signup"
-                                ? "New to TalkPilot? Create your account to accept the invite."
-                                : "Already have a TalkPilot account? Sign in to accept."}
+                            {mode === "signup" ? t.acceptInvite.signupHelp : t.acceptInvite.signinHelp}
                         </p>
                         <form onSubmit={submitAuth} className="space-y-3">
-                            <input type="email" placeholder="Work email" value={email} required
+                            <input type="email" placeholder={t.common.workEmail} value={email} required
                                 onChange={e => setEmail(e.target.value)} className={INPUT} />
-                            <input type="password" placeholder={mode === "signup" ? "Choose a password" : "Password"}
+                            <input type="password" placeholder={mode === "signup" ? t.acceptInvite.choosePassword : t.common.password}
                                 value={password} required minLength={6}
                                 onChange={e => setPassword(e.target.value)} className={INPUT} />
                             {message && <p className="text-xs text-red-600">{message}</p>}
                             <button type="submit" disabled={busy} className={BTN}>
-                                {busy ? "One moment…" : mode === "signup" ? "Create account & accept invite" : "Sign in & accept invite"}
+                                {busy ? t.common.oneMoment : mode === "signup" ? t.acceptInvite.createAndAccept : t.acceptInvite.signInAndAccept}
                             </button>
                         </form>
                         <div className="flex items-center gap-3">
                             <span className="h-px flex-1 bg-[var(--color-border)]" />
-                            <span className="text-[11px] text-[var(--color-muted)]">or</span>
+                            <span className="text-[11px] text-[var(--color-muted)]">{t.common.or}</span>
                             <span className="h-px flex-1 bg-[var(--color-border)]" />
                         </div>
                         <button type="button" onClick={googleAuth}
                             className="w-full py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors flex items-center justify-center gap-2.5">
                             <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.8 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.4 28.7a14.5 14.5 0 0 1 0-9.4l-7.8-6.1a24 24 0 0 0 0 21.6l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2.1 1.4-4.7 2.3-7.7 2.3-6.3 0-11.7-3.7-13.6-9l-7.8 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
-                            Continue with Google
+                            {t.common.continueWithGoogle}
                         </button>
                         <p className="text-[10.5px] text-[var(--color-muted)] text-center">
-                            Use the account for the invited address — the invite is bound to it.
+                            {t.acceptInvite.boundToAddress}
                         </p>
                     </div>
                 )}
@@ -256,6 +263,7 @@ function AcceptInviteContent() {
 // ─── Post-accept: download the app ───────────────────────────────────────────
 
 function GetTheAppScreen() {
+    const t = useT()
     const [platform] = useState<Platform>(detectPlatform)
     const [macUrl, setMacUrl] = useState(MAC_RELEASES_PAGE)
     const [androidUrl, setAndroidUrl] = useState<string | null>(null)
@@ -277,12 +285,12 @@ function GetTheAppScreen() {
     }, [])
 
     const rows: { key: Platform; label: string; sub: string; href?: string; soon?: boolean }[] = [
-        { key: "mac",     label: "Mac",     sub: "Download the desktop app (.dmg)", href: macUrl },
-        { key: "ios",     label: "iPhone",  sub: "Get TalkPilot AI on the App Store", href: IOS_APP_STORE },
+        { key: "mac",     label: "Mac",     sub: t.acceptInvite.macSub, href: macUrl },
+        { key: "ios",     label: "iPhone",  sub: t.acceptInvite.iosSub, href: IOS_APP_STORE },
         androidUrl
-            ? { key: "android", label: "Android", sub: "Download the Android app (.apk)", href: androidUrl }
-            : { key: "android", label: "Android", sub: "Coming soon", soon: true },
-        { key: "windows", label: "Windows", sub: "Coming soon", soon: true },
+            ? { key: "android", label: "Android", sub: t.acceptInvite.androidSub, href: androidUrl }
+            : { key: "android", label: "Android", sub: t.acceptInvite.comingSoon, soon: true },
+        { key: "windows", label: "Windows", sub: t.acceptInvite.comingSoon, soon: true },
     ]
     // Detected platform first
     rows.sort((a, b) => (a.key === platform ? -1 : 0) - (b.key === platform ? -1 : 0))
@@ -292,17 +300,17 @@ function GetTheAppScreen() {
     return (
         <div className="space-y-4">
             <div className="text-center space-y-1">
-                <p className="text-emerald-600 text-sm font-medium">✓ You're on the team!</p>
-                <h2 className="text-lg font-semibold text-[var(--color-text)]">Now get the TalkPilot app</h2>
+                <p className="text-emerald-600 text-sm font-medium">{t.acceptInvite.onTheTeam}</p>
+                <h2 className="text-lg font-semibold text-[var(--color-text)]">{t.acceptInvite.getTheApp}</h2>
                 <p className="text-sm text-[var(--color-text-secondary)]">
-                    TalkPilot runs on your Mac, iPhone or Android during your conversations — that's where the magic happens.
+                    {t.acceptInvite.getTheAppSub}
                 </p>
             </div>
 
             {primary && (
                 <a href={primary.href} target="_blank" rel="noopener noreferrer"
                     className="block w-full py-3 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-xl transition-colors text-center">
-                    {primary.key === "mac" ? "Download TalkPilot for Mac" : "Get TalkPilot on the App Store"}
+                    {primary.key === "mac" ? t.acceptInvite.downloadMac : t.acceptInvite.getAppStore}
                 </a>
             )}
 
@@ -311,16 +319,16 @@ function GetTheAppScreen() {
                     <div key={r.key} className="flex items-center justify-between px-4 py-3">
                         <div>
                             <p className="text-sm font-medium text-[var(--color-text)]">{r.label}
-                                {r.key === platform && <span className="ml-2 text-xs text-[var(--color-accent)]">(this device)</span>}
+                                {r.key === platform && <span className="ml-2 text-xs text-[var(--color-accent)]">{t.acceptInvite.thisDevice}</span>}
                             </p>
                             <p className="text-xs text-[var(--color-text-secondary)]">{r.sub}</p>
                         </div>
                         {r.soon ? (
-                            <span className="text-xs text-[var(--color-muted)] border border-[var(--color-border)] rounded-full px-2.5 py-1">Soon</span>
+                            <span className="text-xs text-[var(--color-muted)] border border-[var(--color-border)] rounded-full px-2.5 py-1">{t.acceptInvite.soon}</span>
                         ) : (
                             <a href={r.href} target="_blank" rel="noopener noreferrer"
                                 className="text-xs font-medium text-[var(--color-accent)] border border-[var(--color-accent)] rounded-lg px-3 py-1.5 hover:bg-teal-50 transition-colors">
-                                {r.key === "mac" ? "Download" : "App Store"}
+                                {r.key === "mac" ? t.acceptInvite.download : t.acceptInvite.appStore}
                             </a>
                         )}
                     </div>
@@ -328,12 +336,12 @@ function GetTheAppScreen() {
             </div>
 
             <p className="text-xs text-[var(--color-muted)] text-center">
-                Sign in to the app with the same email and password you just used.
+                {t.acceptInvite.sameCredentials}
             </p>
 
             <div className="text-center">
                 <Link href="/" className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] underline underline-offset-2">
-                    Manager or admin? Open the Command Center instead
+                    {t.acceptInvite.managerLink}
                 </Link>
             </div>
         </div>

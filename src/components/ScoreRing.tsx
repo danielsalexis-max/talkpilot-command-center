@@ -1,3 +1,7 @@
+"use client"
+
+import { useT } from "@/i18n/LocaleProvider"
+
 export function ScoreRing({ score, size = "md" }: { score: number | null; size?: "sm" | "md" | "lg" }) {
     const cls = score == null
         ? "bg-[var(--color-line-soft)] text-[var(--color-muted)]"
@@ -25,30 +29,30 @@ export function ScoreBadge({ label, score }: { label: string; score: number | nu
 }
 
 export function GradePill({ grade }: { grade: "excellent" | "adequate" | "off_script" | "missed" }) {
+    const t = useT()
     const styles = {
         excellent:  "bg-emerald-50 text-emerald-700 border-emerald-200",
         adequate:   "bg-teal-50 text-teal-700 border-teal-200",
         off_script: "bg-amber-50 text-amber-700 border-amber-200",
         missed:     "bg-red-50 text-red-700 border-red-200",
     }
-    const labels = { excellent: "Excellent", adequate: "Adequate", off_script: "Off-script", missed: "Missed" }
     return (
         <span className={`text-xs px-2 py-0.5 rounded border ${styles[grade]}`}>
-            {labels[grade]}
+            {t.pills.grade[grade]}
         </span>
     )
 }
 
 export function VerdictPill({ verdict }: { verdict: "verified" | "unverifiable" | "contradicts" }) {
+    const t = useT()
     const styles = {
         verified:     "bg-emerald-50 text-emerald-700 border-emerald-200",
         unverifiable: "bg-[var(--color-bg)] text-[var(--color-text-secondary)] border-[var(--color-border)]",
         contradicts:  "bg-red-50 text-red-700 border-red-200",
     }
-    const labels = { verified: "Verified", unverifiable: "Unverifiable", contradicts: "Contradicts" }
     return (
         <span className={`text-xs px-2 py-0.5 rounded border ${styles[verdict]}`}>
-            {labels[verdict]}
+            {t.pills.verdict[verdict]}
         </span>
     )
 }

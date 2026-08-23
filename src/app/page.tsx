@@ -8,6 +8,7 @@ import { supabase, type Scorecard } from "@/lib/supabase"
 import { ScoreRing } from "@/components/ScoreRing"
 import { InsightsSections } from "@/components/InsightsSections"
 import { PageSkeleton, SetupChecklistCard, WaitingRoomCard, setupRequiredMet, type SetupState } from "@/components/homeStates"
+import { useLocale } from "@/i18n/LocaleProvider"
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts"
@@ -29,10 +30,6 @@ const avgOf = (cards: Scorecard[], field: keyof Scorecard) => {
     return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null
 }
 
-function memberLabel(m: MemberInfo | undefined) {
-    return m?.full_name || m?.email || "Rep"
-}
-
 function Delta({ value }: { value: number | null }) {
     if (value == null || value === 0) return <span className="font-mono text-[11px] text-[var(--color-muted)]">—</span>
     return value > 0
@@ -42,6 +39,7 @@ function Delta({ value }: { value: number | null }) {
 
 export default function HomePage() {
     const router = useRouter()
+    const { t, intl } = useLocale()
     const [org, setOrg]           = useState<OrgInfo | null>(null)
     const [cards, setCards]       = useState<Scorecard[]>([])
     const [members, setMembers]   = useState<MemberInfo[]>([])
@@ -49,6 +47,8 @@ export default function HomePage() {
     const [pendingInvites, setPendingInvites] = useState(0)
     const [loading, setLoading]   = useState(true)
     const [error, setError]       = useState<string | null>(null)
+
+    const memberLabel = (m: MemberInfo | undefined) => m?.full_name || m?.email || t.common.rep
 
     useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -58,7 +58,7 @@ export default function HomePage() {
             if (!user) { router.replace("/login"); return }
 
             const { data: orgData } = await supabase.rpc("get_org_context")
-            if (!orgData?.org_id) { setError("No org membership found."); setLoading(false); return }
+            if (!orgData?.org_id) { setError("no_org"); setLoading(false); return }
             const orgId = orgData.org_id
 
             const [{ data: orgInfo }, { data: scorecards }, { data: mems },
@@ -99,16 +99,16 @@ export default function HomePage() {
     }
 
     if (loading) return <PageSkeleton />
-    if (error === "No org membership found.") return (
+    if (error === "no_org") return (
         <div className="max-w-md mx-auto mt-16 bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-8 text-center shadow-sm">
-            <h1 className="font-display text-xl font-bold text-[var(--color-text)]">You&apos;re not in a workspace yet</h1>
+            <h1 className="font-display text-xl font-bold text-[var(--color-text)]">{t.home.noWorkspaceTitle}</h1>
             <p className="text-sm text-[var(--color-text-secondary)] mt-2">
-                Create one for your team — 14 days free, no card — or ask your manager for an invite link.
+                {t.home.noWorkspaceBody}
             </p>
             <a href="/start" className="inline-block mt-5 px-5 py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors">
-                Create your workspace →
+                {t.home.createWorkspace}
             </a>
-            <p className="text-xs text-[var(--color-muted)] mt-4">Got an invite email? Open its link to join your team&apos;s workspace.</p>
+            <p className="text-xs text-[var(--color-muted)] mt-4">{t.home.gotInvite}</p>
         </div>
     )
     if (error)   return <div className="text-red-600 text-sm">{error}</div>
@@ -129,9 +129,9 @@ export default function HomePage() {
         const b = breachCard.guardrail_breaches[0]
         attention.push({
             kind: "breach",
-            title: `Guardrail breach — ${b.rule}`,
-            sub: `${memberLabel(byUser.get(breachCard.user_id))} · ${breachCard.session_title || "scored call"}`,
-            cta: "Review call →", href: `/scorecard/${breachCard.id}` as Route,
+            title: t.home.attnBreachTitle(b.rule),
+            sub: `${memberLabel(byUser.get(breachCard.user_id))} · ${breachCard.session_title || t.common.scoredCall}`,
+            cta: t.home.attnReviewCall, href: `/scorecard/${breachCard.id}` as Route,
         })
     }
     // Biggest adherence decline, recent half vs prior half, min 2 calls each side.
@@ -148,9 +148,9 @@ export default function HomePage() {
     if (decline) {
         attention.push({
             kind: "decline",
-            title: `${memberLabel(byUser.get(decline.user))}’s adherence fell ${decline.drop} pts`,
-            sub: "Compared with the two weeks before",
-            cta: "Open rep profile →", href: `/team/${decline.user}` as Route,
+            title: t.home.attnDeclineTitle(memberLabel(byUser.get(decline.user)), decline.drop),
+            sub: t.home.attnDeclineSub,
+            cta: t.home.attnOpenProfile, href: `/team/${decline.user}` as Route,
         })
     }
     const reviewable = cards.filter(c =>
@@ -158,9 +158,9 @@ export default function HomePage() {
     if (reviewable.length > 0) {
         attention.push({
             kind: "review",
-            title: `${reviewable.length} call${reviewable.length === 1 ? "" : "s"} worth a coaching review`,
-            sub: "Breaches and low-adherence calls from the last 30 days",
-            cta: "Open review queue →", href: "/coaching",
+            title: t.home.attnReviewTitle(reviewable.length),
+            sub: t.home.attnReviewSub,
+            cta: t.home.attnOpenQueue, href: "/coaching",
         })
     }
 
@@ -170,11 +170,11 @@ export default function HomePage() {
         const start = Date.now() - (w + 1) * 7 * 86400e3
         const end   = Date.now() - w * 7 * 86400e3
         const week  = cards.filter(c => {
-            const t = c.started_at ? new Date(c.started_at).getTime() : null
-            return t != null && t >= start && t < end
+            const time = c.started_at ? new Date(c.started_at).getTime() : null
+            return time != null && time >= start && time < end
         })
         trend.push({
-            week: new Date(start).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            week: new Date(start).toLocaleDateString(intl, { month: "short", day: "numeric" }),
             overall: avgOf(week, "overall_score"),
             adherence: avgOf(week, "adherence_score"),
         })
@@ -194,10 +194,10 @@ export default function HomePage() {
     const sessionsPerRepWeek = activeMembers ? Math.round((cards.length / activeMembers / (30 / 7)) * 10) / 10 : 0
 
     const kpis: { label: string; field: keyof Scorecard; hint: string }[] = [
-        { label: "Overall",    field: "overall_score",   hint: "Average overall score across scored calls, 0–100." },
-        { label: "Adherence",  field: "adherence_score", hint: "How closely calls followed your playbook's stages." },
-        { label: "Objections", field: "objection_score", hint: "How well pushback was handled against your approved responses." },
-        { label: "Accuracy",   field: "accuracy_score",  hint: "Factual claims on calls, verified against your knowledge base." },
+        { label: t.common.overall,    field: "overall_score",   hint: t.home.kpiHints.overall },
+        { label: t.common.adherence,  field: "adherence_score", hint: t.home.kpiHints.adherence },
+        { label: t.common.objections, field: "objection_score", hint: t.home.kpiHints.objections },
+        { label: t.common.accuracy,   field: "accuracy_score",  hint: t.home.kpiHints.accuracy },
     ]
 
     const attnStyle: Record<Attention["kind"], string> = {
@@ -206,9 +206,9 @@ export default function HomePage() {
         review:  "border-l-[var(--color-accent-light)]",
     }
     const attnPill: Record<Attention["kind"], { label: string; cls: string }> = {
-        breach:  { label: "CRITICAL",      cls: "bg-red-50 text-red-700" },
-        decline: { label: "TRENDING DOWN", cls: "bg-amber-50 text-amber-700" },
-        review:  { label: "COACHING",      cls: "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)]" },
+        breach:  { label: t.home.pillCritical,     cls: "bg-red-50 text-red-700" },
+        decline: { label: t.home.pillTrendingDown, cls: "bg-amber-50 text-amber-700" },
+        review:  { label: t.home.pillCoaching,     cls: "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)]" },
     }
 
     return (
@@ -217,12 +217,12 @@ export default function HomePage() {
                 <div>
                     <h1 className="text-2xl font-bold text-[var(--color-text)]">{org?.name}</h1>
                     <p className="text-sm text-[var(--color-text-secondary)] mt-1 capitalize">
-                        {org?.plan} plan · {org?.seats_purchased} seats · {org?.visibility?.replace(/_/g, " ")} visibility
+                        {t.home.headerMeta(org?.plan ?? "", org?.seats_purchased ?? 0, (t.data.visibility[org?.visibility ?? ""] ?? org?.visibility ?? "").toLowerCase())}
                     </p>
                 </div>
                 <Link href={"/team?tab=members" as Route}
                     className="px-4 py-2 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors">
-                    Invite reps
+                    {t.home.inviteReps}
                 </Link>
             </div>
 
@@ -270,13 +270,13 @@ export default function HomePage() {
                     </div>
 
                     {/* Trend */}
-                    {trend.some(t => t.overall != null) && (
+                    {trend.some(p => p.overall != null) && (
                         <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
                             <div className="flex items-center justify-between">
-                                <h2 className="text-sm font-semibold text-[var(--color-text)]">Score trend — last 4 weeks</h2>
+                                <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.trendTitle}</h2>
                                 <div className="flex items-center gap-3 text-[11px] text-[var(--color-text-secondary)]">
-                                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0C9482]" />Overall</span>
-                                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#E69F19]" />Adherence</span>
+                                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0C9482]" />{t.common.overall}</span>
+                                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#E69F19]" />{t.common.adherence}</span>
                                 </div>
                             </div>
                             <div className="text-[var(--color-muted)] mt-3">
@@ -290,8 +290,8 @@ export default function HomePage() {
                                             labelStyle={{ color: "var(--color-text)", fontSize: 12, fontWeight: 600 }}
                                             itemStyle={{ fontSize: 12 }}
                                         />
-                                        <Line type="monotone" dataKey="overall"   stroke="#0C9482" strokeWidth={2.5} dot={{ r: 3 }} connectNulls name="Overall"   />
-                                        <Line type="monotone" dataKey="adherence" stroke="#E69F19" strokeWidth={2}   dot={{ r: 2.5 }} connectNulls name="Adherence" />
+                                        <Line type="monotone" dataKey="overall"   stroke="#0C9482" strokeWidth={2.5} dot={{ r: 3 }} connectNulls name={t.common.overall}   />
+                                        <Line type="monotone" dataKey="adherence" stroke="#E69F19" strokeWidth={2}   dot={{ r: 2.5 }} connectNulls name={t.common.adherence} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
@@ -301,13 +301,13 @@ export default function HomePage() {
                     {/* Recent calls */}
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
                         <div className="flex items-center justify-between mb-3">
-                            <h2 className="text-sm font-semibold text-[var(--color-text)]">Recent calls</h2>
-                            <Link href="/calls" className="text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">All calls →</Link>
+                            <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.recentCalls}</h2>
+                            <Link href="/calls" className="text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">{t.home.allCalls}</Link>
                         </div>
                         {cards.length === 0 && (
                             <div className="py-8 text-center">
-                                <p className="text-sm text-[var(--color-text-secondary)]">No scored sessions in the last 30 days.</p>
-                                <p className="text-xs text-[var(--color-muted)] mt-1">Sessions appear here after calls are scored by the AI pipeline.</p>
+                                <p className="text-sm text-[var(--color-text-secondary)]">{t.home.noScoredSessions}</p>
+                                <p className="text-xs text-[var(--color-muted)] mt-1">{t.home.sessionsAppear}</p>
                             </div>
                         )}
                         <div className="divide-y divide-[var(--color-line-soft)]">
@@ -316,17 +316,17 @@ export default function HomePage() {
                                     className="flex items-center justify-between gap-3 py-2.5 hover:bg-[var(--color-hover)] -mx-2 px-2 rounded-lg transition-colors">
                                     <div className="min-w-0">
                                         <p className="text-sm font-medium text-[var(--color-text)] truncate">
-                                            {c.session_title || (c.started_at ? new Date(c.started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Scored call")}
+                                            {c.session_title || (c.started_at ? new Date(c.started_at).toLocaleString(intl, { dateStyle: "medium", timeStyle: "short" }) : t.common.scoredCall)}
                                         </p>
                                         <p className="text-xs text-[var(--color-muted)]">
                                             {memberLabel(byUser.get(c.user_id))}
-                                            {c.started_at ? ` · ${new Date(c.started_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}
-                                            {c.duration_minutes ? ` · ${c.duration_minutes} min` : ""}
+                                            {c.started_at ? ` · ${new Date(c.started_at).toLocaleDateString(intl, { month: "short", day: "numeric" })}` : ""}
+                                            {c.duration_minutes ? ` · ${t.common.min(c.duration_minutes)}` : ""}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
                                         {(c.guardrail_breaches ?? []).length > 0 &&
-                                            <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700">BREACH</span>}
+                                            <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700">{t.home.breach}</span>}
                                         <ScoreRing score={c.overall_score} />
                                     </div>
                                 </Link>
@@ -338,11 +338,11 @@ export default function HomePage() {
                 {/* Right rail */}
                 <div className="space-y-4">
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
-                        <h2 className="text-sm font-semibold text-[var(--color-text)]">Adoption</h2>
+                        <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.adoption}</h2>
                         <div className="space-y-3 mt-3">
                             <div>
                                 <div className="flex justify-between text-xs text-[var(--color-text-secondary)]">
-                                    <span>Active seats</span>
+                                    <span>{t.home.activeSeats}</span>
                                     <span className="font-mono text-[var(--color-text)]">{activeMembers} / {org?.seats_purchased ?? "—"}</span>
                                 </div>
                                 <div className="h-1.5 bg-[var(--color-line-soft)] rounded-full mt-1.5">
@@ -352,7 +352,7 @@ export default function HomePage() {
                             </div>
                             <div>
                                 <div className="flex justify-between text-xs text-[var(--color-text-secondary)]">
-                                    <span>Sessions per rep · week</span>
+                                    <span>{t.home.sessionsPerRepWeek}</span>
                                     <span className="font-mono text-[var(--color-text)]">{sessionsPerRepWeek}</span>
                                 </div>
                                 <div className="h-1.5 bg-[var(--color-line-soft)] rounded-full mt-1.5">
@@ -361,7 +361,7 @@ export default function HomePage() {
                                 </div>
                             </div>
                             <div className="flex justify-between text-xs text-[var(--color-text-secondary)]">
-                                <span>Scored calls · 30 days</span>
+                                <span>{t.home.scoredCalls30d}</span>
                                 <span className="font-mono text-[var(--color-text)]">{cards.length}</span>
                             </div>
                         </div>
@@ -369,10 +369,10 @@ export default function HomePage() {
 
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
                         <div className="flex items-center justify-between mb-3">
-                            <h2 className="text-sm font-semibold text-[var(--color-text)]">Leaderboard</h2>
-                            <Link href="/team" className="text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">All reps →</Link>
+                            <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.leaderboard}</h2>
+                            <Link href="/team" className="text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">{t.home.allReps}</Link>
                         </div>
-                        {leaderboard.length === 0 && <p className="text-xs text-[var(--color-muted)]">Scores appear once calls are graded.</p>}
+                        {leaderboard.length === 0 && <p className="text-xs text-[var(--color-muted)]">{t.home.scoresAppear}</p>}
                         <div className="space-y-2.5">
                             {leaderboard.map((r, i) => (
                                 <Link key={r.m.user_id} href={`/team/${r.m.user_id}`} className="flex items-center gap-2.5 group">
@@ -382,7 +382,7 @@ export default function HomePage() {
                                     </span>
                                     <span className="text-[13px] font-medium text-[var(--color-text)] truncate group-hover:text-[var(--color-accent-deep)]">
                                         {memberLabel(r.m)}
-                                        <span className="block text-[10.5px] font-normal text-[var(--color-muted)]">{r.n} calls</span>
+                                        <span className="block text-[10.5px] font-normal text-[var(--color-muted)]">{t.home.nCalls(r.n)}</span>
                                     </span>
                                     <span className="font-mono text-sm ml-auto text-[var(--color-text)]">{r.score}</span>
                                 </Link>

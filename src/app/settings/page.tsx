@@ -8,23 +8,21 @@ import { useOrg, OrgBanners } from "@/lib/useOrg"
 import { SettingsTab, BillingTab } from "@/components/orgTabs"
 import { PageSkeleton } from "@/components/homeStates"
 import { getSkinPref, setSkinPref, type SkinPref } from "@/lib/skin"
+import { useT } from "@/i18n/LocaleProvider"
 import { useState } from "react"
 
 type Tab = "org" | "billing"
-const TABS: { key: Tab; label: string }[] = [
-    { key: "org",     label: "Organization" },
-    { key: "billing", label: "Billing"      },
-]
 
 function AppearanceCard() {
+    const t = useT()
     const [pref, setPref] = useState<SkinPref>("light")
     useEffect(() => { setPref(getSkinPref()) }, [])
     return (
         <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm space-y-3 max-w-2xl">
             <div>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">Appearance</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.settingsPage.appearance}</h3>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                    How the Command Center looks for you. Reps&apos; apps have their own setting (dark by default).
+                    {t.settingsPage.appearanceSub}
                 </p>
             </div>
             <select
@@ -32,9 +30,9 @@ function AppearanceCard() {
                 value={pref}
                 onChange={e => { const v = e.target.value as SkinPref; setPref(v); setSkinPref(v) }}
             >
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-                <option value="system">Match system</option>
+                <option value="light">{t.settingsPage.light}</option>
+                <option value="dark">{t.settingsPage.dark}</option>
+                <option value="system">{t.settingsPage.matchSystem}</option>
             </select>
         </div>
     )
@@ -43,7 +41,12 @@ function AppearanceCard() {
 function SettingsPageInner() {
     const router = useRouter()
     const params = useSearchParams()
+    const t = useT()
     const { org, orgId, loading, reload } = useOrg()
+    const TABS: { key: Tab; label: string }[] = [
+        { key: "org",     label: t.settingsPage.tabOrg     },
+        { key: "billing", label: t.settingsPage.tabBilling },
+    ]
 
     const raw = params.get("tab")
     const tab: Tab = raw === "billing" ? "billing" : "org"
@@ -61,16 +64,18 @@ function SettingsPageInner() {
     if (loading) return <PageSkeleton rows={2} />
     if (!orgId || !org) return (
         <div className="text-red-600 text-sm">
-            Admin access required. Make sure you&apos;re an org owner or admin.
+            {t.common.adminAccessRequired}
         </div>
     )
 
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-[var(--color-text)]">Settings</h1>
+                <h1 className="text-2xl font-bold text-[var(--color-text)]">{t.settingsPage.title}</h1>
                 <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                    {org.name} · <span className="capitalize">{org.plan}</span> plan — your team lives under <Link href="/team?tab=members" className="text-[var(--color-accent-deep)] font-medium hover:underline">Team</Link> now
+                    {org.name} · <span className="capitalize">{t.settingsPage.subPlan(org.plan)}</span> {t.settingsPage.subTeamMoved}{" "}
+                    <Link href="/team?tab=members" className="text-[var(--color-accent-deep)] font-medium hover:underline">{t.settingsPage.subTeamMovedLink}</Link>
+                    {t.settingsPage.subNow ? ` ${t.settingsPage.subNow}` : ""}
                 </p>
             </div>
 
@@ -101,7 +106,7 @@ function SettingsPageInner() {
 
 export default function SettingsPage() {
     return (
-        <Suspense fallback={<div className="text-sm text-[var(--color-muted)]">Loading…</div>}>
+        <Suspense fallback={<PageSkeleton rows={2} />}>
             <SettingsPageInner />
         </Suspense>
     )

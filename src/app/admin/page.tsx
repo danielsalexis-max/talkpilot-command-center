@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useT } from "@/i18n/LocaleProvider"
 
 /// The old Admin hub was split by the Boardroom redesign (D-162): coaching
 /// configuration (playbooks, objections, knowledge, voice, Team DNA) lives at
@@ -9,6 +10,7 @@ import { useRouter } from "next/navigation"
 /// Old bookmarks land here — send them to Settings.
 export default function AdminRedirect() {
     const router = useRouter()
+    const t = useT()
     useEffect(() => { router.replace("/settings") }, [router])
-    return <div className="text-sm text-[var(--color-muted)]">Admin moved — taking you to Settings…</div>
+    return <div className="text-sm text-[var(--color-muted)]">{t.adminPage.moved}</div>
 }

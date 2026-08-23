@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
-import { STARTER_KITS, applyStarterKit, type StarterKit } from "@/lib/starterKit"
+import { starterKitsFor, applyStarterKit, type StarterKit } from "@/lib/starterKit"
+import { useT, useLocale } from "@/i18n/LocaleProvider"
+import type { Dict } from "@/i18n"
 
 /// /start — self-serve Teams onboarding (D-163).
 /// account → workspace → coaching brain → invite → live.
@@ -13,9 +15,6 @@ import { STARTER_KITS, applyStarterKit, type StarterKit } from "@/lib/starterKit
 
 type Step = "account" | "workspace" | "brain" | "invite" | "done"
 const STEPS: Step[] = ["account", "workspace", "brain", "invite", "done"]
-const STEP_LABELS: Record<Step, string> = {
-    account: "Account", workspace: "Workspace", brain: "Playbook", invite: "Your team", done: "Live",
-}
 
 const INPUT = "w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
 const BTN = "w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors"
@@ -35,6 +34,13 @@ function isPersonalEmail(email: string): boolean {
     return PERSONAL_DOMAINS.has(domain)
 }
 
+/// Starter-kit content is seeded into the org's playbook in English (the
+/// coaching data itself is not localized yet) — but the /start cards show the
+/// localized title/tagline so a LATAM prospect reads them in their language.
+function kitDisplay(t: Dict, kit: StarterKit): { title: string; tagline: string } {
+    return t.start.kits[kit.key] ?? { title: kit.title, tagline: kit.tagline }
+}
+
 async function callFn(name: string, body: unknown) {
     const { data: { session } } = await supabase.auth.getSession()
     const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/${name}`, {
@@ -49,20 +55,20 @@ async function callFn(name: string, body: unknown) {
 
 // ─── The right-hand showcase: what your reps actually see ────────────────────
 
-function HudSlide() {
+function HudSlide({ t }: { t: Dict }) {
     return (
         <div className="w-full max-w-[360px] rounded-2xl bg-[#1A263D] border border-white/10 p-4 shadow-2xl">
             <div className="flex items-center gap-2 font-mono text-[9.5px] tracking-[0.12em] text-[#94A2AB]">
                 <span className="w-2 h-2 rounded-full bg-[#3EA48F] animate-pulse" />
-                LIVE · DISCOVERY STAGE 2/5
+                {t.start.hud.liveLine}
                 <span className="ml-auto">12:41</span>
             </div>
             <p className="mt-3 text-[15px] leading-snug text-[#EDF2F1] font-medium">
-                They just said budget is tight — anchor on the payback model, <span className="text-[#9CD9C6]">not a discount.</span>
+                {t.start.hud.cueMain}<span className="text-[#9CD9C6]">{t.start.hud.cueAccent}</span>
             </p>
-            <p className="mt-2 text-[11px] text-[#94A2AB]">From your objection library · “It’s too expensive”</p>
+            <p className="mt-2 text-[11px] text-[#94A2AB]">{t.start.hud.cueSource}</p>
             <div className="mt-3 flex gap-1.5">
-                {["Open", "Discovery", "Value", "Objections", "Close"].map((s, i) => (
+                {t.start.hud.stages.map((s, i) => (
                     <span key={s} className={`h-1 flex-1 rounded-full ${i < 2 ? "bg-[#3EA48F]" : "bg-white/10"}`} />
                 ))}
             </div>
@@ -70,22 +76,27 @@ function HudSlide() {
     )
 }
 
-function ScorecardSlide() {
+function ScorecardSlide({ t }: { t: Dict }) {
+    const rows: [string, number, string][] = [
+        [t.start.scorecardSlide.rows.discovery, 92, "#3EA48F"],
+        [t.start.scorecardSlide.rows.objections, 84, "#3EA48F"],
+        [t.start.scorecardSlide.rows.nextSteps, 61, "#E69F19"],
+    ]
     return (
         <div className="w-full max-w-[360px] rounded-2xl bg-[#1A263D] border border-white/10 p-4 shadow-2xl">
             <div className="flex items-center gap-3">
                 <span className="w-12 h-12 rounded-full border-[3px] border-[#3EA48F] flex items-center justify-center font-mono text-lg text-[#EDF2F1]">86</span>
                 <div>
-                    <p className="text-[13px] font-semibold text-[#EDF2F1]">Acme Corp — discovery</p>
-                    <p className="font-mono text-[9.5px] tracking-wide text-[#94A2AB]">SCORED AGAINST YOUR PLAYBOOK</p>
+                    <p className="text-[13px] font-semibold text-[#EDF2F1]">{t.start.scorecardSlide.title}</p>
+                    <p className="font-mono text-[9.5px] tracking-wide text-[#94A2AB]">{t.start.scorecardSlide.scoredAgainst}</p>
                 </div>
             </div>
             <div className="mt-3 space-y-1.5">
-                {[["Discovery", 92, "#3EA48F"], ["Objections", 84, "#3EA48F"], ["Next steps", 61, "#E69F19"]].map(([label, v, c]) => (
-                    <div key={label as string} className="flex items-center gap-2">
+                {rows.map(([label, v, c]) => (
+                    <div key={label} className="flex items-center gap-2">
                         <span className="text-[11px] text-[#94A2AB] w-20">{label}</span>
                         <span className="h-1.5 flex-1 rounded-full bg-white/10 overflow-hidden">
-                            <span className="block h-full rounded-full" style={{ width: `${v}%`, background: c as string }} />
+                            <span className="block h-full rounded-full" style={{ width: `${v}%`, background: c }} />
                         </span>
                         <span className="font-mono text-[11px] text-[#EDF2F1]">{v}</span>
                     </div>
@@ -95,36 +106,36 @@ function ScorecardSlide() {
     )
 }
 
-function AuditSlide() {
+function AuditSlide({ t }: { t: Dict }) {
     return (
         <div className="w-full max-w-[360px] rounded-2xl bg-[#1A263D] border border-white/10 p-4 shadow-2xl space-y-2.5">
-            <p className="font-mono text-[9.5px] tracking-[0.12em] text-[#94A2AB]">TRUTH AUDIT · 5 CLAIMS CHECKED</p>
+            <p className="font-mono text-[9.5px] tracking-[0.12em] text-[#94A2AB]">{t.start.auditSlide.header}</p>
             <div className="flex items-start gap-2">
-                <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-[#14311F] text-[#6FCB84] mt-0.5">VERIFIED</span>
-                <p className="text-[12.5px] text-[#EDF2F1]">“SOC 2 certified since 2024” <span className="text-[#94A2AB]">· your security doc</span></p>
+                <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-[#14311F] text-[#6FCB84] mt-0.5">{t.start.auditSlide.verified}</span>
+                <p className="text-[12.5px] text-[#EDF2F1]">{t.start.auditSlide.claim1} <span className="text-[#94A2AB]">{t.start.auditSlide.claim1Src}</span></p>
             </div>
             <div className="flex items-start gap-2">
-                <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-[#3A1818] text-[#F08A8A] mt-0.5">CONTRADICTS</span>
-                <p className="text-[12.5px] text-[#EDF2F1]">“Guaranteed 40% ROI” <span className="text-[#94A2AB]">· flagged for coaching</span></p>
+                <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-[#3A1818] text-[#F08A8A] mt-0.5">{t.start.auditSlide.contradicts}</span>
+                <p className="text-[12.5px] text-[#EDF2F1]">{t.start.auditSlide.claim2} <span className="text-[#94A2AB]">{t.start.auditSlide.claim2Src}</span></p>
             </div>
         </div>
     )
 }
 
-const SLIDES = [
-    { caption: "Your playbook, whispered at the right moment", sub: "Reps hear the approved answer while the objection is still hanging in the air — not in next week's call review.", node: <HudSlide /> },
-    { caption: "Every call scored against your playbook", sub: "Not generic AI notes — graded on the stages, questions and guardrails you defined.", node: <ScorecardSlide /> },
-    { caption: "Catch drift before your customers do", sub: "Every factual claim is checked against your own docs. What can't be verified gets flagged, not repeated.", node: <AuditSlide /> },
-]
-
 function Showcase() {
+    const t = useT()
     const [idx, setIdx] = useState(0)
+    const slides = [
+        { ...t.start.slides[0], node: <HudSlide t={t} /> },
+        { ...t.start.slides[1], node: <ScorecardSlide t={t} /> },
+        { ...t.start.slides[2], node: <AuditSlide t={t} /> },
+    ]
     useEffect(() => {
         if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return
-        const t = setInterval(() => setIdx(i => (i + 1) % SLIDES.length), 6000)
-        return () => clearInterval(t)
+        const timer = setInterval(() => setIdx(i => (i + 1) % 3), 6000)
+        return () => clearInterval(timer)
     }, [])
-    const slide = SLIDES[idx]
+    const slide = slides[idx]
     return (
         <div className="hidden lg:flex flex-col items-center justify-center flex-1 bg-[#0A1220] px-10 py-12 relative overflow-hidden">
             <div className="absolute inset-0 opacity-40" style={{ background: "radial-gradient(ellipse 60% 50% at 50% 40%, rgba(12,148,130,0.25), transparent)" }} />
@@ -133,15 +144,15 @@ function Showcase() {
                 <h2 className="font-display text-[22px] font-bold text-[#EDF2F1] mt-8 leading-tight" style={{ textWrap: "balance" }}>{slide.caption}</h2>
                 <p className="text-[13.5px] text-[#94A2AB] mt-2 leading-relaxed">{slide.sub}</p>
                 <div className="flex gap-2 mt-6">
-                    {SLIDES.map((_, i) => (
-                        <button key={i} onClick={() => setIdx(i)} aria-label={`Slide ${i + 1}`}
+                    {slides.map((_, i) => (
+                        <button key={i} onClick={() => setIdx(i)} aria-label={t.start.slideAria(i + 1)}
                             className={`w-2 h-2 rounded-full transition-colors ${i === idx ? "bg-[#3EA48F]" : "bg-white/20 hover:bg-white/40"}`} />
                     ))}
                 </div>
             </div>
             <div className="relative mt-10 flex flex-col items-center gap-1.5">
-                <p className="font-mono text-[11px] tracking-[0.16em] text-[#9CD9C6] border border-[#2FB39E]/40 rounded-full px-4 py-1.5">COACH UP, NOT SURVEIL DOWN</p>
-                <p className="font-mono text-[9.5px] tracking-[0.12em] text-[#5A6B7D]">REPS ALWAYS SEE THEIR OWN SCORECARDS</p>
+                <p className="font-mono text-[11px] tracking-[0.16em] text-[#9CD9C6] border border-[#2FB39E]/40 rounded-full px-4 py-1.5">{t.start.coachUp}</p>
+                <p className="font-mono text-[9.5px] tracking-[0.12em] text-[#5A6B7D]">{t.start.repsSeeOwn}</p>
             </div>
         </div>
     )
@@ -151,6 +162,12 @@ function Showcase() {
 
 export default function StartPage() {
     const router = useRouter()
+    const { locale, t } = useLocale()
+    // The kit BODY (stage text, guardrail keywords, objections) is inserted
+    // into the org's database as their real playbook, so it follows the
+    // locale the owner is signing up in — not just the labels on screen.
+    // An English guardrail keyword can never match a Spanish call (D-177).
+    const kits = starterKitsFor(locale)
     const [step, setStep]         = useState<Step>("account")
     const [checking, setChecking] = useState(true)
     const [busy, setBusy]         = useState(false)
@@ -196,7 +213,7 @@ export default function StartPage() {
                 if (err) throw err
             }
             const { data: { user } } = await supabase.auth.getUser()
-            if (!user) { setError("Check your email to confirm your account, then come back here."); return }
+            if (!user) { setError(t.start.confirmEmailFirst); return }
             const { data: member } = await supabase.from("org_members")
                 .select("org_id").eq("user_id", user.id).eq("status", "active").maybeSingle()
             if (member) { router.replace("/"); return }
@@ -219,7 +236,7 @@ export default function StartPage() {
     async function handleWorkspace(e: React.FormEvent) {
         e.preventDefault(); setError(null)
         if (isPersonalEmail(email)) {
-            setError("Workspaces need a work email. Sign up with your company address — your reps' invites and billing all hang off it.")
+            setError(t.start.personalEmailError)
             return
         }
         setBusy(true)
@@ -242,7 +259,7 @@ export default function StartPage() {
         const err = await applyStarterKit(orgId, kit)
         setBusy(false)
         if (err) { setError(err); return }
-        setKitApplied(kit.title)
+        setKitApplied(kitDisplay(t, kit).title)
         setStep("invite")
     }
 
@@ -255,7 +272,7 @@ export default function StartPage() {
             catch { failed++ }
         }
         setBusy(false)
-        setInviteNote(sent ? `${sent} invite${sent === 1 ? "" : "s"} sent${failed ? ` · ${failed} failed — retry from Settings → Members` : ""}` : null)
+        setInviteNote(sent ? t.start.inviteNote(sent, failed) : null)
         doneRef.current = true
         setStep("done")
     }
@@ -263,7 +280,7 @@ export default function StartPage() {
     const stepIdx = STEPS.indexOf(step)
 
     if (checking) return (
-        <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] text-sm text-[var(--color-muted)]">Loading…</div>
+        <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] text-sm text-[var(--color-muted)]">{t.common.loading}</div>
     )
 
     return (
@@ -278,11 +295,11 @@ export default function StartPage() {
                 </div>
 
                 {/* Progress */}
-                <div className="flex items-center gap-1.5 mb-8" aria-label={`Step ${stepIdx + 1} of ${STEPS.length}`}>
+                <div className="flex items-center gap-1.5 mb-8" aria-label={t.start.stepOf(stepIdx + 1, STEPS.length)}>
                     {STEPS.map((s, i) => (
                         <div key={s} className="flex-1">
                             <div className={`h-1 rounded-full ${i <= stepIdx ? "bg-[var(--color-accent)]" : "bg-[var(--color-line-soft)]"}`} />
-                            <p className={`mt-1.5 text-[10px] font-medium hidden sm:block ${i === stepIdx ? "text-[var(--color-accent-deep)]" : "text-[var(--color-muted)]"}`}>{STEP_LABELS[s]}</p>
+                            <p className={`mt-1.5 text-[10px] font-medium hidden sm:block ${i === stepIdx ? "text-[var(--color-accent-deep)]" : "text-[var(--color-muted)]"}`}>{t.start.stepLabels[s]}</p>
                         </div>
                     ))}
                 </div>
@@ -291,34 +308,34 @@ export default function StartPage() {
                     {step === "account" && (
                         <div>
                             <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight" style={{ textWrap: "balance" }}>
-                                Give your whole team your best rep’s instincts
+                                {t.start.accountTitle}
                             </h1>
                             <p className="text-sm text-[var(--color-text-secondary)] mt-2">
-                                Live coaching on every call, scored against your playbook.
-                                <span className="font-semibold text-[var(--color-text)] whitespace-nowrap"> 14 days free — no card.</span>
+                                {t.start.accountSub}
+                                <span className="font-semibold text-[var(--color-text)] whitespace-nowrap"> {t.start.accountFree}</span>
                             </p>
                             <form onSubmit={handleAccount} className="space-y-3 mt-7">
-                                <input type="email" required placeholder="Work email" className={INPUT}
+                                <input type="email" required placeholder={t.common.workEmail} className={INPUT}
                                     value={email} onChange={e => setEmail(e.target.value)} />
-                                <input type="password" required minLength={8} placeholder={mode === "signup" ? "Choose a password (8+ characters)" : "Password"}
+                                <input type="password" required minLength={8} placeholder={mode === "signup" ? t.start.choosePassword : t.common.password}
                                     className={INPUT} value={password} onChange={e => setPassword(e.target.value)} />
                                 {error && <p className="text-xs text-red-600">{error}</p>}
                                 <button type="submit" disabled={busy} className={BTN}>
-                                    {busy ? "One moment…" : mode === "signup" ? "Create account & continue" : "Sign in & continue"}
+                                    {busy ? t.common.oneMoment : mode === "signup" ? t.start.createAndContinue : t.start.signInAndContinue}
                                 </button>
                             </form>
                             <div className="flex items-center gap-3 my-4">
-                                <span className="h-px flex-1 bg-[var(--color-border)]" /><span className="text-[11px] text-[var(--color-muted)]">or</span><span className="h-px flex-1 bg-[var(--color-border)]" />
+                                <span className="h-px flex-1 bg-[var(--color-border)]" /><span className="text-[11px] text-[var(--color-muted)]">{t.common.or}</span><span className="h-px flex-1 bg-[var(--color-border)]" />
                             </div>
                             <button onClick={handleGoogle} className={BTN_GHOST + " flex items-center justify-center gap-2.5"}>
                                 <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.8 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.4 28.7a14.5 14.5 0 0 1 0-9.4l-7.8-6.1a24 24 0 0 0 0 21.6l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2.1 1.4-4.7 2.3-7.7 2.3-6.3 0-11.7-3.7-13.6-9l-7.8 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
-                                Continue with Google
+                                {t.common.continueWithGoogle}
                             </button>
                             <p className="text-center text-xs text-[var(--color-muted)] mt-4">
-                                {mode === "signup" ? "Already have a TalkPilot account? " : "New here? "}
+                                {mode === "signup" ? t.start.alreadyHaveAccount : t.start.newHere}
                                 <button onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setError(null) }}
                                     className="text-[var(--color-accent-deep)] font-medium hover:underline">
-                                    {mode === "signup" ? "Sign in" : "Create one"}
+                                    {mode === "signup" ? t.common.signIn : t.common.createOne}
                                 </button>
                             </p>
                         </div>
@@ -326,46 +343,46 @@ export default function StartPage() {
 
                     {step === "workspace" && (
                         <div>
-                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">Name your workspace</h1>
-                            <p className="text-sm text-[var(--color-text-secondary)] mt-2">This is what your team sees when they join.</p>
+                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">{t.start.workspaceTitle}</h1>
+                            <p className="text-sm text-[var(--color-text-secondary)] mt-2">{t.start.workspaceSub}</p>
                             <form onSubmit={handleWorkspace} className="space-y-4 mt-7">
                                 <div>
-                                    <label className="text-xs font-medium text-[var(--color-text-secondary)]">Company or team name</label>
-                                    <input required minLength={2} maxLength={80} placeholder="Acme Sales" className={INPUT + " mt-1.5"}
+                                    <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.companyName}</label>
+                                    <input required minLength={2} maxLength={80} placeholder={t.start.companyPlaceholder} className={INPUT + " mt-1.5"}
                                         value={orgName} onChange={e => setOrgName(e.target.value)} />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-medium text-[var(--color-text-secondary)]">Seats (you can change this anytime)</label>
+                                    <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.seatsLabel}</label>
                                     <div className="flex items-center gap-3 mt-1.5">
-                                        <button type="button" aria-label="Fewer seats" onClick={() => setSeats(s => Math.max(3, s - 1))}
+                                        <button type="button" aria-label={t.start.fewerSeats} onClick={() => setSeats(s => Math.max(3, s - 1))}
                                             className="w-9 h-9 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]">−</button>
                                         <span className="font-mono text-lg text-[var(--color-text)] w-10 text-center">{seats}</span>
-                                        <button type="button" aria-label="More seats" onClick={() => setSeats(s => Math.min(500, s + 1))}
+                                        <button type="button" aria-label={t.start.moreSeats} onClick={() => setSeats(s => Math.min(500, s + 1))}
                                             className="w-9 h-9 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]">+</button>
-                                        <span className="text-xs text-[var(--color-muted)]">minimum 3</span>
+                                        <span className="text-xs text-[var(--color-muted)]">{t.start.minSeats}</span>
                                     </div>
                                 </div>
                                 <div className="bg-[var(--color-accent-subtle)] rounded-lg px-4 py-3 text-xs text-[var(--color-accent-deep)] leading-relaxed">
-                                    <strong>14 days free, every feature, no card.</strong><br />
-                                    After the trial: $40/seat/mo, or $32/seat/mo billed annually.
+                                    <strong>{t.start.trialBoxTitle}</strong><br />
+                                    {t.start.trialBoxSub}
                                 </div>
                                 {error && <p className="text-xs text-red-600">{error}</p>}
-                                <button type="submit" disabled={busy} className={BTN}>{busy ? "Creating…" : "Start free trial"}</button>
+                                <button type="submit" disabled={busy} className={BTN}>{busy ? t.start.creating : t.start.startFreeTrial}</button>
                             </form>
                         </div>
                     )}
 
                     {step === "brain" && (
                         <div className="max-w-md">
-                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">Give your reps a playbook</h1>
+                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">{t.start.brainTitle}</h1>
                             <p className="text-sm text-[var(--color-text-secondary)] mt-2">
-                                This is what makes coaching <em>yours</em> — reps get guided through these stages live, and every call is scored against them. Pick a starting point; edit everything later.
+                                {t.start.brainSub1}<em>{t.start.brainSubEm}</em>{t.start.brainSub2}
                             </p>
                             {/* One question, then two compact cards — the per-stage chips made
                                 this step read as a wall (D-171). Details live in a single meta
                                 line; everything is editable under Playbook afterwards. */}
                             <div className="flex rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] p-1 mt-6 max-w-xs">
-                                {([["sales", "Sales"], ["support", "Support & success"]] as const).map(([key, label]) => (
+                                {([["sales", t.start.teamSales], ["support", t.start.teamSupport]] as const).map(([key, label]) => (
                                     <button key={key} type="button" onClick={() => setTeamType(key)}
                                         className={`flex-1 py-1.5 text-xs rounded-md transition-colors ${
                                             teamType === key
@@ -375,16 +392,16 @@ export default function StartPage() {
                                 ))}
                             </div>
                             <div className="space-y-3 mt-3">
-                                {STARTER_KITS.filter(kit => kit.team === teamType).map(kit => (
+                                {kits.filter(kit => kit.team === teamType).map(kit => (
                                     <button key={kit.key} disabled={busy} onClick={() => handleKit(kit)}
                                         className="w-full text-left bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent-light)] rounded-xl px-4 py-3.5 transition-colors disabled:opacity-50 group">
                                         <div className="flex items-center justify-between">
-                                            <p className="text-sm font-semibold text-[var(--color-text)]">{kit.title}</p>
-                                            <span className="text-xs font-semibold text-[var(--color-accent-deep)] opacity-0 group-hover:opacity-100 transition-opacity">Use this →</span>
+                                            <p className="text-sm font-semibold text-[var(--color-text)]">{kitDisplay(t, kit).title}</p>
+                                            <span className="text-xs font-semibold text-[var(--color-accent-deep)] opacity-0 group-hover:opacity-100 transition-opacity">{t.start.useThis}</span>
                                         </div>
-                                        <p className="text-xs text-[var(--color-text-secondary)] mt-1">{kit.tagline}</p>
+                                        <p className="text-xs text-[var(--color-text-secondary)] mt-1">{kitDisplay(t, kit).tagline}</p>
                                         <p className="text-[10.5px] text-[var(--color-muted)] mt-1.5">
-                                            {kit.stages.length} stages · {kit.objections.length} objections with approved responses · edit anything later
+                                            {t.start.kitMeta(kit.stages.length, kit.objections.length)}
                                         </p>
                                     </button>
                                 ))}
@@ -392,46 +409,46 @@ export default function StartPage() {
                                     className="w-full text-left bg-[var(--color-surface)] border border-dashed border-[var(--color-accent-light)] rounded-xl p-4 transition-colors hover:bg-[var(--color-accent-subtle)] disabled:opacity-50">
                                     <p className="text-sm font-semibold text-[var(--color-accent-deep)] inline-flex items-center gap-1.5">
                                         <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent)] shrink-0" />
-                                        Clone your best rep instead (Team DNA)
+                                        {t.start.dnaCard}
                                     </p>
                                     <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                                        Upload 3–5 transcripts of your top performer — we extract their tone, phrases, objection responses and flow into a playbook. Takes ~5 minutes; we’ll take you there after setup.
+                                        {t.start.dnaCardSub}
                                     </p>
                                 </button>
                             </div>
                             {error && <p className="text-xs text-red-600 mt-3">{error}</p>}
                             <button onClick={() => setStep("invite")} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-4">
-                                Skip for now — I’ll build my own under Playbook
+                                {t.start.skipBrain}
                             </button>
                         </div>
                     )}
 
                     {step === "invite" && (
                         <div>
-                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">Invite your first reps</h1>
+                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">{t.start.inviteTitle}</h1>
                             <p className="text-sm text-[var(--color-text-secondary)] mt-2">
                                 {kitApplied
-                                    ? <>The <strong>{kitApplied}</strong> playbook is live — anyone who joins gets coached from it on their very first call.</>
-                                    : "They install TalkPilot on Mac, iPhone or Android and get coached live on their calls."}
+                                    ? <>{t.start.inviteSubWithKit1}<strong>{kitApplied}</strong>{t.start.inviteSubWithKit2}</>
+                                    : t.start.inviteSubNoKit}
                             </p>
                             <form onSubmit={handleInvites} className="space-y-3 mt-7">
                                 {invites.map((v, i) => (
-                                    <input key={i} type="email" placeholder={`teammate${i + 1}@company.com`} className={INPUT}
+                                    <input key={i} type="email" placeholder={t.start.invitePlaceholder(i + 1)} className={INPUT}
                                         value={v} onChange={e => setInvites(prev => prev.map((p, j) => j === i ? e.target.value : p))} />
                                 ))}
                                 <button type="button" onClick={() => setInvites(p => [...p, ""])}
-                                    className="text-xs font-medium text-[var(--color-accent-deep)] hover:underline">+ Add another</button>
+                                    className="text-xs font-medium text-[var(--color-accent-deep)] hover:underline">{t.start.addAnother}</button>
                                 {error && <p className="text-xs text-red-600">{error}</p>}
                                 <button type="submit" disabled={busy} className={BTN}>
-                                    {busy ? "Sending…" : invites.some(v => v.trim()) ? "Send invites & finish" : "Finish setup"}
+                                    {busy ? t.start.sending : invites.some(v => v.trim()) ? t.start.sendInvitesFinish : t.start.finishSetup}
                                 </button>
                             </form>
                             <div className="flex items-center gap-4 mt-4">
                                 <button onClick={() => setStep("brain")} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">
-                                    ← Back
+                                    {t.common.back}
                                 </button>
                                 <button onClick={() => { doneRef.current = true; setStep("done") }} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">
-                                    Skip — I’ll invite them later
+                                    {t.start.skipInvites}
                                 </button>
                             </div>
                         </div>
@@ -442,43 +459,43 @@ export default function StartPage() {
                             <div className="w-12 h-12 rounded-full bg-[var(--color-accent-subtle)] flex items-center justify-center">
                                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12.5 10 18 20 6" /></svg>
                             </div>
-                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight mt-4">{orgName || "Your workspace"} is live</h1>
+                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight mt-4">{t.start.doneTitle(orgName || t.start.doneFallbackOrg)}</h1>
                             {inviteNote && <p className="text-xs text-[var(--color-accent-deep)] font-medium mt-1">{inviteNote}</p>}
                             <div className="space-y-4 mt-6">
-                                {[
-                                    ["1", "Reps install TalkPilot", "Mac, iPhone or Android — they sign in with their invite and they're in your workspace."],
-                                    ["2", "Their next call gets coached live", kitApplied ? `Guided through the ${kitApplied} stages, with your approved objection responses on tap.` : "Once your playbook is active, they're guided through your stages live."],
-                                    ["3", "The scorecard lands here", "Stage adherence, objection grades and coaching moments — in your Command Center minutes after the call ends."],
-                                ].map(([n, title, sub]) => (
-                                    <div key={n} className="flex gap-3">
-                                        <span className="w-6 h-6 rounded-full bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-mono text-[11px] flex items-center justify-center shrink-0 mt-0.5">{n}</span>
+                                {t.start.doneSteps.map((s, i) => (
+                                    <div key={i} className="flex gap-3">
+                                        <span className="w-6 h-6 rounded-full bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-mono text-[11px] flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
                                         <div>
-                                            <p className="text-sm font-semibold text-[var(--color-text)]">{title}</p>
-                                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{sub}</p>
+                                            <p className="text-sm font-semibold text-[var(--color-text)]">{s.title}</p>
+                                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                                                {i === 1
+                                                    ? (kitApplied ? t.start.doneStep2WithKit(kitApplied) : t.start.doneStep2NoKit)
+                                                    : s.sub}
+                                            </p>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                             <div className="flex flex-col sm:flex-row gap-3 mt-8">
                                 <button onClick={() => { window.location.href = wantsDna ? "/playbook?tab=dna" : "/" }} className={BTN + " sm:flex-1"}>
-                                    {wantsDna ? "Set up Team DNA →" : "Open your Command Center →"}
+                                    {wantsDna ? t.start.setUpDna : t.start.openCommandCenter}
                                 </button>
                                 {wantsDna && (
-                                    <button onClick={() => { window.location.href = "/" }} className={BTN_GHOST + " sm:flex-1"}>Command Center</button>
+                                    <button onClick={() => { window.location.href = "/" }} className={BTN_GHOST + " sm:flex-1"}>{t.start.commandCenter}</button>
                                 )}
                             </div>
                             <p className="text-[11px] text-[var(--color-muted)] mt-5">
-                                Trial: 14 days, every feature. Add billing anytime in Settings → Billing.
-                                Apps: <a className="underline" href="https://apps.apple.com/app/id6763953639" target="_blank" rel="noreferrer">iPhone</a> · <a className="underline" href="https://talkpilot.co" target="_blank" rel="noreferrer">Mac</a>
+                                {t.start.doneFooter1}{" "}
+                                <a className="underline" href="https://apps.apple.com/app/id6763953639" target="_blank" rel="noreferrer">{t.start.iphone}</a> · <a className="underline" href="https://talkpilot.co" target="_blank" rel="noreferrer">{t.start.mac}</a>
                             </p>
                         </div>
                     )}
                 </div>
 
                 <p className="text-[11px] text-[var(--color-muted)] mt-10">
-                    Already using TalkPilot Teams? <Link href="/login" className="text-[var(--color-accent-deep)] hover:underline">Sign in</Link>
+                    {t.start.alreadyUsing} <Link href="/login" className="text-[var(--color-accent-deep)] hover:underline">{t.common.signIn}</Link>
                     <span className="mx-2">·</span>
-                    Questions? <a href="mailto:alexis@talkpilot.co" className="text-[var(--color-accent-deep)] hover:underline">Talk to us</a>
+                    {t.start.questions} <a href="mailto:alexis@talkpilot.co" className="text-[var(--color-accent-deep)] hover:underline">{t.start.talkToUs}</a>
                 </p>
                 </div>
             </div>

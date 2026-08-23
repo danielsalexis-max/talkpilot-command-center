@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next"
 import { Hanken_Grotesk, Inter, Azeret_Mono } from "next/font/google"
 import "./globals.css"
 import AppShell from "@/components/AppShell"
+import { LocaleProvider } from "@/i18n/LocaleProvider"
+import { getLocale, getT } from "@/i18n/server"
 
 const display = Hanken_Grotesk({ subsets: ["latin"], weight: ["600", "700", "800"], variable: "--font-display" })
 const body    = Inter({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-body" })
@@ -10,33 +12,35 @@ const mono    = Azeret_Mono({ subsets: ["latin"], weight: ["400", "500"], variab
 // Server root layout: owns metadata (title, description, Open Graph, icons —
 // icon.png / apple-icon.png / opengraph-image.png in this folder are picked up
 // by Next automatically). All client chrome lives in <AppShell>.
-export const metadata: Metadata = {
-    metadataBase: new URL("https://teams.talkpilot.co"),
-    title: {
-        default: "TalkPilot Teams — Command Center",
-        template: "%s · TalkPilot Teams",
-    },
-    description:
-        "The command center for your team's conversations. Scorecards, coaching insights, playbooks, and Team DNA — powered by TalkPilot's real-time AI copilot.",
-    applicationName: "TalkPilot Teams",
-    openGraph: {
-        title: "TalkPilot Teams — Command Center",
-        description:
-            "Scorecards, coaching insights, playbooks, and Team DNA for every conversation your team has.",
-        url: "https://teams.talkpilot.co",
-        siteName: "TalkPilot Teams",
-        type: "website",
-        locale: "en_US",
-    },
-    twitter: {
-        card: "summary_large_image",
-        title: "TalkPilot Teams — Command Center",
-        description:
-            "Scorecards, coaching insights, playbooks, and Team DNA for every conversation your team has.",
-    },
-    // Private admin surface — keep it out of search results (links still
-    // unfurl with the OG card when shared).
-    robots: { index: false, follow: false },
+// Resolved per-request so a Spanish visitor's tab title and link unfurls are
+// Spanish too (same cookie → Accept-Language → en order as the page itself).
+export async function generateMetadata(): Promise<Metadata> {
+    const t = await getT()
+    return {
+        metadataBase: new URL("https://teams.talkpilot.co"),
+        title: {
+            default: t.meta.title,
+            template: t.meta.titleTemplate,
+        },
+        description: t.meta.description,
+        applicationName: "TalkPilot Teams",
+        openGraph: {
+            title: t.meta.title,
+            description: t.meta.ogDescription,
+            url: "https://teams.talkpilot.co",
+            siteName: "TalkPilot Teams",
+            type: "website",
+            locale: t.ogLocale,
+        },
+        twitter: {
+            card: "summary_large_image",
+            title: t.meta.title,
+            description: t.meta.ogDescription,
+        },
+        // Private admin surface — keep it out of search results (links still
+        // unfurl with the OG card when shared).
+        robots: { index: false, follow: false },
+    }
 }
 
 export const viewport: Viewport = {
@@ -53,12 +57,17 @@ try {
 } catch (e) { document.documentElement.dataset.skin = "light"; }
 `
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+    // Locale: cookie (tp_locale) wins, else Accept-Language, else English.
+    // Resolved server-side so SSR markup and hydration agree on the language.
+    const locale = await getLocale()
     return (
-        <html lang="en" data-skin="light" suppressHydrationWarning className={`${display.variable} ${body.variable} ${mono.variable}`}>
+        <html lang={locale} data-skin="light" suppressHydrationWarning className={`${display.variable} ${body.variable} ${mono.variable}`}>
             <body>
                 <script dangerouslySetInnerHTML={{ __html: skinInit }} />
-                <AppShell>{children}</AppShell>
+                <LocaleProvider initialLocale={locale}>
+                    <AppShell>{children}</AppShell>
+                </LocaleProvider>
             </body>
         </html>
     )

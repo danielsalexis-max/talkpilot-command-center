@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import type { ChatTurn } from "@/lib/supabase"
+import { useT } from "@/i18n/LocaleProvider"
 
 /** Shared "ask AI" chat panel. `onAsk` receives the question + prior turns and
  *  returns the assistant's answer. Context/grounding lives in the caller. */
@@ -13,6 +14,7 @@ export function AskPanel({
     suggestions: string[]
     onAsk: (question: string, history: ChatTurn[]) => Promise<string>
 }) {
+    const t = useT()
     const [thread, setThread] = useState<ChatTurn[]>([])
     const [input, setInput]   = useState("")
     const [busy, setBusy]     = useState(false)
@@ -30,7 +32,7 @@ export function AskPanel({
             const answer = await onAsk(question, history)
             setThread(t => [...t, { role: "assistant", content: answer }])
         } catch (e) {
-            setError((e as Error).message || "Something went wrong.")
+            setError((e as Error).message || t.askPanel.genericError)
             setThread(t => t.slice(0, -1))
             setInput(question)
         } finally {
@@ -69,7 +71,7 @@ export function AskPanel({
                             </div>
                         </div>
                     ))}
-                    {busy && <div className="text-xs text-[var(--color-muted)] px-1">Thinking…</div>}
+                    {busy && <div className="text-xs text-[var(--color-muted)] px-1">{t.askPanel.thinking}</div>}
                 </div>
             )}
 
@@ -84,7 +86,7 @@ export function AskPanel({
                 />
                 <button type="submit" disabled={busy || !input.trim()}
                     className="px-4 py-2 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] text-sm font-medium rounded-lg transition-colors">
-                    {busy ? "…" : "Ask"}
+                    {busy ? "…" : t.askPanel.ask}
                 </button>
             </form>
         </div>

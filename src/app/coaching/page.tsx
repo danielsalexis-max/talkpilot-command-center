@@ -7,11 +7,13 @@ import { supabase, type Scorecard } from "@/lib/supabase"
 import { ScoreRing } from "@/components/ScoreRing"
 import { PracticeTab } from "@/components/orgTabs"
 import { PageSkeleton } from "@/components/homeStates"
+import { useLocale } from "@/i18n/LocaleProvider"
 
 interface MemberInfo { user_id: string; email: string | null; full_name: string | null }
 
 export default function CoachingPage() {
     const router = useRouter()
+    const { t, intl } = useLocale()
     const [orgId, setOrgId]     = useState<string | null>(null)
     const [queue, setQueue]     = useState<Scorecard[]>([])
     const [members, setMembers] = useState<MemberInfo[]>([])
@@ -44,32 +46,32 @@ export default function CoachingPage() {
     }
 
     const byUser = useMemo(() => new Map(members.map(m => [m.user_id, m])), [members])
-    const label = (id: string) => byUser.get(id)?.full_name || byUser.get(id)?.email || "Rep"
+    const label = (id: string) => byUser.get(id)?.full_name || byUser.get(id)?.email || t.common.rep
 
     if (loading) return <PageSkeleton rows={2} />
-    if (!orgId) return <div className="text-red-600 text-sm">No org membership found.</div>
+    if (!orgId) return <div className="text-red-600 text-sm">{t.common.noOrgMembership}</div>
 
     return (
         <div className="space-y-8">
             <div>
-                <h1 className="text-2xl font-bold text-[var(--color-text)]">Review</h1>
+                <h1 className="text-2xl font-bold text-[var(--color-text)]">{t.coaching.title}</h1>
                 <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                    Flagged calls worth your eyes, notes reps see in their app, and practice you assign — grades roll back up here.
+                    {t.coaching.sub}
                 </p>
             </div>
 
             {/* Review queue */}
             <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
                 <div className="flex items-center gap-2 mb-3">
-                    <h2 className="text-sm font-semibold text-[var(--color-text)]">Review queue</h2>
+                    <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.coaching.queueTitle}</h2>
                     {queue.length > 0 && (
                         <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700">{queue.length}</span>
                     )}
                 </div>
                 {queue.length === 0 && (
                     <p className="text-sm text-[var(--color-muted)] py-4 text-center">
-                        Nothing needs review — no guardrail breaches or low-adherence calls in 30 days.
-                        That&apos;s the goal. <Link href="/playbook" className="text-[var(--color-accent-deep)] font-medium hover:underline">Tighten the playbook →</Link>
+                        {t.coaching.queueEmpty}{" "}
+                        <Link href="/playbook" className="text-[var(--color-accent-deep)] font-medium hover:underline">{t.coaching.tightenPlaybook}</Link>
                     </p>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -80,14 +82,14 @@ export default function CoachingPage() {
                                 className={`rounded-lg border border-[var(--color-border)] border-l-[3px] ${hasBreach ? "border-l-red-500" : "border-l-amber-400"} px-4 py-3 hover:bg-[var(--color-hover)] transition-colors flex items-center justify-between gap-3`}>
                                 <div className="min-w-0">
                                     <p className="text-sm font-medium text-[var(--color-text)] truncate">
-                                        {c.session_title || (c.started_at ? new Date(c.started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Scored call")}
+                                        {c.session_title || (c.started_at ? new Date(c.started_at).toLocaleString(intl, { dateStyle: "medium", timeStyle: "short" }) : t.common.scoredCall)}
                                     </p>
                                     <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
                                         {label(c.user_id)}
                                         {hasBreach
-                                            ? ` · ${c.guardrail_breaches.length} breach${c.guardrail_breaches.length > 1 ? "es" : ""}`
-                                            : ` · adherence ${c.adherence_score}`}
-                                        {c.started_at ? ` · ${new Date(c.started_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}
+                                            ? ` · ${t.coaching.nBreaches(c.guardrail_breaches.length)}`
+                                            : ` · ${t.coaching.adherenceN(c.adherence_score ?? 0)}`}
+                                        {c.started_at ? ` · ${new Date(c.started_at).toLocaleDateString(intl, { month: "short", day: "numeric" })}` : ""}
                                     </p>
                                 </div>
                                 <ScoreRing score={c.overall_score} size="sm" />
@@ -99,7 +101,7 @@ export default function CoachingPage() {
 
             {/* Practice assignment (shared component; grades roll up automatically) */}
             <div>
-                <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">Practice</h2>
+                <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">{t.coaching.practice}</h2>
                 <PracticeTab orgId={orgId} />
             </div>
         </div>

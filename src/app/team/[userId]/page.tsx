@@ -6,6 +6,7 @@ import { supabase, askClaude, type Scorecard } from "@/lib/supabase"
 import { ScoreBadge } from "@/components/ScoreRing"
 import { SearchBox } from "@/components/SearchBox"
 import { AskPanel } from "@/components/AskPanel"
+import { useLocale } from "@/i18n/LocaleProvider"
 import Link from "next/link"
 
 function buildRepContext(cards: Scorecard[]): string {
@@ -24,15 +25,9 @@ function buildRepContext(cards: Scorecard[]): string {
         "answer, say so.\n\nSCORES ARE 0–100. REP'S RECENT SCORED CALLS (newest first):\n" + lines
 }
 
-const REP_SUGGESTIONS = [
-    "What does this rep keep getting wrong?",
-    "What are they consistently good at?",
-    "What one thing should they focus on next week?",
-    "Any recurring guardrail risks?",
-]
-
 export default function RepPage() {
     const { userId } = useParams<{ userId: string }>()
+    const { t, intl } = useLocale()
     const [cards, setCards]   = useState<Scorecard[]>([])
     const [query, setQuery]   = useState("")
     const [loading, setLoading] = useState(true)
@@ -61,7 +56,7 @@ export default function RepPage() {
         }
     }
 
-    if (loading) return <div className="text-[var(--color-text-secondary)] text-sm">Loading…</div>
+    if (loading) return <div className="text-[var(--color-text-secondary)] text-sm">{t.common.loading}</div>
 
     const s = query.trim().toLowerCase()
     const shown = s
@@ -72,23 +67,23 @@ export default function RepPage() {
         <div className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                    <Link href="/team" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] text-sm transition-colors">← Team</Link>
-                    <h1 className="text-2xl font-semibold text-[var(--color-text)]">Rep History</h1>
+                    <Link href="/team" className="text-[var(--color-text-secondary)] hover:text-[var(--color-text)] text-sm transition-colors">{t.repPage.backTeam}</Link>
+                    <h1 className="text-2xl font-semibold text-[var(--color-text)]">{t.repPage.title}</h1>
                 </div>
-                {cards.length > 5 && <SearchBox value={query} onChange={setQuery} placeholder="Search sessions…" className="w-56" />}
+                {cards.length > 5 && <SearchBox value={query} onChange={setQuery} placeholder={t.repPage.searchSessions} className="w-56" />}
             </div>
 
             {cards.length > 0 && (
                 <AskPanel
-                    heading="Ask about this rep"
-                    placeholder="Ask about this rep's patterns across their calls…"
-                    suggestions={REP_SUGGESTIONS}
+                    heading={t.repPage.askHeading}
+                    placeholder={t.repPage.askPlaceholder}
+                    suggestions={t.repPage.suggestions}
                     onAsk={(q, h) => askClaude(buildRepContext(cards), q, h)}
                 />
             )}
 
             {shown.length === 0 && (
-                <p className="text-sm text-[var(--color-text-secondary)]">{s ? `No sessions match “${query}”.` : "No scored sessions found for this rep."}</p>
+                <p className="text-sm text-[var(--color-text-secondary)]">{s ? t.repPage.noSessionsMatch(query) : t.repPage.noSessions}</p>
             )}
 
             <div className="space-y-2">
@@ -102,19 +97,19 @@ export default function RepPage() {
                             <span className="text-sm font-medium text-[var(--color-text)] truncate">
                                 {card.session_title
                                     ?? (card.started_at
-                                        ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
-                                        : "Session")}
+                                        ? new Date(card.started_at).toLocaleString(intl, { dateStyle: "medium", timeStyle: "short" })
+                                        : t.repPage.session)}
                             </span>
                             <span className="text-xs text-[var(--color-text-secondary)]">
-                                {card.started_at ? new Date(card.started_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Unknown time"}
-                                {card.duration_minutes ? ` · ${card.duration_minutes} min` : ""}
-                                {card.talk_ratio != null ? ` · ${Math.round(card.talk_ratio * 100)}% talk ratio` : ""}
-                                {card.guardrail_breaches?.length ? ` · ⚠ ${card.guardrail_breaches.length} guardrail breach${card.guardrail_breaches.length > 1 ? "es" : ""}` : ""}
+                                {card.started_at ? new Date(card.started_at).toLocaleString(intl, { dateStyle: "medium", timeStyle: "short" }) : t.repPage.unknownTime}
+                                {card.duration_minutes ? ` · ${t.common.min(card.duration_minutes)}` : ""}
+                                {card.talk_ratio != null ? ` · ${t.repPage.talkRatio(Math.round(card.talk_ratio * 100))}` : ""}
+                                {card.guardrail_breaches?.length ? ` · ${t.repPage.guardrailBreaches(card.guardrail_breaches.length)}` : ""}
                             </span>
                         </div>
                         <div className="flex items-center gap-4 shrink-0">
-                            <ScoreBadge label="Overall"   score={card.overall_score}   />
-                            <ScoreBadge label="Adherence" score={card.adherence_score} />
+                            <ScoreBadge label={t.common.overall}   score={card.overall_score}   />
+                            <ScoreBadge label={t.common.adherence} score={card.adherence_score} />
                             <svg className="w-4 h-4 text-[var(--color-muted)] hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>

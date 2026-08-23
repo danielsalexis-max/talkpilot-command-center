@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { VerdictPill, GradePill } from "@/components/ScoreRing"
+import { useLocale } from "@/i18n/LocaleProvider"
 
 interface ObjectionPattern {
     objection_text: string
@@ -24,6 +25,7 @@ interface DigestRow {
 /// accuracy slippage and objection patterns are exactly what the attention
 /// surface is for, and a separate nav item made owners hunt for them.
 export function InsightsSections() {
+    const { t, intl } = useLocale()
     const [objectionPatterns, setObjectionPatterns] = useState<ObjectionPattern[]>([])
     const [claimSummary, setClaimSummary]           = useState<ClaimSummary[]>([])
     const [digests, setDigests]                     = useState<DigestRow[]>([])
@@ -117,7 +119,7 @@ export function InsightsSections() {
             {/* Claim accuracy */}
             {totalClaims > 0 && (
                 <div>
-                    <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">Factual accuracy — 30 days ({totalClaims} claims)</h2>
+                    <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">{t.insights.accuracyTitle(totalClaims)}</h2>
                     <div className="flex flex-wrap gap-3">
                         {claimSummary.map(c => (
                             <div key={c.verdict} className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 flex flex-col items-center gap-2 min-w-[100px] flex-1 sm:flex-none sm:min-w-[120px] shadow-sm">
@@ -125,7 +127,7 @@ export function InsightsSections() {
                                     {Math.round((c.count / totalClaims) * 100)}%
                                 </span>
                                 <VerdictPill verdict={c.verdict} />
-                                <span className="text-xs text-[var(--color-muted)]">{c.count} claims</span>
+                                <span className="text-xs text-[var(--color-muted)]">{t.insights.nClaims(c.count)}</span>
                             </div>
                         ))}
                     </div>
@@ -135,7 +137,7 @@ export function InsightsSections() {
             {/* Objection patterns */}
             {objectionPatterns.length > 0 && (
                 <div>
-                    <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">Objection patterns — 30 days</h2>
+                    <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">{t.insights.objectionPatterns}</h2>
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] divide-y divide-[var(--color-border)] shadow-sm">
                         {objectionPatterns.map((o, i) => (
                             <div key={i} className="flex items-center justify-between px-4 py-3 gap-4">
@@ -155,20 +157,20 @@ export function InsightsSections() {
             {/* Digests */}
             <div>
                 <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm font-semibold text-[var(--color-text)]">Weekly digests</h2>
+                    <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.insights.weeklyDigests}</h2>
                     <button
                         onClick={generateDigest}
                         disabled={generating}
                         className="text-xs px-3 py-1.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] rounded-lg transition-colors font-medium"
                     >
-                        {generating ? "Generating…" : "Generate now"}
+                        {generating ? t.insights.generating : t.insights.generateNow}
                     </button>
                 </div>
 
                 {digests.length === 0 && (
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] px-6 py-8 text-center shadow-sm">
-                        <p className="text-sm text-[var(--color-text-secondary)]">No digests yet.</p>
-                        <p className="text-xs text-[var(--color-muted)] mt-1">Click &ldquo;Generate now&rdquo; to create the first one, or wait for the weekly cron.</p>
+                        <p className="text-sm text-[var(--color-text-secondary)]">{t.insights.noDigests}</p>
+                        <p className="text-xs text-[var(--color-muted)] mt-1">{t.insights.noDigestsSub}</p>
                     </div>
                 )}
 
@@ -177,12 +179,12 @@ export function InsightsSections() {
                         <div key={d.id} className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
                             <div className="flex items-center justify-between mb-3">
                                 <span className="text-sm font-semibold text-[var(--color-text)]">
-                                    {new Date(d.period_start + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                    {new Date(d.period_start + "T00:00:00").toLocaleDateString(intl, { month: "short", day: "numeric" })}
                                     {" – "}
-                                    {new Date(d.period_end + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                                    {new Date(d.period_end + "T00:00:00").toLocaleDateString(intl, { month: "short", day: "numeric", year: "numeric" })}
                                 </span>
                                 <span className="text-xs text-[var(--color-muted)]">
-                                    {(d.stats as Record<string, number>)?.session_count ?? 0} sessions
+                                    {t.insights.nSessions((d.stats as Record<string, number>)?.session_count ?? 0)}
                                 </span>
                             </div>
                             <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed whitespace-pre-wrap">{d.summary}</p>
