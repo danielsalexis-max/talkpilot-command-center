@@ -19,6 +19,14 @@ const CARD = "bg-[var(--color-surface)] rounded-xl border border-[var(--color-bo
 
 const SSO_ENABLED = process.env.NEXT_PUBLIC_SSO_ENABLED === "true"
 
+/// Security-sensitive admin actions must leave a trail. Claiming a domain or
+/// minting a provisioning token are exactly the events a breach review asks
+/// about — they were invisible until now.
+async function audit(orgId: string, action: string, meta: Record<string, unknown>) {
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from("org_audit_log").insert({ org_id: orgId, actor_id: user?.id ?? null, action, meta })
+}
+
 function Msg({ msg, error }: { msg: string | null; error?: boolean }) {
     if (!msg) return null
     return <p className={`text-xs ${error ? "text-red-600" : "text-emerald-600"}`}>{msg}</p>
@@ -29,7 +37,7 @@ function Msg({ msg, error }: { msg: string | null; error?: boolean }) {
 // enrols the signed-in admin's own account; org-wide enforcement is a policy
 // question we don't have a buyer for yet, so it isn't built.
 
-function MfaCard() {
+function MfaCard({ orgId }: { orgId?: string }) {
     const t = useT()
     const [factors, setFactors] = useState<Array<{ id: string; status: string; friendly_name?: string }>>([])
     const [qr, setQr] = useState<string | null>(null)
@@ -63,6 +71,7 @@ function MfaCard() {
         setBusy(false)
         if (error) { setMsg(t.security.mfaBadCode); setIsErr(true); return }
         setMsg(t.security.mfaOn); setIsErr(false)
+        if (orgId) await audit(orgId, "mfa.enabled", {})
         setQr(null); setSecret(null); setFactorId(null); setCode("")
         await load()
     }
@@ -72,7 +81,9 @@ function MfaCard() {
         const { error } = await supabase.auth.mfa.unenroll({ factorId: id })
         setBusy(false)
         if (error) { setMsg(error.message); setIsErr(true); return }
-        setMsg(t.security.mfaOff); setIsErr(false); await load()
+        setMsg(t.security.mfaOff); setIsErr(false)
+        if (orgId) await audit(orgId, "mfa.disabled", {})
+        await load()
     }
 
     const active = factors.filter(f => f.status === "verified")
@@ -145,11 +156,14 @@ function SsoCard({ orgId }: { orgId: string }) {
             setMsg(error.message.includes("duplicate") ? t.security.ssoDuplicate : t.security.ssoAddFailed)
             setIsErr(true); return
         }
+        await audit(orgId, "sso.domain_claimed", { domain: d })
         setMsg(t.security.ssoClaimed); setIsErr(false); setDomain(""); await load()
     }
 
     async function remove(id: string) {
+        const gone = rows.find(r => r.id === id)?.domain
         await supabase.from("org_sso_domains").delete().eq("id", id)
+        await audit(orgId, "sso.domain_removed", { domain: gone })
         await load()
     }
 
@@ -219,11 +233,14 @@ function ScimCard({ orgId }: { orgId: string }) {
         const { error } = await supabase.from("org_scim_tokens")
             .insert({ org_id: orgId, token_hash: hash, label: label.trim() || t.security.scimDefaultLabel })
         if (error) { setMsg(t.security.scimCreateFailed); setIsErr(true); return }
+        await audit(orgId, "scim.token_created", { label: label.trim() || t.security.scimDefaultLabel })
         setFresh(token); setLabel(""); setMsg(null); await load()
     }
 
     async function revoke(id: string) {
+        const gone = rows.find(r => r.id === id)?.label
         await supabase.from("org_scim_tokens").update({ revoked_at: new Date().toISOString() }).eq("id", id)
+        await audit(orgId, "scim.token_revoked", { label: gone })
         await load()
     }
 
@@ -320,7 +337,7 @@ function ExportCard({ org }: { org: OrgInfo }) {
 export function SecurityTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     return (
         <div className="space-y-6 max-w-3xl">
-            <MfaCard />
+            <MfaCard orgId={orgId} />
             <SsoCard orgId={orgId} />
             <ScimCard orgId={orgId} />
             <ExportCard org={org} />
