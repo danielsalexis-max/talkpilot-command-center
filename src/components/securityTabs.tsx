@@ -132,6 +132,28 @@ function MfaCard({ orgId }: { orgId?: string }) {
     )
 }
 
+/// Locked features stay visible with a reason and a way out (D-181). Hiding
+/// them entirely means an admin evaluating TalkPilot never learns SSO exists;
+/// showing the door and who opens it is how it turns into a conversation.
+function EnterpriseLock({ title, body }: { title: string; body: string }) {
+    const t = useT()
+    return (
+        <div className={CARD + " space-y-3 opacity-95"}>
+            <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">{title}</h3>
+                <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded-full bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)]">
+                    {t.security.enterpriseBadge}
+                </span>
+            </div>
+            <p className="text-xs text-[var(--color-text-secondary)]">{body}</p>
+            <a href="mailto:hello@talkpilot.co?subject=Enterprise%20—%20SSO%20%2F%20SCIM"
+               className="inline-block text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">
+                {t.security.enterpriseTalk}
+            </a>
+        </div>
+    )
+}
+
 // ── SSO domains ─────────────────────────────────────────────────────────────
 
 function SsoCard({ orgId }: { orgId: string }) {
@@ -335,11 +357,24 @@ function ExportCard({ org }: { org: OrgInfo }) {
 }
 
 export function SecurityTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
+    const t = useT()
+    const [ent, setEnt] = useState<{ sso: boolean; scim: boolean } | null>(null)
+
+    useEffect(() => {
+        (async () => {
+            const [sso, scim] = await Promise.all([
+                supabase.rpc("org_has_entitlement", { p_org: orgId, p_key: "sso" }),
+                supabase.rpc("org_has_entitlement", { p_org: orgId, p_key: "scim" }),
+            ])
+            setEnt({ sso: sso.data === true, scim: scim.data === true })
+        })()
+    }, [orgId])
+
     return (
         <div className="space-y-6 max-w-3xl">
             <MfaCard orgId={orgId} />
-            <SsoCard orgId={orgId} />
-            <ScimCard orgId={orgId} />
+            {ent?.sso  ? <SsoCard  orgId={orgId} /> : ent && <EnterpriseLock title={t.security.ssoTitle}  body={t.security.enterpriseLockedSso}  />}
+            {ent?.scim ? <ScimCard orgId={orgId} /> : ent && <EnterpriseLock title={t.security.scimTitle} body={t.security.enterpriseLockedScim} />}
             <ExportCard org={org} />
         </div>
     )

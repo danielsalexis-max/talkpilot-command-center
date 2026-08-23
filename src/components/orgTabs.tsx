@@ -8,7 +8,7 @@ import { SearchBox } from "@/components/SearchBox"
 import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
 import { rollUpGuardrails } from "@/lib/guardrails"
 import { useLocale, useT } from "@/i18n/LocaleProvider"
-import type { Dict } from "@/i18n"
+import { clientLocale, type Dict } from "@/i18n"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -101,6 +101,53 @@ function SectionHeader({ title, action }: { title: string; action?: React.ReactN
         <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-[var(--color-text)]">{title}</h2>
             {action}
+        </div>
+    )
+}
+
+/// Upload is the path we want people on; typing it in by hand is the escape
+/// hatch (D-180). Showing both at full weight made every one of these tabs read
+/// as "here are six boxes, good luck" — so the manual form collapses behind one
+/// line of text and opens on demand.
+///
+/// `forceOpen` matters: the moment a file is parsed, its contents land in these
+/// very fields, so the section must open by itself and retitle to "Review &
+/// save". A collapsed section hiding a freshly-parsed document would look like
+/// the upload silently failed.
+function ManualSection({
+    label, openLabel, forceOpen, children,
+}: {
+    label: string
+    openLabel?: string
+    forceOpen?: boolean
+    children: React.ReactNode
+}) {
+    const [open, setOpen] = useState(false)
+    const isOpen = open || !!forceOpen
+
+    if (!isOpen) {
+        return (
+            <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="w-full text-center py-2 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-accent-deep)] transition-colors"
+            >
+                {label} ↓
+            </button>
+        )
+    }
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-[var(--color-text-secondary)]">{openLabel ?? label}</span>
+                {!forceOpen && (
+                    <button type="button" onClick={() => setOpen(false)}
+                        className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors">
+                        ↑
+                    </button>
+                )}
+            </div>
+            {children}
         </div>
     )
 }
@@ -493,13 +540,13 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                 subtitle={t.tabs.knowledge.uploadSub}
             />
 
+            <ManualSection
+                label={t.tabs.knowledge.orAddManually}
+                openLabel={content ? t.tabs.knowledge.reviewSave : t.tabs.knowledge.orAddManually}
+                forceOpen={!!content}
+            >
             <div className={CARD + " space-y-4"}>
-                <div>
-                    <h3 className="text-sm font-semibold text-[var(--color-text)]">
-                        {content ? t.tabs.knowledge.reviewSave : t.tabs.knowledge.orAddManually}
-                    </h3>
-                    {content && <p className="text-xs text-emerald-600 mt-0.5">{t.tabs.knowledge.fileLoaded}</p>}
-                </div>
+                {content && <p className="text-xs text-emerald-600">{t.tabs.knowledge.fileLoaded}</p>}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="col-span-2 space-y-1">
                         <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.title}</label>
@@ -529,6 +576,7 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                     <Msg msg={msg} error={isErr} />
                 </div>
             </div>
+            </ManualSection>
 
             <div>
                 <div className="flex items-center justify-between gap-4 mb-3">
@@ -790,9 +838,9 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
             )}
 
             {/* Manual add */}
+            <ManualSection label={t.tabs.objections.addManually}>
             <div className={CARD + " space-y-4"}>
                 <div>
-                    <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.objections.addManually}</h3>
                     <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
                         {t.tabs.objections.addManuallySub1}<span className="font-medium text-[var(--color-text-secondary)]">{t.tabs.objections.addManuallySubBold}</span>{t.tabs.objections.addManuallySub2}
                     </p>
@@ -839,6 +887,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                     <Msg msg={msg} error={isErr} />
                 </div>
             </div>
+            </ManualSection>
 
             <div>
                 <div className="flex items-center justify-between gap-4 mb-3">
@@ -1047,10 +1096,10 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                     </div>
                     <div className="flex items-center gap-2">
                         <input ref={extractFileRef} type="file" accept=".txt,.md,.csv,.pdf" className="hidden" onChange={handleExtractFile} />
-                        <button className={BTN_GHOST} onClick={() => extractFileRef.current?.click()} disabled={extracting}>
+                        <button className={BTN_PRIMARY} onClick={() => extractFileRef.current?.click()} disabled={extracting}>
                             {extracting ? t.tabs.playbooks.extracting : t.tabs.playbooks.importFromDoc}
                         </button>
-                        <button className={BTN_PRIMARY} onClick={() => {
+                        <button className={BTN_GHOST} onClick={() => {
                             if (creating) {
                                 setCreating(false); setEditingId(null)
                                 setPbName(""); setMethodology("custom")
@@ -1428,7 +1477,14 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
         const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/invite-member`, {
             method: "POST",
             headers: { "Authorization": `Bearer ${session?.access_token}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ org_id: orgId, email: inviteEmail.trim(), role: inviteRole }),
+            // invite-member has had Spanish copy all along but defaults to
+            // English when `language` is absent — and nobody was sending it, so
+            // every invite went out in English (D-181). The recipient has no
+            // account yet, so the admin's locale is the best signal we have.
+            body: JSON.stringify({
+                org_id: orgId, email: inviteEmail.trim(), role: inviteRole,
+                language: clientLocale(),
+            }),
         })
         setInviting(false)
         if (res.ok) {
@@ -2037,13 +2093,12 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                         {t.tabs.dna.sub}
                     </p>
                 </div>
-                <div>
-                    <label className="text-xs font-medium text-[var(--color-text-secondary)] block mb-1">{t.tabs.dna.playbookName}</label>
+                <ManualSection label={t.tabs.dna.playbookName} forceOpen={!!expertName}>
                     <input type="text" placeholder={t.tabs.dna.playbookNamePlaceholder}
                         value={expertName} onChange={e => setExpertName(e.target.value)}
                         className={INPUT} />
                     <p className="text-xs text-[var(--color-muted)] mt-1">{t.tabs.dna.playbookNameHint}</p>
-                </div>
+                </ManualSection>
                 <div className="flex items-center gap-3">
                     <div className="flex-1 h-2 bg-[var(--color-line-soft)] rounded-full overflow-hidden">
                         <div className="h-full bg-[var(--color-accent)] transition-all rounded-full"

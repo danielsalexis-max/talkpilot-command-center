@@ -442,6 +442,10 @@ export const es: Dict = {
         mfaOn: "La autenticación en dos pasos está activa en tu cuenta.",
         mfaOff: "Autenticación en dos pasos desactivada.",
 
+        enterpriseBadge: "Enterprise",
+        enterpriseLockedSso: "El inicio de sesión único es parte de Enterprise. Escríbenos y lo activamos para tu espacio de trabajo — ya está construido y toma minutos.",
+        enterpriseLockedScim: "La sincronización de directorio es parte de Enterprise. Escríbenos y la activamos para tu espacio de trabajo.",
+        enterpriseTalk: "Escríbenos →",
         ssoTitle: "Inicio de sesión único (SAML)",
         ssoSub: "Reclama los dominios de correo que tu empresa posee. Quien inicie sesión desde un dominio reclamado será enviado a tu proveedor de identidad en lugar de usar una contraseña.",
         ssoDormant: "Los dominios se guardan ahora y entran en vigor cuando se active SAML para este espacio de trabajo — no habrá que volver a ingresarlos.",

@@ -452,6 +452,10 @@ export const en = {
         mfaOn: "Two-factor authentication is on for your account.",
         mfaOff: "Two-factor removed.",
 
+        enterpriseBadge: "Enterprise",
+        enterpriseLockedSso: "Single sign-on is part of Enterprise. Talk to us and we'll switch it on for your workspace — the setup is already built and takes minutes.",
+        enterpriseLockedScim: "Directory sync is part of Enterprise. Talk to us and we'll switch it on for your workspace.",
+        enterpriseTalk: "Talk to us →",
         ssoTitle: "Single sign-on (SAML)",
         ssoSub: "Claim the email domains your company owns. Anyone signing in from a claimed domain is sent to your identity provider instead of a password.",
         ssoDormant: "Claims are saved now and take effect once SAML is switched on for this workspace — domains added here need no re-entry then.",
