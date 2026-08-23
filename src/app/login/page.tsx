@@ -34,7 +34,7 @@ export default function LoginPage() {
             } else {
                 const { error: authErr } = await supabase.auth.signUp({ email, password })
                 if (authErr) { setError(authErr.message); return }
-                setInfo("Account created! Check your email to confirm, or sign in now if email confirmation is disabled.")
+                setInfo(t.login.accountCreated)
                 setMode("signin"); setPassword(""); setConfirm("")
             }
         } finally {
@@ -56,15 +56,14 @@ export default function LoginPage() {
         <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center px-4">
             <div className="w-full max-w-sm space-y-6">
                 <div className="text-center">
-                    <div className="w-12 h-12 bg-[var(--color-accent)] rounded-2xl mx-auto mb-4 flex items-center justify-center">
-                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                        </svg>
-                    </div>
+                    {/* The brand mark, not a generic mic glyph — this is the first
+                        screen a customer sees. eslint-disable-next-line @next/next/no-img-element */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/brand-mark.png" alt="TalkPilot" className="w-12 h-12 object-contain mx-auto mb-4" />
                     <h1 className="text-2xl font-semibold text-[var(--color-text)]">
                         TalkPilot <span className="text-[var(--color-accent)]">Teams</span>
                     </h1>
-                    <p className="text-sm text-[var(--color-text-secondary)] mt-1">Command Center</p>
+                    <p className="text-sm text-[var(--color-text-secondary)] mt-1">{t.login.commandCenter}</p>
                 </div>
 
                 <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 shadow-sm space-y-4">
@@ -109,14 +108,14 @@ export default function LoginPage() {
                         {mode === "signin" && (
                             <button type="button" onClick={forgotPassword}
                                 className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors">
-                                Forgot password?
+                                {t.login.forgotPassword}
                             </button>
                         )}
                     </form>
 
                     <div className="flex items-center gap-3">
                         <span className="h-px flex-1 bg-[var(--color-border)]" />
-                        <span className="text-[11px] text-[var(--color-muted)]">or</span>
+                        <span className="text-[11px] text-[var(--color-muted)]">{t.common.or}</span>
                         <span className="h-px flex-1 bg-[var(--color-border)]" />
                     </div>
                     <button
@@ -124,7 +123,7 @@ export default function LoginPage() {
                         className="w-full py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors flex items-center justify-center gap-2.5"
                     >
                         <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.8 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.4 28.7a14.5 14.5 0 0 1 0-9.4l-7.8-6.1a24 24 0 0 0 0 21.6l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2.1 1.4-4.7 2.3-7.7 2.3-6.3 0-11.7-3.7-13.6-9l-7.8 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
-                        Continue with Google
+                        {t.common.continueWithGoogle}
                     </button>
 
                     <p className="text-center text-xs text-[var(--color-text-secondary)]">
@@ -139,9 +138,9 @@ export default function LoginPage() {
                 </div>
 
                 <p className="text-center text-xs text-[var(--color-text-secondary)]">
-                    New team?{" "}
+                    {t.login.newTeam}{" "}
                     <a href="/start" className="text-[var(--color-accent-deep)] font-semibold hover:underline">
-                        Start your 14-day free trial →
+                        {t.login.startTrial}
                     </a>
                 </p>
             </div>
