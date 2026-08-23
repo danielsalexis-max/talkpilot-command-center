@@ -117,6 +117,14 @@ export const en = {
     },
 
     login: {
+        mfaStepTitle: "One more step",
+        mfaStepSub: "Enter the 6-digit code from your authenticator app.",
+        mfaVerify: "Verify",
+        mfaBadCode: "That code didn't match. Try the next one your app shows.",
+        mfaBackToSignIn: "← Back to sign in",
+        ssoButton: "Sign in with SSO",
+        ssoNeedsEmail: "Enter your work email above first.",
+        ssoNotConfigured: "Single sign-on isn't set up for that domain. Use your email and password, or ask your admin.",
         commandCenter: "Command Center",
         signingIn: "Signing in…",
         creatingAccount: "Creating account…",

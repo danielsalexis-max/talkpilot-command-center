@@ -9,6 +9,12 @@ export default function LoginPage() {
     const router = useRouter()
     const t = useT()
     const [mode, setMode]         = useState<"signin" | "signup">("signin")
+    // Second-factor step (D-182). Enrolling TOTP did nothing at sign-in: the
+    // password alone produced a full AAL1 session, so MFA was enrollable but
+    // bypassed — worse than no MFA, because it looks like protection.
+    const [mfaFactorId, setMfaFactorId] = useState<string | null>(null)
+    const [mfaCode, setMfaCode]         = useState("")
+    const [ssoChecking, setSsoChecking] = useState(false)
     const [email, setEmail]       = useState("")
     const [password, setPassword] = useState("")
     const [confirm, setConfirm]   = useState("")
@@ -30,6 +36,15 @@ export default function LoginPage() {
             if (mode === "signin") {
                 const { error: authErr } = await supabase.auth.signInWithPassword({ email, password })
                 if (authErr) { setError(authErr.message); return }
+
+                // A verified TOTP factor means this session is only AAL1 until
+                // the code is entered. Stop here rather than letting them in.
+                const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+                if (aal?.nextLevel === "aal2" && aal.nextLevel !== aal.currentLevel) {
+                    const { data: factors } = await supabase.auth.mfa.listFactors()
+                    const verified = (factors?.totp ?? []).find(f => f.status === "verified")
+                    if (verified) { setMfaFactorId(verified.id); return }
+                }
                 router.replace("/")
             } else {
                 const { error: authErr } = await supabase.auth.signUp({ email, password })
@@ -40,6 +55,36 @@ export default function LoginPage() {
         } finally {
             setLoading(false)
         }
+    }
+
+    /// Completes the second factor. Until this succeeds the session is AAL1 and
+    /// the user never reaches the dashboard.
+    async function submitMfa(e: React.FormEvent) {
+        e.preventDefault()
+        if (!mfaFactorId || mfaCode.trim().length < 6) return
+        setLoading(true); setError(null)
+        try {
+            const { data: ch, error: chErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId })
+            if (chErr) { setError(chErr.message); return }
+            const { error: vErr } = await supabase.auth.mfa.verify({
+                factorId: mfaFactorId, challengeId: ch.id, code: mfaCode.trim(),
+            })
+            if (vErr) { setError(t.login.mfaBadCode); return }
+            router.replace("/")
+        } finally { setLoading(false) }
+    }
+
+    /// If the email's domain is claimed by an org with SSO, hand off to their
+    /// identity provider instead of asking for a password we don't own.
+    async function continueWithSso() {
+        const domain = email.split("@")[1]?.trim().toLowerCase()
+        if (!domain) { setError(t.login.ssoNeedsEmail); return }
+        setSsoChecking(true); setError(null)
+        try {
+            const { data, error: err } = await supabase.auth.signInWithSSO({ domain })
+            if (err || !data?.url) { setError(t.login.ssoNotConfigured); return }
+            window.location.assign(data.url)
+        } finally { setSsoChecking(false) }
     }
 
     async function forgotPassword() {
@@ -67,6 +112,30 @@ export default function LoginPage() {
                 </div>
 
                 <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 shadow-sm space-y-4">
+                {mfaFactorId ? (
+                    <form onSubmit={submitMfa} className="space-y-3">
+                        <div>
+                            <p className="text-sm font-semibold text-[var(--color-text)]">{t.login.mfaStepTitle}</p>
+                            <p className="text-xs text-[var(--color-text-secondary)] mt-1">{t.login.mfaStepSub}</p>
+                        </div>
+                        <input
+                            inputMode="numeric" autoFocus placeholder="000000" value={mfaCode}
+                            onChange={e => setMfaCode(e.target.value)}
+                            className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm font-mono tracking-widest text-center text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                        />
+                        {error && <p className="text-xs text-red-600">{error}</p>}
+                        <button type="submit" disabled={loading || mfaCode.trim().length < 6}
+                            className="w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors">
+                            {loading ? t.login.signingIn : t.login.mfaVerify}
+                        </button>
+                        <button type="button"
+                            onClick={async () => { await supabase.auth.signOut(); setMfaFactorId(null); setMfaCode(""); setError(null) }}
+                            className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors">
+                            {t.login.mfaBackToSignIn}
+                        </button>
+                    </form>
+                ) : (
+                <>
                     <form onSubmit={handleSubmit} className="space-y-3">
                         <input
                             type="email"
@@ -125,6 +194,13 @@ export default function LoginPage() {
                         <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.8 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.4 28.7a14.5 14.5 0 0 1 0-9.4l-7.8-6.1a24 24 0 0 0 0 21.6l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2.1 1.4-4.7 2.3-7.7 2.3-6.3 0-11.7-3.7-13.6-9l-7.8 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
                         {t.common.continueWithGoogle}
                     </button>
+                    <button
+                        onClick={continueWithSso}
+                        disabled={ssoChecking}
+                        className="w-full py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-muted)] disabled:opacity-50 text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors"
+                    >
+                        {ssoChecking ? t.common.oneMoment : t.login.ssoButton}
+                    </button>
 
                     <p className="text-center text-xs text-[var(--color-text-secondary)]">
                         {mode === "signin" ? t.login.noAccount : t.login.haveAccount}
@@ -135,6 +211,8 @@ export default function LoginPage() {
                             {mode === "signin" ? t.common.createOne : t.common.signIn}
                         </button>
                     </p>
+                </>
+                )}
                 </div>
 
                 <p className="text-center text-xs text-[var(--color-text-secondary)]">

@@ -114,6 +114,14 @@ export const es: Dict = {
     },
 
     login: {
+        mfaStepTitle: "Un paso más",
+        mfaStepSub: "Ingresa el código de 6 dígitos de tu app de autenticación.",
+        mfaVerify: "Verificar",
+        mfaBadCode: "Ese código no coincide. Prueba con el siguiente que muestre tu app.",
+        mfaBackToSignIn: "← Volver a iniciar sesión",
+        ssoButton: "Entrar con SSO",
+        ssoNeedsEmail: "Primero ingresa tu email de trabajo arriba.",
+        ssoNotConfigured: "El inicio de sesión único no está configurado para ese dominio. Usa tu email y contraseña, o consulta a tu admin.",
         commandCenter: "Command Center",
         signingIn: "Iniciando sesión…",
         creatingAccount: "Creando cuenta…",
