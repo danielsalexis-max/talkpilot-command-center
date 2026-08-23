@@ -6,12 +6,13 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useOrg, OrgBanners } from "@/lib/useOrg"
 import { SettingsTab, BillingTab } from "@/components/orgTabs"
+import { SecurityTab, AuditTab } from "@/components/securityTabs"
 import { PageSkeleton } from "@/components/homeStates"
 import { getSkinPref, setSkinPref, type SkinPref } from "@/lib/skin"
 import { useT } from "@/i18n/LocaleProvider"
 import { useState } from "react"
 
-type Tab = "org" | "billing"
+type Tab = "org" | "security" | "audit" | "billing"
 
 function AppearanceCard() {
     const t = useT()
@@ -44,12 +45,15 @@ function SettingsPageInner() {
     const t = useT()
     const { org, orgId, loading, reload } = useOrg()
     const TABS: { key: Tab; label: string }[] = [
-        { key: "org",     label: t.settingsPage.tabOrg     },
-        { key: "billing", label: t.settingsPage.tabBilling },
+        { key: "org",      label: t.settingsPage.tabOrg      },
+        { key: "security", label: t.settingsPage.tabSecurity },
+        { key: "audit",    label: t.settingsPage.tabAudit    },
+        { key: "billing",  label: t.settingsPage.tabBilling  },
     ]
 
     const raw = params.get("tab")
-    const tab: Tab = raw === "billing" ? "billing" : "org"
+    const tab: Tab = raw === "billing" || raw === "security" || raw === "audit"
+        ? (raw as Tab) : "org"
     const setTab = (t: Tab) => router.replace(`/settings?tab=${t}`, { scroll: false })
 
     useEffect(() => {
@@ -99,7 +103,9 @@ function SettingsPageInner() {
                     <AppearanceCard />
                 </div>
             )}
-            {tab === "billing" && <BillingTab orgId={orgId} trialEndsAt={org.trial_ends_at ?? null} />}
+            {tab === "security" && <SecurityTab orgId={orgId} org={org} />}
+            {tab === "audit"    && <AuditTab orgId={orgId} />}
+            {tab === "billing"  && <BillingTab orgId={orgId} trialEndsAt={org.trial_ends_at ?? null} />}
         </div>
     )
 }

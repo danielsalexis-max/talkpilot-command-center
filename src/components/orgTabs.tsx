@@ -1439,14 +1439,27 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
         }
     }
 
+    // Role changes and removals were invisible in the audit trail (D-176) —
+    // the two events a security review asks about most.
+    async function auditWrite(action: string, meta: Record<string, unknown>) {
+        const { data: { user } } = await supabase.auth.getUser()
+        await supabase.from("org_audit_log").insert({ org_id: orgId, actor_id: user?.id ?? null, action, meta })
+    }
+
     async function changeRole(userId: string, role: string) {
+        const before = members.find(m => m.user_id === userId)?.role
         await supabase.from("org_members").update({ role }).eq("org_id", orgId).eq("user_id", userId)
         setMembers(prev => prev.map(m => m.user_id === userId ? { ...m, role } : m))
+        await auditWrite("member.role_changed", { user_id: userId, from: before, to: role })
+        setIsErr(false); setMsg(`Role updated to ${role}.`)
     }
 
     async function removeMember(userId: string) {
+        const who = members.find(m => m.user_id === userId)?.email
         await supabase.from("org_members").delete().eq("org_id", orgId).eq("user_id", userId)
         setMembers(prev => prev.filter(m => m.user_id !== userId))
+        await auditWrite("member.removed", { user_id: userId, email: who })
+        setIsErr(false); setMsg("Removed — their seat is free. Their personal TalkPilot account is untouched.")
     }
 
     const roleColor = (r: string): "indigo"|"yellow"|"slate" =>

@@ -426,6 +426,8 @@ export const es: Dict = {
         title: "Configuración",
         tabOrg: "Organización",
         tabBilling: "Facturación",
+        tabSecurity: "Seguridad y acceso",
+        tabAudit: "Registro de auditoría",
         subPlan: (plan: string) => `Plan ${plan}`,
         subTeamMoved: "— tu equipo ahora vive en",
         subTeamMovedLink: "Equipo",

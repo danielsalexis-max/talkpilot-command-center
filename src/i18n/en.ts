@@ -435,6 +435,8 @@ export const en = {
         title: "Settings",
         tabOrg: "Organization",
         tabBilling: "Billing",
+        tabSecurity: "Security & access",
+        tabAudit: "Audit log",
         subPlan: (plan: string) => `${plan} plan`,
         subTeamMoved: "— your team lives under",
         subTeamMovedLink: "Team",
