@@ -87,3 +87,22 @@ export function guidanceOf(row: {
     const first = row.approved_responses?.[0]?.text
     return first && first.trim() ? first : null
 }
+
+/// `org_objections.severity` accepts exactly two values — the CHECK constraint
+/// is `('normal','critical')`. Everything that writes an objection has to pass
+/// through here (D-190).
+///
+/// Three writers disagreed with the database and all three failed: the manual
+/// "add objection" form defaulted to `"medium"`, the bulk import fell back to
+/// `"medium"`, and `extract-content` asked the model for `low|medium|high|
+/// critical`. Only the starter kits were fixed when this bit us the first time
+/// (D-171), so in production *no objection had ever been created* through the
+/// form or the importer — the insert died on a raw constraint violation that
+/// surfaced to the admin as a database error string.
+///
+/// Anything that is not explicitly critical is normal: an objection's severity
+/// only decides how loudly the coach flags it, and guessing "critical" wrong is
+/// worse than guessing "normal" wrong.
+export function normalizeSeverity(raw: string | null | undefined): "normal" | "critical" {
+    return (raw ?? "").trim().toLowerCase() === "critical" ? "critical" : "normal"
+}

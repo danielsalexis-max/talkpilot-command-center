@@ -195,6 +195,16 @@ export default function LoginPage() {
                         {t.common.continueWithGoogle}
                     </button>
                     <button
+                        onClick={() => supabase.auth.signInWithOAuth({ provider: "azure", options: { scopes: "openid profile email", redirectTo: `${window.location.origin}/` } })}
+                        className="w-full py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors flex items-center justify-center gap-2.5"
+                    >
+                        {/* Microsoft's four-square mark. No Calendars.Read here on purpose:
+                            the panel is an admin surface that never reads a calendar — that
+                            scope belongs to the rep apps (D-187). */}
+                        <svg width="16" height="16" viewBox="0 0 23 23" aria-hidden="true"><path fill="#F25022" d="M0 0h11v11H0z"/><path fill="#7FBA00" d="M12 0h11v11H12z"/><path fill="#00A4EF" d="M0 12h11v11H0z"/><path fill="#FFB900" d="M12 12h11v11H12z"/></svg>
+                        {t.common.continueWithMicrosoft}
+                    </button>
+                    <button
                         onClick={continueWithSso}
                         disabled={ssoChecking}
                         className="w-full py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-muted)] disabled:opacity-50 text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors"

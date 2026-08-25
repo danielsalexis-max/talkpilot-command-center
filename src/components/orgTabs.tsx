@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState, useCallback, useRef } from "react"
-import { embedObjections, reindexObjections, ingestKnowledgeInline, reindexKnowledge, approvedResponsesFrom, guidanceOf } from "@/lib/orgBrain"
+import { embedObjections, reindexObjections, ingestKnowledgeInline, reindexKnowledge, approvedResponsesFrom, guidanceOf, normalizeSeverity } from "@/lib/orgBrain"
 import { supabase } from "@/lib/supabase"
 import { SearchBox } from "@/components/SearchBox"
 import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
@@ -457,7 +457,7 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
     const [query, setQuery]         = useState("")
     const [loading, setLoading]     = useState(true)
     const [title, setTitle]         = useState("")
-    const [kind, setKind]           = useState("product")
+    const [kind, setKind]           = useState("doc")
     const [content, setContent]     = useState("")
     const [uploading, setUploading] = useState(false)
     const [reindexing, setReindexing] = useState<string | null>(null)
@@ -494,7 +494,7 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                 setMsg(t.tabs.knowledge.errorPrefix(failure)); setIsErr(true)
             } else {
                 setMsg(t.tabs.knowledge.added); setIsErr(false)
-                setTitle(""); setContent(""); setKind("product")
+                setTitle(""); setContent(""); setKind("doc")
             }
             await load()
         } finally {
@@ -522,8 +522,8 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
 
     const kindColor = (k: string): "indigo"|"green"|"yellow"|"slate" => {
         const m: Record<string, "indigo"|"green"|"yellow"|"slate"> = {
-            product: "indigo", case_study: "green", competitive: "yellow",
-            methodology: "indigo", objection_playbook: "slate", other: "slate"
+            doc: "slate", pricing: "indigo", battlecard: "yellow", faq: "green",
+            objection: "yellow", compliance: "indigo", case_study: "green",
         }
         return m[k] ?? "slate"
     }
@@ -555,12 +555,18 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                     <div className="space-y-1">
                         <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.type}</label>
                         <select className={INPUT} value={kind} onChange={e => setKind(e.target.value)}>
-                            <option value="product">{t.tabs.knowledge.kindProduct}</option>
+                            {/* These values are the `org_knowledge_kind_check` CHECK constraint,
+                                verbatim. They used to be a different vocabulary entirely
+                                (product / competitive / methodology / objection_playbook /
+                                other) of which only case_study was accepted, so every upload
+                                through this form died on a constraint violation — D-190. */}
+                            <option value="doc">{t.tabs.knowledge.kindDoc}</option>
+                            <option value="pricing">{t.tabs.knowledge.kindPricing}</option>
+                            <option value="battlecard">{t.tabs.knowledge.kindBattlecard}</option>
+                            <option value="faq">{t.tabs.knowledge.kindFaq}</option>
+                            <option value="objection">{t.tabs.knowledge.kindObjection}</option>
+                            <option value="compliance">{t.tabs.knowledge.kindCompliance}</option>
                             <option value="case_study">{t.tabs.knowledge.kindCaseStudy}</option>
-                            <option value="competitive">{t.tabs.knowledge.kindCompetitive}</option>
-                            <option value="methodology">{t.tabs.knowledge.kindMethodology}</option>
-                            <option value="objection_playbook">{t.tabs.knowledge.kindObjectionPlaybook}</option>
-                            <option value="other">{t.tabs.knowledge.kindOther}</option>
                         </select>
                     </div>
                 </div>
@@ -620,7 +626,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
     const [loading, setLoading]               = useState(true)
     const [objText, setObjText]               = useState("")
     const [guidance, setGuidance]             = useState("")
-    const [severity, setSeverity]             = useState("medium")
+    const [severity, setSeverity]             = useState("normal")
     const [variants, setVariants]             = useState("")
     const [saving, setSaving]                 = useState(false)
     const [msg, setMsg]                       = useState<string | null>(null)
@@ -704,7 +710,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
             objection: o.objection,
             response_guidance: o.response_guidance || null,
             approved_responses: approvedResponsesFrom(o.response_guidance),
-            severity: o.severity || "medium",
+            severity: normalizeSeverity(o.severity),
             variants: o.variants ?? [],
             active: true,
         }))
@@ -748,7 +754,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
             objection: objText.trim(),
             response_guidance: guidance.trim() || null,
             approved_responses: approvedResponsesFrom(guidance),
-            severity,
+            severity: normalizeSeverity(severity),
             variants: variants.split("\n").map(s => s.trim()).filter(Boolean),
             active: true,
         }).select("id").single()
@@ -760,7 +766,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                 ? t.tabs.objections.savedNotIndexed
                 : t.tabs.objections.addedIndexed)
             setIsErr(r.failed > 0)
-            setObjText(""); setGuidance(""); setVariants(""); setSeverity("medium")
+            setObjText(""); setGuidance(""); setVariants(""); setSeverity("normal")
             await load()
         }
     }
@@ -776,7 +782,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
     }
 
     const sevColor = (s: string): "green"|"yellow"|"red"|"slate" =>
-        ({ low: "green", medium: "yellow", high: "red", critical: "red" }[s] ?? "slate") as "green"|"yellow"|"red"|"slate"
+        ({ normal: "slate", critical: "red" }[s] ?? "slate") as "green"|"yellow"|"red"|"slate"
 
     return (
         <div className="space-y-6">
@@ -827,7 +833,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                                     <p className="text-sm text-[var(--color-text)] font-medium">{o.objection}</p>
                                     {guidanceOf(o) && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{guidanceOf(o)}</p>}
                                     <div className="flex items-center gap-2 mt-1">
-                                        <StatusBadge label={t.data.severities[o.severity || "medium"] ?? o.severity} color={sevColor(o.severity || "medium")} />
+                                        <StatusBadge label={t.data.severities[o.severity || "normal"] ?? o.severity} color={sevColor(o.severity || "normal")} />
                                         {o.variants?.length > 0 && <span className="text-xs text-[var(--color-muted)]">{t.tabs.objections.nVariants(o.variants.length)}</span>}
                                     </div>
                                 </div>
@@ -860,9 +866,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                     <div className="space-y-1">
                         <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.objections.severity}</label>
                         <select className={INPUT} value={severity} onChange={e => setSeverity(e.target.value)}>
-                            <option value="low">{t.tabs.objections.sevLow}</option>
-                            <option value="medium">{t.tabs.objections.sevMedium}</option>
-                            <option value="high">{t.tabs.objections.sevHigh}</option>
+                            <option value="normal">{t.tabs.objections.sevNormal}</option>
                             <option value="critical">{t.tabs.objections.sevCritical}</option>
                         </select>
                     </div>
@@ -1852,7 +1856,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 dnaResult.objections.map(o => ({
                     org_id: orgId, objection: o.objection, response_guidance: o.response_guidance,
                     approved_responses: approvedResponsesFrom(o.response_guidance),
-                    severity: o.severity, variants: null, active: true,
+                    severity: normalizeSeverity(o.severity), variants: null, active: true,
                 }))
             ).select("id")
             await embedObjections(orgId, (inserted ?? []).map(x => x.id as string))
@@ -2020,8 +2024,6 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                                         <p className="text-sm font-medium text-[var(--color-text)]">{o.objection}</p>
                                         <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
                                             o.severity === "critical" ? "bg-red-100 text-red-700" :
-                                            o.severity === "high"     ? "bg-orange-100 text-orange-700" :
-                                            o.severity === "medium"   ? "bg-amber-100 text-amber-700" :
                                                                         "bg-[var(--color-line-soft)] text-[var(--color-text-secondary)]"
                                         }`}>{t.data.severities[o.severity] ?? o.severity}</span>
                                     </div>
@@ -2276,8 +2278,14 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                     </p>
                 )}
 
-                {info.has_stripe ? (
-                    <div className="mt-5 pt-4 border-t border-[var(--color-border)] flex flex-wrap items-end gap-3">
+                {info.has_stripe ? (() => {
+                    // Teams caps at 20 seats (mirrored in org-billing and
+                    // create-org); Enterprise has no plan cap — 500 is a
+                    // fat-finger ceiling only.
+                    const seatCap = info.plan === "team" ? 20 : 500
+                    return (
+                    <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
+                    <div className="flex flex-wrap items-end gap-3">
                         <div className="space-y-1">
                             <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.billing.seats}</label>
                             <div className="flex items-center gap-1">
@@ -2286,11 +2294,11 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                                     type="number"
                                     value={seatDraft}
                                     min={info.seats_members}
-                                    max={500}
-                                    onChange={e => setSeatDraft(Math.max(1, Math.min(500, Number(e.target.value) || 1)))}
+                                    max={seatCap}
+                                    onChange={e => setSeatDraft(Math.max(1, Math.min(seatCap, Number(e.target.value) || 1)))}
                                     className="w-20 text-center bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-2 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)]"
                                 />
-                                <button className={BTN_GHOST} onClick={() => setSeatDraft(s => Math.min(500, s + 1))} disabled={saving || seatDraft >= 500}>+</button>
+                                <button className={BTN_GHOST} onClick={() => setSeatDraft(s => Math.min(seatCap, s + 1))} disabled={saving || seatDraft >= seatCap}>+</button>
                             </div>
                         </div>
                         <button className={BTN_PRIMARY} onClick={updateSeats} disabled={saving || seatDraft === info.seats_purchased}>
@@ -2298,7 +2306,17 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                         </button>
                         {perSeat && <span className="text-xs text-[var(--color-text-secondary)] pb-2.5">{t.tabs.billing.perSeatNote(perSeat)}</span>}
                     </div>
-                ) : trialEndsAt ? (
+                    {info.plan === "team" && seatDraft >= seatCap && (
+                        <p className="text-xs text-[var(--color-text-secondary)] mt-2">
+                            {t.tabs.billing.seatCapNote}{" "}
+                            <a href="mailto:hello@talkpilot.co?subject=TalkPilot%20Enterprise" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
+                                {t.tabs.billing.seatCapCta}
+                            </a>
+                        </p>
+                    )}
+                    </div>
+                    )
+                })() : trialEndsAt ? (
                     <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
                         {(() => {
                             const days = Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400e3)

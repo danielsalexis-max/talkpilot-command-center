@@ -34,6 +34,11 @@ function isPersonalEmail(email: string): boolean {
     return PERSONAL_DOMAINS.has(domain)
 }
 
+// The Teams plan tops out at 20 seats (mirrored in create-org and org-billing).
+// Beyond that it's an Enterprise conversation — the stepper stops here and
+// shows the "talk to us" pointer instead of letting the number climb.
+const TEAM_SEAT_CAP = 20
+
 /// Starter-kit content is seeded into the org's playbook in English (the
 /// coaching data itself is not localized yet) — but the /start cards show the
 /// localized title/tagline so a LATAM prospect reads them in their language.
@@ -203,7 +208,15 @@ export default function StartPage() {
     useEffect(() => { routeForUser() }, [routeForUser])
 
     async function handleAccount(e: React.FormEvent) {
-        e.preventDefault(); setError(null); setBusy(true)
+        e.preventDefault(); setError(null)
+        // The account that will OWN the workspace must be a company address
+        // (D-171). Saying so here — before the account even exists — instead of
+        // one screen later, after signup already went through (P0, e2e 2026-08-25).
+        if (mode === "signup" && isPersonalEmail(email)) {
+            setError(t.start.personalEmailError)
+            return
+        }
+        setBusy(true)
         try {
             if (mode === "signup") {
                 const { error: err } = await supabase.auth.signUp({ email, password })
@@ -231,6 +244,25 @@ export default function StartPage() {
             provider: "google",
             options: { redirectTo: `${window.location.origin}/start` },
         })
+    }
+
+    // No Calendars.Read here on purpose — the panel is an admin surface that
+    // never reads a calendar; that scope belongs to the rep apps (D-187).
+    async function handleMicrosoft() {
+        setError(null)
+        await supabase.auth.signInWithOAuth({
+            provider: "azure",
+            options: { scopes: "openid profile email", redirectTo: `${window.location.origin}/start` },
+        })
+    }
+
+    // OAuth identities land back here already signed in, so the personal-domain
+    // check can't run before the account exists the way it does for the email
+    // form. The recovery path is a real one: sign out and start over.
+    async function switchAccount() {
+        await supabase.auth.signOut()
+        setEmail(""); setPassword(""); setError(null)
+        setStep("account")
     }
 
     async function handleWorkspace(e: React.FormEvent) {
@@ -317,6 +349,9 @@ export default function StartPage() {
                             <form onSubmit={handleAccount} className="space-y-3 mt-7">
                                 <input type="email" required placeholder={t.common.workEmail} className={INPUT}
                                     value={email} onChange={e => setEmail(e.target.value)} />
+                                {mode === "signup" && isPersonalEmail(email) && (
+                                    <p className="text-xs text-amber-700">{t.start.personalEmailError}</p>
+                                )}
                                 <input type="password" required minLength={8} placeholder={mode === "signup" ? t.start.choosePassword : t.common.password}
                                     className={INPUT} value={password} onChange={e => setPassword(e.target.value)} />
                                 {error && <p className="text-xs text-red-600">{error}</p>}
@@ -330,6 +365,10 @@ export default function StartPage() {
                             <button onClick={handleGoogle} className={BTN_GHOST + " flex items-center justify-center gap-2.5"}>
                                 <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.8 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.4 28.7a14.5 14.5 0 0 1 0-9.4l-7.8-6.1a24 24 0 0 0 0 21.6l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2.1 1.4-4.7 2.3-7.7 2.3-6.3 0-11.7-3.7-13.6-9l-7.8 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
                                 {t.common.continueWithGoogle}
+                            </button>
+                            <button onClick={handleMicrosoft} className={BTN_GHOST + " flex items-center justify-center gap-2.5 mt-2"}>
+                                <svg width="16" height="16" viewBox="0 0 23 23" aria-hidden="true"><path fill="#F25022" d="M0 0h11v11H0z"/><path fill="#7FBA00" d="M12 0h11v11H12z"/><path fill="#00A4EF" d="M0 12h11v11H0z"/><path fill="#FFB900" d="M12 12h11v11H12z"/></svg>
+                                {t.common.continueWithMicrosoft}
                             </button>
                             <p className="text-center text-xs text-[var(--color-muted)] mt-4">
                                 {mode === "signup" ? t.start.alreadyHaveAccount : t.start.newHere}
@@ -345,6 +384,17 @@ export default function StartPage() {
                         <div>
                             <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">{t.start.workspaceTitle}</h1>
                             <p className="text-sm text-[var(--color-text-secondary)] mt-2">{t.start.workspaceSub}</p>
+                            {/* OAuth arrivals skip the account form, so a personal Google/
+                                Microsoft identity is only catchable here — say it now, with
+                                a way out, instead of on submit. */}
+                            {isPersonalEmail(email) && (
+                                <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+                                    <p className="text-xs text-amber-900">{t.start.personalEmailError}</p>
+                                    <button onClick={switchAccount} className="mt-1.5 text-xs font-semibold text-amber-900 underline">
+                                        {t.start.useAnotherAccount}
+                                    </button>
+                                </div>
+                            )}
                             <form onSubmit={handleWorkspace} className="space-y-4 mt-7">
                                 <div>
                                     <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.companyName}</label>
@@ -357,10 +407,18 @@ export default function StartPage() {
                                         <button type="button" aria-label={t.start.fewerSeats} onClick={() => setSeats(s => Math.max(3, s - 1))}
                                             className="w-9 h-9 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]">−</button>
                                         <span className="font-mono text-lg text-[var(--color-text)] w-10 text-center">{seats}</span>
-                                        <button type="button" aria-label={t.start.moreSeats} onClick={() => setSeats(s => Math.min(500, s + 1))}
+                                        <button type="button" aria-label={t.start.moreSeats} onClick={() => setSeats(s => Math.min(TEAM_SEAT_CAP, s + 1))}
                                             className="w-9 h-9 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]">+</button>
                                         <span className="text-xs text-[var(--color-muted)]">{t.start.minSeats}</span>
                                     </div>
+                                    {seats >= TEAM_SEAT_CAP && (
+                                        <p className="text-xs text-[var(--color-text-secondary)] mt-2">
+                                            {t.start.seatCapNote}{" "}
+                                            <a href="mailto:hello@talkpilot.co?subject=TalkPilot%20Enterprise" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
+                                                {t.start.seatCapCta}
+                                            </a>
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="bg-[var(--color-accent-subtle)] rounded-lg px-4 py-3 text-xs text-[var(--color-accent-deep)] leading-relaxed">
                                     <strong>{t.start.trialBoxTitle}</strong><br />
