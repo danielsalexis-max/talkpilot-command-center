@@ -1629,14 +1629,64 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
 
 // ─── TeamDNATab ───────────────────────────────────────────────────────────────
 
+/// Speaker-attributed line: `Name: text`.
+///
+/// Unicode-aware on purpose. The original `[A-Za-z]` class silently failed on
+/// every accented name — Tomás, José, Martín, Muñoz — so in a Spanish
+/// transcript that speaker's lines were invisible: they never appeared in the
+/// "who is the expert" picker, and they did not count as dialogue. For a
+/// product whose second market is LATAM (D-177) that is not an edge case.
+const SPEAKER_LINE = /^(\p{L}[\p{L}\p{M}0-9 _.'-]{0,30}):\s/u
+
 function detectSpeakers(text: string): string[] {
     const matches = new Set<string>()
     for (const line of text.split("\n")) {
-        const m = line.match(/^([A-Za-z][A-Za-z0-9 _-]{0,30}):\s/)
+        const m = line.match(SPEAKER_LINE)
         if (m) matches.add(m[1].trim())
     }
     return Array.from(matches).slice(0, 10)
 }
+
+/// Does this text actually look like a call transcript?
+///
+/// It used to be enough to be longer than 100 characters, so any document at
+/// all was accepted and the model dutifully produced a "playbook" out of it —
+/// a resume, an invoice, a real-estate listing. The output looked plausible
+/// and became the org's ACTIVE playbook, which is worse than a visible error.
+///
+/// The checks are deliberately structural rather than semantic: a transcript is
+/// a dialogue, so it has speaker-attributed lines, more than one speaker, and
+/// enough back-and-forth to have a shape. That is cheap, runs as you type, and
+/// cannot be fooled by subject matter — which is the point, because we do not
+/// want to reject a legitimate call for being about an unusual topic.
+export type TranscriptIssue = "empty" | "tooShort" | "noSpeakers" | "oneSpeaker" | "tooFewTurns"
+
+export function transcriptIssue(text: string): TranscriptIssue | null {
+    const trimmed = text.trim()
+    if (!trimmed) return "empty"
+
+    const lines = trimmed.split("\n").map(l => l.trim()).filter(Boolean)
+    const speakerLines = lines.filter(l => SPEAKER_LINE.test(l))
+    const words = trimmed.split(/\s+/).filter(Boolean).length
+
+    // No attributed lines at all means this is prose, not a dialogue — the
+    // single strongest signal, and the one the PDF-of-anything case trips.
+    if (speakerLines.length === 0) return "noSpeakers"
+    // A transcript is mostly dialogue. A document with one stray "Note:" line
+    // would otherwise pass on the check above.
+    if (speakerLines.length < Math.max(6, lines.length * 0.5)) return "tooFewTurns"
+    if (detectSpeakers(trimmed).length < 2) return "oneSpeaker"
+    // Short enough that there is nothing to learn from, even if well-formed.
+    if (words < 150) return "tooShort"
+    return null
+}
+
+/// Extensions we can read as text in the browser. `.doc`/`.docx`/`.pdf` are
+/// containers, not text — `file.text()` on them yields binary noise that would
+/// then fail validation with a confusing message, so they are refused by name
+/// with instructions instead.
+const TRANSCRIPT_TEXT_EXTENSIONS = ["txt", "md", "markdown", "srt", "vtt", "csv", "tsv", "text", "log", "json", "rtf"]
+const TRANSCRIPT_BINARY_EXTENSIONS = ["pdf", "doc", "docx", "pages", "odt"]
 
 function TranscriptCard({ index, entry, onChange, onRemove }: {
     index: number
@@ -1654,8 +1704,8 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
         if (!file) return
         setFileError("")
         const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
-        if (ext === "pdf") {
-            setFileError(t.tabs.dna.pdfError)
+        if (TRANSCRIPT_BINARY_EXTENSIONS.includes(ext)) {
+            setFileError(t.tabs.dna.binaryError(ext.toUpperCase()))
             e.target.value = ""; return
         }
         setLoadingFile(true)
@@ -1672,6 +1722,8 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
 
     const hasText = entry.text.trim().length > 50
     const wordCount = entry.text.split(/\s+/).filter(Boolean).length
+    const issue = hasText ? transcriptIssue(entry.text) : null
+    const issueMessage = issue ? t.tabs.dna.issues[issue] : null
 
     return (
         <div className={CARD + " space-y-3"}>
@@ -1687,7 +1739,7 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
                 <div className="space-y-3">
                     <button type="button" onClick={() => fileRef.current?.click()} disabled={loadingFile}
                         className="w-full border-2 border-dashed border-[var(--color-accent)] rounded-xl p-5 flex flex-col items-center gap-2 bg-teal-50/50 hover:bg-teal-50 transition-colors disabled:opacity-60">
-                        <input ref={fileRef} type="file" accept=".txt,.md,.srt,.text,.csv" className="hidden" onChange={handleFile} />
+                        <input ref={fileRef} type="file" accept={TRANSCRIPT_TEXT_EXTENSIONS.map(x => "." + x).join(",")} className="hidden" onChange={handleFile} />
                         <div className="w-10 h-10 bg-[var(--color-accent)] rounded-xl flex items-center justify-center">
                             {loadingFile
                                 ? <svg className="w-5 h-5 text-white animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
@@ -1711,6 +1763,14 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
                 </div>
             )}
 
+            {/* Does this read like a call? Said before the speaker question,
+                because if it isn't a transcript the speaker question is moot. */}
+            {issueMessage && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
+                    <p className="text-xs text-amber-900">{issueMessage}</p>
+                </div>
+            )}
+
             {/* Compact text view — shown after text is entered */}
             {hasText && (
                 <div className="space-y-1">
@@ -1725,8 +1785,8 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
                 </div>
             )}
 
-            {/* Speaker selection — only appears after text is entered */}
-            {hasText && (
+            {/* Speaker selection — only once the text reads like a call */}
+            {hasText && !issue && (
                 <div className="border-t border-[var(--color-border)] pt-3 space-y-2">
                     <label className="text-xs font-semibold text-[var(--color-text-secondary)] block">
                         {t.tabs.dna.whoIsExpert}
@@ -1785,17 +1845,29 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         setTranscripts(prev => prev.filter(t => t.id !== id))
     }
     function updateTranscript(id: string, field: "text" | "expertSpeaker", value: string) {
-        setTranscripts(prev => prev.map(t => {
-            if (t.id !== id) return t
-            if (field === "text") return { ...t, text: value, detectedSpeakers: detectSpeakers(value) }
-            return { ...t, [field]: value }
-        }))
+        setTranscripts(prev => {
+            const next = prev.map(t => {
+                if (t.id !== id) return t
+                if (field === "text") return { ...t, text: value, detectedSpeakers: detectSpeakers(value) }
+                return { ...t, [field]: value }
+            })
+            // Open the next slot as soon as this one is genuinely done, so the
+            // requirement teaches itself: you finish one, the next appears, and
+            // the counter moves. Previously the only way to reach three was to
+            // notice a muted dashed button below the fold and press it twice —
+            // people got to "1 of 3" and stopped, with no idea what was wrong.
+            const complete = next.filter(t => !transcriptIssue(t.text) && t.expertSpeaker)
+            if (complete.length < MIN && complete.length === next.length) {
+                return [...next, { id: crypto.randomUUID(), text: "", expertSpeaker: "", detectedSpeakers: [] }]
+            }
+            return next
+        })
     }
 
     async function analyze() {
         setError("")
-        const valid = transcripts.filter(t => t.text.trim().length > 100 && t.expertSpeaker)
-        if (valid.length < 3) {
+        const valid = transcripts.filter(t => !transcriptIssue(t.text) && t.expertSpeaker)
+        if (valid.length < MIN) {
             setError(t.tabs.dna.need3)
             return
         }
@@ -1894,7 +1966,9 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         } finally { setApplyingFlow(false) }
     }
 
-    const completedCount = transcripts.filter(t => t.text.trim().length > 100 && t.expertSpeaker).length
+    // "Complete" means it passes the same check the analyze button enforces —
+    // a card can't count toward 3 of 3 and then be rejected on submit.
+    const completedCount = transcripts.filter(t => !transcriptIssue(t.text) && t.expertSpeaker).length
     const MIN = 3
 
     if (step === "analyzing") {
@@ -2104,7 +2178,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 <div className="flex items-center gap-3">
                     <div className="flex-1 h-2 bg-[var(--color-line-soft)] rounded-full overflow-hidden">
                         <div className="h-full bg-[var(--color-accent)] transition-all rounded-full"
-                            style={{ width: `${Math.min((completedCount / 5) * 100, 100)}%` }} />
+                            style={{ width: `${Math.min((completedCount / MIN) * 100, 100)}%` }} />
                     </div>
                     <span className="text-xs text-[var(--color-text-secondary)] whitespace-nowrap">
                         {t.tabs.dna.progress(completedCount, MIN)}
@@ -2126,7 +2200,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 </button>
                 <button onClick={analyze} disabled={completedCount < MIN}
                     className={BTN_PRIMARY + " flex-shrink-0" + (completedCount < MIN ? " opacity-50 cursor-not-allowed" : "")}>
-                    {t.tabs.dna.analyzeN(completedCount)}
+                    {completedCount < MIN ? t.tabs.dna.needMore(MIN - completedCount) : t.tabs.dna.analyzeN(completedCount)}
                 </button>
             </div>
 
