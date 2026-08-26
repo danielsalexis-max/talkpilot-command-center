@@ -39,6 +39,11 @@ function isPersonalEmail(email: string): boolean {
 // shows the "talk to us" pointer instead of letting the number climb.
 const TEAM_SEAT_CAP = 20
 
+/// Where "talk to us first" goes. The website's Teams button points here too
+/// (D-192 #8) — teams.talkpilot.co keeps working for whoever lands on it
+/// directly, but the default motion is a conversation.
+const DEMO_URL = "https://talkpilot.co/demo"
+
 /// Starter-kit content is seeded into the org's playbook in English (the
 /// coaching data itself is not localized yet) — but the /start cards show the
 /// localized title/tagline so a LATAM prospect reads them in their language.
@@ -185,6 +190,10 @@ export default function StartPage() {
     const [orgName, setOrgName]   = useState("")
     const [seats, setSeats]       = useState(5)
     const [orgId, setOrgId]       = useState<string | null>(null)
+    /// Whether a sales-granted trial was claimed at workspace creation (D-192).
+    /// False is the normal path now: the wizard ends at checkout.
+    const [hasTrial, setHasTrial] = useState(false)
+    const [checkoutBusy, setCheckoutBusy] = useState(false)
 
     const [teamType, setTeamType]     = useState<"sales" | "support">("sales")
     const [kitApplied, setKitApplied] = useState<string | null>(null)
@@ -275,6 +284,11 @@ export default function StartPage() {
         try {
             const res = await callFn("create-org", { name: orgName, seats })
             setOrgId(res.org_id)
+            // A null trial_ends_at means no grant matched, which since D-192 is
+            // the DEFAULT: this workspace pays before it is used. Keep building
+            // the brain either way — a half-configured workspace is worthless
+            // to them and to us — but the final step becomes checkout.
+            setHasTrial(!!res.trial_ends_at)
             setStep("brain")
         } catch (e) {
             const msg = (e as Error).message
@@ -282,6 +296,20 @@ export default function StartPage() {
             setError(msg)
         } finally {
             setBusy(false)
+        }
+    }
+
+    async function startCheckout() {
+        if (!orgId) return
+        setCheckoutBusy(true); setError(null)
+        try {
+            const res = await callFn("org-billing", { org_id: orgId, action: "checkout", interval: "month" })
+            if (res?.url) { window.location.href = res.url as string; return }
+            setError(t.start.checkoutFailed)
+        } catch (e) {
+            setError((e as Error).message)
+        } finally {
+            setCheckoutBusy(false)
         }
     }
 
@@ -420,8 +448,12 @@ export default function StartPage() {
                                         </p>
                                     )}
                                 </div>
+                                {/* This used to promise "14 days free, no card"
+                                    to everyone. Trials are granted by sales now
+                                    (D-192 #8), so promising one here would be a
+                                    lie for most people who read it. */}
                                 <div className="bg-[var(--color-accent-subtle)] rounded-lg px-4 py-3 text-xs text-[var(--color-accent-deep)] leading-relaxed">
-                                    <strong>{t.start.trialBoxTitle}</strong><br />
+                                    <strong>{t.start.pricingBoxTitle}</strong><br />
                                     {t.start.trialBoxSub}
                                 </div>
                                 {error && <p className="text-xs text-red-600">{error}</p>}
@@ -534,6 +566,23 @@ export default function StartPage() {
                                     </div>
                                 ))}
                             </div>
+                            {/* No grant, no trial (D-192 #8): the workspace and
+                                its playbook are built, and the last step is
+                                paying. The demo route stays one click away for
+                                anyone who would rather talk first. */}
+                            {!hasTrial && (
+                                <div className="mt-7 rounded-lg border border-[var(--color-accent-light)] bg-[var(--color-accent-subtle)] px-4 py-3.5 space-y-2">
+                                    <p className="text-sm font-semibold text-[var(--color-accent-deep)]">{t.start.payTitle}</p>
+                                    <p className="text-xs text-[var(--color-accent-deep)]">{t.start.paySub(seats)}</p>
+                                    <div className="flex flex-wrap gap-2 pt-1">
+                                        <button onClick={startCheckout} disabled={checkoutBusy} className={BTN + " sm:w-auto px-5"}>
+                                            {checkoutBusy ? t.start.openingCheckout : t.start.goToCheckout}
+                                        </button>
+                                        <a href={DEMO_URL} className={BTN_GHOST + " sm:w-auto px-5 text-center"}>{t.start.bookDemoInstead}</a>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="flex flex-col sm:flex-row gap-3 mt-8">
                                 <button onClick={() => { window.location.href = wantsDna ? "/playbook?tab=dna" : "/" }} className={BTN + " sm:flex-1"}>
                                     {wantsDna ? t.start.setUpDna : t.start.openCommandCenter}

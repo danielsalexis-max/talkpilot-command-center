@@ -76,6 +76,10 @@ export const es: Dict = {
             doc: "documento", pricing: "precios", battlecard: "battlecard", faq: "preguntas frecuentes",
             objection: "objeciones", compliance: "cumplimiento", case_study: "caso de éxito",
         } as Record<string, string>,
+        verticals: {
+            sales: "Ventas", real_estate: "Bienes raíces",
+            customer_care: "Atención al cliente", contact_center: "Contact center",
+        } as Record<string, string>,
         visibility: {
             scores_only: "Solo puntajes",
             flagged_moments: "Momentos marcados",
@@ -93,6 +97,7 @@ export const es: Dict = {
         calls: "Llamadas",
         team: "Equipo",
         review: "Revisión",
+        practice: "Práctica",
         playbook: "Playbook",
         settings: "Configuración",
         lightMode: "Modo claro",
@@ -104,12 +109,18 @@ export const es: Dict = {
         visibilityCardSub: "Los reps siempre ven sus propios scorecards",
     },
 
+    practice: {
+        title: "Práctica",
+        sub: "Asigna un roleplay a un rep o a un equipo. Su puntaje regresa aquí cuando lo termina.",
+    },
+
     memberGate: {
         title: "El Command Center es para managers",
         body1: "Eres miembro de",
         yourWorkspace: "tu espacio de trabajo",
         body2: "— tu coaching sucede en la app de TalkPilot, y tus scorecards también viven ahí.",
         getIphone: "Descarga TalkPilot para iPhone",
+        getAndroid: "Descarga TalkPilot para Android",
         getMac: "Descargar para Mac",
         askAdmin: "¿Crees que deberías tener acceso de manager? Pide al admin de tu espacio de trabajo que cambie tu rol.",
     },
@@ -196,6 +207,14 @@ export const es: Dict = {
         seatCapNote: "El plan Teams incluye hasta 20 asientos.",
         seatCapCta: "¿Necesitas más? Escríbenos →",
         useAnotherAccount: "Usar otra cuenta",
+        pricingBoxTitle: "$40 USD/asiento/mes — o $32 USD/asiento/mes con facturación anual.",
+        payTitle: "Falta un paso: agrega la facturación",
+        paySub: (seats: number) => `Tu espacio de trabajo y tu playbook ya están listos. Activa ${seats} asiento${seats !== 1 ? "s" : ""} para que tu equipo empiece a usarlo.`,
+        goToCheckout: "Agregar facturación",
+        openingCheckout: "Abriendo el checkout…",
+        bookDemoInstead: "Mejor agenda una demo",
+        checkoutFailed: "No se pudo abrir el checkout. Inténtalo de nuevo, o agenda una demo y lo configuramos contigo.",
+        questionsBookDemo: "¿Prefieres platicar primero? Agenda una demo →",
         trialBoxTitle: "14 días gratis, todas las funciones, sin tarjeta.",
         trialBoxSub: "Después de la prueba: $40 USD/asiento/mes, o $32 USD/asiento/mes con facturación anual.",
         creating: "Creando…",
@@ -276,6 +295,9 @@ export const es: Dict = {
         getAppStore: "Descargar TalkPilot en el App Store",
         macSub: "Descarga la app de escritorio (.dmg)",
         iosSub: "Descarga TalkPilot AI en el App Store",
+        androidPlaySub: "Google Play",
+        androidApkLink: "O descarga el APK directamente",
+        playStore: "Play Store",
         androidSub: "Descarga la app de Android (.apk)",
         comingSoon: "Próximamente",
         thisDevice: "(este dispositivo)",
@@ -622,6 +644,12 @@ export const es: Dict = {
             plan: "Plan:",
             seats: "Asientos:",
             slug: "Slug:",
+            recordingNotice: "Avisar a la otra parte que TalkPilot está activo",
+            recordingOff: "Desactivado — cada rep lo comunica por su cuenta",
+            recordingCalendar: "Agregar una línea a la invitación del calendario",
+            recordingEmail: "Enviar un email a los participantes antes de la llamada",
+            recordingHelp: "TalkPilot no mete un bot a la llamada ni guarda audio, así que nada se anuncia solo. Elige cómo —o si— tu espacio de trabajo lo comunica. Los reps siempre pueden copiar una línea de aviso desde la app, sin importar este ajuste.",
+            recordingLegal: "Esto es una política del espacio de trabajo, no asesoría legal. Las reglas de consentimiento cambian por país y estado, y cumplir con la norma local sigue siendo responsabilidad del espacio de trabajo.",
             saveSettings: "Guardar configuración",
         },
 
@@ -724,6 +752,15 @@ export const es: Dict = {
             noObjections: "Aún no hay objeciones.",
         },
 
+        teams: {
+            title: "Equipos",
+            sub: "Agrupa a tus reps para que los playbooks, la práctica y la voz del coaching apunten a una parte del espacio de trabajo y no a todo.",
+            namePlaceholder: "Ejecutivos de cuenta",
+            create: "Agregar equipo",
+            nMembers: (n: number) => `${n} ${n !== 1 ? "miembros" : "miembro"}`,
+            whoIsWhere: "Quién está en cada equipo",
+            noTeam: "Sin equipo",
+        },
         playbooks: {
             title: "Playbooks",
             sub: "El playbook activo guía a los reps en tiempo real y contra él se evalúa cada llamada.",
@@ -763,6 +800,27 @@ export const es: Dict = {
             deactivate: "Desactivar",
             archive: "Archivar",
             noPlaybooks: "Aún no hay playbooks. Crea uno arriba o importa desde un documento.",
+            presetsTitle: "Empieza desde un preset",
+            presetsSub: "Un playbook listo con su biblioteca de objeciones, en tu idioma. Todo queda editable.",
+            industry: "Industria",
+            usePreset: "Usar este preset",
+            presetMeta: (stages: number, objections: number) => `${stages} etapas · ${objections} objeciones`,
+            presetApplied: (name: string) => `${name} agregado. Si ya tenías un playbook en vivo, este entró como borrador — actívalo cuando quieras.`,
+            presetNote: "Aplicar un preset nunca reemplaza un playbook en vivo: si ya hay uno activo, el nuevo llega como borrador.",
+            appliesTo: "Aplica a",
+            assignDefault: "todos (playbook por defecto)",
+            assignEveryone: "Todo el espacio de trabajo",
+            assignScoped: (teams: number, people: number) => {
+                const parts: string[] = []
+                if (teams > 0)  parts.push(`${teams} equipo${teams !== 1 ? "s" : ""}`)
+                if (people > 0) parts.push(`${people} persona${people !== 1 ? "s" : ""}`)
+                return parts.join(" · ")
+            },
+            assignWholeOrg: "Todo el espacio",
+            assignTeams: "Equipos",
+            assignPeople: "Personas",
+            assignNoTeams: "Aún no hay equipos — créalos en Miembros.",
+            assignPrecedence: "Cada rep recibe el playbook más específico que lo nombre: el suyo, luego el de su equipo, luego el del espacio de trabajo.",
         },
 
         practice: {

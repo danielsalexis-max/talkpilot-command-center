@@ -226,13 +226,20 @@ export default function HomePage() {
                 </Link>
             </div>
 
-            {/* ── State 1: the brain isn't assembled — the checklist IS the page (D-175) ── */}
+            {/* ── Unfinished setup: a card ABOVE the dashboard, not instead of it
+                 (D-192, superseding D-175 on this point).
+                 The checklist used to replace Home entirely, which produced the
+                 e2e's exact complaint: every other tab rendered normally while
+                 Home alone was "empty and broken", and the two required items
+                 are already satisfied by finishing /start — so the wizard
+                 handed you a second checklist for work you had just done.
+                 Now it is a banner, and whatever data exists still shows. ── */}
             {setup && !setupRequiredMet(setup) && (
                 <SetupChecklistCard state={setup} />
             )}
 
-            {/* ── State 2: set up, but nobody has made a call yet ── */}
-            {setup && setupRequiredMet(setup) && cards.length === 0 && (
+            {/* ── Nobody has made a call yet ── */}
+            {cards.length === 0 && (
                 <WaitingRoomCard activeMembers={members.length} pendingInvites={pendingInvites} />
             )}
 

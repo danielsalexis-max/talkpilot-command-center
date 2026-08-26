@@ -34,6 +34,13 @@ const ICONS = {
         </>
     ),
     insights: <path strokeLinecap="round" strokeLinejoin="round" d="M4 20V10M10 20V4M16 20v-7M22 20H2" />,
+    practice: (
+        <>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v10.5" />
+            <circle cx="12" cy="17.5" r="3" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.5.8 4 2 4.5 3.6" />
+        </>
+    ),
     playbook: <path strokeLinecap="round" strokeLinejoin="round" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15zM4 18.5A2.5 2.5 0 0 1 6.5 16H20" />,
     settings: (
         <>
@@ -104,6 +111,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         // Home the same change — five ways to look at the same scorecards was
         // the "convoluted" feeling in one sentence.
         { href: "/coaching",  label: t.nav.review,   icon: ICONS.coaching, match: p => p.startsWith("/coaching") },
+        // Practice is its own page (D-192): Review is about calls that already
+        // happened, practice is about the next one.
+        { href: "/practice",  label: t.nav.practice, icon: ICONS.practice, match: p => p.startsWith("/practice") },
         { href: "/playbook",  label: t.nav.playbook, icon: ICONS.playbook, match: p => p.startsWith("/playbook") },
         // Managers can't edit org settings or billing (RLS would silently
         // refuse) — don't show them doors they can't open.
@@ -195,6 +205,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     <a href="https://apps.apple.com/app/id6763953639" target="_blank" rel="noreferrer"
                         className="block w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-medium rounded-lg transition-colors">
                         {t.memberGate.getIphone}
+                    </a>
+                    <a href="https://play.google.com/store/apps/details?id=co.talkpilot.android" target="_blank" rel="noreferrer"
+                        className="block w-full py-2.5 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors">
+                        {t.memberGate.getAndroid}
                     </a>
                     <a href="https://github.com/danielsalexis-max/talkpilot-releases/releases/latest" target="_blank" rel="noreferrer"
                         className="block w-full py-2.5 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors">

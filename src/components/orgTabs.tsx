@@ -7,6 +7,10 @@ import { supabase } from "@/lib/supabase"
 import { SearchBox } from "@/components/SearchBox"
 import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
 import { rollUpGuardrails } from "@/lib/guardrails"
+import { PlaybookAssignment, type AssignTarget } from "@/components/playbookAssignment"
+import { TeamsSection } from "@/components/teamsSection"
+import { StarterKitPicker } from "@/components/starterKitPicker"
+import { VERTICALS, type Vertical } from "@/lib/starterKit"
 import { useLocale, useT } from "@/i18n/LocaleProvider"
 import { clientLocale, type Dict } from "@/i18n"
 
@@ -238,13 +242,23 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
     // opt-out exists but is deliberately quiet: small text, no big toggle UI.
     const [repPlaybook, setRepPlaybook]   = useState(org.settings?.rep_visibility?.playbook !== false)
     const [repKnowledge, setRepKnowledge] = useState(org.settings?.rep_visibility?.knowledge !== false)
+    // How this workspace tells the other side TalkPilot is listening (D-192).
+    // Default OFF: TalkPilot has no bot in the call and does not record audio,
+    // so there is nothing that announces itself — disclosure is a policy the
+    // workspace chooses, and the honest default is not to claim one.
+    const [recordingNotice, setRecordingNotice] =
+        useState((org.settings?.recording_notice as string | undefined) ?? "off")
     const [saving, setSaving]         = useState(false)
     const [msg, setMsg]               = useState<string | null>(null)
     const [isErr, setIsErr]           = useState(false)
 
     async function save() {
         setSaving(true); setMsg(null)
-        const settings = { ...(org.settings ?? {}), rep_visibility: { playbook: repPlaybook, knowledge: repKnowledge } }
+        const settings = {
+            ...(org.settings ?? {}),
+            rep_visibility: { playbook: repPlaybook, knowledge: repKnowledge },
+            recording_notice: recordingNotice,
+        }
         const { error } = await supabase.from("organizations").update({ name, visibility, settings }).eq("id", org.id)
         setSaving(false)
         if (error) { setMsg(humanError(error.message, t.tabs.doingSaveSettings, t)); setIsErr(true) }
@@ -287,6 +301,25 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
                         </label>
                     </div>
                 </div>
+                {/* Recording notice (D-192). TalkPilot puts no bot in the call
+                    and does not record audio, so nothing announces itself —
+                    which is exactly why this has to be a deliberate policy
+                    choice rather than a default. */}
+                <div className="pt-3 border-t border-[var(--color-border)] space-y-1.5">
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.settings.recordingNotice}</label>
+                    <select className={INPUT} value={recordingNotice} onChange={e => setRecordingNotice(e.target.value)}>
+                        <option value="off">{t.tabs.settings.recordingOff}</option>
+                        <option value="calendar_note">{t.tabs.settings.recordingCalendar}</option>
+                        <option value="email">{t.tabs.settings.recordingEmail}</option>
+                    </select>
+                    <p className="text-xs text-[var(--color-text-secondary)] pt-1">
+                        {t.tabs.settings.recordingHelp}
+                    </p>
+                    <p className="text-xs text-[var(--color-muted)]">
+                        {t.tabs.settings.recordingLegal}
+                    </p>
+                </div>
+
                 <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)] bg-[var(--color-bg)] rounded-lg px-3 py-2">
                     <span>{t.tabs.settings.plan} <span className="text-[var(--color-text)] font-medium capitalize">{org.plan}</span></span>
                     <span>·</span>
@@ -948,12 +981,32 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
     // Tracked explicitly — the copy is translated, so sniffing for "Error" fails.
     const [extractErr, setExtractErr]   = useState(false)
     const extractFileRef = useRef<HTMLInputElement>(null)
+    // Assignment targets (D-192): a playbook can now apply to the whole org,
+    // to teams, or to named people.
+    const [teams, setTeams]     = useState<AssignTarget[]>([])
+    const [people, setPeople]   = useState<AssignTarget[]>([])
+    // Which industry's presets to offer (D-192). Stored on the org, so the
+    // choice survives a reload and other surfaces can read it later.
+    const [vertical, setVertical] = useState<Vertical>("sales")
 
     const load = useCallback(async () => {
-        const { data } = await supabase.from("org_playbooks")
-            .select("id, name, methodology, status, version, stages, created_at")
-            .eq("org_id", orgId).order("created_at", { ascending: false })
+        const [{ data }, { data: teamRows }, { data: memberRows }, { data: orgRow }] = await Promise.all([
+            supabase.from("org_playbooks")
+                .select("id, name, methodology, status, version, stages, created_at")
+                .eq("org_id", orgId).order("created_at", { ascending: false }),
+            supabase.from("org_teams").select("id, name").eq("org_id", orgId).order("name"),
+            supabase.rpc("get_org_members_with_email", { p_org: orgId }),
+            supabase.from("organizations").select("settings").eq("id", orgId).single(),
+        ])
+        const storedVertical = (orgRow?.settings as { vertical?: string } | null)?.vertical
+        if (storedVertical && (VERTICALS as string[]).includes(storedVertical)) {
+            setVertical(storedVertical as Vertical)
+        }
         setPlaybooks((data ?? []) as PbRow[])
+        setTeams(((teamRows ?? []) as { id: string; name: string }[]).map(x => ({ id: x.id, label: x.name })))
+        setPeople(((memberRows ?? []) as MemberRow[])
+            .filter(m => m.status === "active" || !m.status)
+            .map(m => ({ id: m.user_id, label: m.email ?? m.user_id.slice(0, 8) })))
         setLoading(false)
     }, [orgId])
 
@@ -1074,7 +1127,28 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
 
     async function setStatus(id: string, status: "draft" | "active" | "archived") {
         if (status === "active") {
-            await supabase.from("org_playbooks").update({ status: "draft" }).eq("org_id", orgId).eq("status", "active")
+            // Several playbooks may be active at once now that they are scoped
+            // (D-192) — a sales playbook and a support playbook are both live,
+            // for different people. What must stay unique is the ORG DEFAULT:
+            // the active playbook with no assignments, which `get_org_context`
+            // falls back to for anyone unmatched. So activating an unassigned
+            // playbook demotes other unassigned ones, and nothing else.
+            const { data: mine } = await supabase
+                .from("org_playbook_assignments").select("playbook_id").eq("playbook_id", id).limit(1)
+            const becomingDefault = (mine ?? []).length === 0
+            if (becomingDefault) {
+                const { data: actives } = await supabase
+                    .from("org_playbooks").select("id").eq("org_id", orgId).eq("status", "active")
+                const { data: assigned } = await supabase
+                    .from("org_playbook_assignments").select("playbook_id").eq("org_id", orgId)
+                const assignedIds = new Set((assigned ?? []).map(a => a.playbook_id as string))
+                const otherDefaults = (actives ?? [])
+                    .map(a => a.id as string)
+                    .filter(pid => pid !== id && !assignedIds.has(pid))
+                if (otherDefaults.length > 0) {
+                    await supabase.from("org_playbooks").update({ status: "draft" }).in("id", otherDefaults)
+                }
+            }
         }
         await supabase.from("org_playbooks").update({ status }).eq("id", id)
         // Every action answers "what happens now?" (D-175).
@@ -1198,6 +1272,8 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                 )}
             </div>
 
+            <StarterKitPicker orgId={orgId} vertical={vertical} onVerticalChange={setVertical} onApplied={load} />
+
             {loading && <p className="text-sm text-[var(--color-text-secondary)]">{t.common.loading}</p>}
             <div className="space-y-3">
                 {playbooks.map(p => (
@@ -1229,6 +1305,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                                 ))}
                             </div>
                         )}
+                        <PlaybookAssignment orgId={orgId} playbookId={p.id} teams={teams} members={people} />
                     </div>
                 ))}
                 {!loading && playbooks.length === 0 && !creating && (
@@ -1558,6 +1635,13 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                     </button>
                 </div>
                 <Msg msg={msg} error={isErr} />
+            </div>
+
+            {/* Teams live here because "who is on which team" is a roster
+                question. Nothing created teams before (D-192), so the practice
+                picker and playbook scoping both read an always-empty table. */}
+            <div className={CARD}>
+                <TeamsSection orgId={orgId} onChanged={load} />
             </div>
 
             <div>

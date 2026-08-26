@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { supabase, type Scorecard } from "@/lib/supabase"
 import { ScoreRing } from "@/components/ScoreRing"
-import { PracticeTab } from "@/components/orgTabs"
 import { PageSkeleton } from "@/components/homeStates"
 import { useLocale } from "@/i18n/LocaleProvider"
 
@@ -97,12 +96,6 @@ export default function CoachingPage() {
                         )
                     })}
                 </div>
-            </div>
-
-            {/* Practice assignment (shared component; grades roll up automatically) */}
-            <div>
-                <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">{t.coaching.practice}</h2>
-                <PracticeTab orgId={orgId} />
             </div>
         </div>
     )

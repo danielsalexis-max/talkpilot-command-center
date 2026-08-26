@@ -79,6 +79,10 @@ export const en = {
             doc: "document", pricing: "pricing", battlecard: "battlecard", faq: "FAQ",
             objection: "objections", compliance: "compliance", case_study: "case study",
         } as Record<string, string>,
+        verticals: {
+            sales: "Sales", real_estate: "Real estate",
+            customer_care: "Customer care", contact_center: "Contact centre",
+        } as Record<string, string>,
         visibility: {
             scores_only: "Scores only",
             flagged_moments: "Flagged moments",
@@ -96,6 +100,7 @@ export const en = {
         calls: "Calls",
         team: "Team",
         review: "Review",
+        practice: "Practice",
         playbook: "Playbook",
         settings: "Settings",
         lightMode: "Light mode",
@@ -107,12 +112,18 @@ export const en = {
         visibilityCardSub: "Reps always see their own scorecards",
     },
 
+    practice: {
+        title: "Practice",
+        sub: "Assign a roleplay to a rep or a team. Their score comes back here when they finish.",
+    },
+
     memberGate: {
         title: "The Command Center is for managers",
         body1: "You're a member of",
         yourWorkspace: "your workspace",
         body2: "— your coaching happens in the TalkPilot app, and your scorecards live there too.",
         getIphone: "Get TalkPilot for iPhone",
+        getAndroid: "Get TalkPilot for Android",
         getMac: "Download for Mac",
         askAdmin: "Think you should have manager access? Ask your workspace admin to change your role.",
     },
@@ -202,6 +213,14 @@ export const en = {
         seatCapNote: "The Teams plan includes up to 20 seats.",
         seatCapCta: "Need more? Talk to us →",
         useAnotherAccount: "Use a different account",
+        pricingBoxTitle: "$40/seat/mo — or $32/seat/mo billed annually.",
+        payTitle: "One step left: add billing",
+        paySub: (seats: number) => `Your workspace and playbook are ready. Activate ${seats} seat${seats !== 1 ? "s" : ""} to let your team start using it.`,
+        goToCheckout: "Add billing",
+        openingCheckout: "Opening checkout…",
+        bookDemoInstead: "Book a demo instead",
+        checkoutFailed: "Couldn't open checkout. Try again, or book a demo and we'll set it up with you.",
+        questionsBookDemo: "Rather talk first? Book a demo →",
         trialBoxTitle: "14 days free, every feature, no card.",
         trialBoxSub: "After the trial: $40/seat/mo, or $32/seat/mo billed annually.",
         creating: "Creating…",
@@ -286,6 +305,9 @@ export const en = {
         getAppStore: "Get TalkPilot on the App Store",
         macSub: "Download the desktop app (.dmg)",
         iosSub: "Get TalkPilot AI on the App Store",
+        androidPlaySub: "Google Play",
+        androidApkLink: "Or download the APK directly",
+        playStore: "Play Store",
         androidSub: "Download the Android app (.apk)",
         comingSoon: "Coming soon",
         thisDevice: "(this device)",
@@ -635,6 +657,12 @@ export const en = {
             plan: "Plan:",
             seats: "Seats:",
             slug: "Slug:",
+            recordingNotice: "Tell the other side TalkPilot is on",
+            recordingOff: "Off — reps disclose it themselves",
+            recordingCalendar: "Add a line to the calendar invite",
+            recordingEmail: "Email participants before the call",
+            recordingHelp: "TalkPilot puts no bot in the call and stores no audio, so nothing announces itself. Choose how — or whether — your workspace discloses it. Reps can always copy a disclosure line from the app regardless of this setting.",
+            recordingLegal: "This is a workspace policy, not legal advice. Consent rules vary by country and state, and meeting the local requirement stays the workspace's responsibility.",
             saveSettings: "Save settings",
         },
 
@@ -737,6 +765,15 @@ export const en = {
             noObjections: "No objections yet.",
         },
 
+        teams: {
+            title: "Teams",
+            sub: "Group reps so playbooks, practice and coaching voice can be aimed at part of the workspace instead of all of it.",
+            namePlaceholder: "Account Executives",
+            create: "Add team",
+            nMembers: (n: number) => `${n} member${n !== 1 ? "s" : ""}`,
+            whoIsWhere: "Who is on which team",
+            noTeam: "No team",
+        },
         playbooks: {
             title: "Playbooks",
             sub: "The active playbook guides reps in real-time and is scored against after each call.",
@@ -776,6 +813,27 @@ export const en = {
             deactivate: "Deactivate",
             archive: "Archive",
             noPlaybooks: "No playbooks yet. Create one above or import from a document.",
+            presetsTitle: "Start from a preset",
+            presetsSub: "A ready playbook plus its objection library, in your language. Everything stays editable.",
+            industry: "Industry",
+            usePreset: "Use this preset",
+            presetMeta: (stages: number, objections: number) => `${stages} stages · ${objections} objections`,
+            presetApplied: (name: string) => `${name} added. It landed as a draft if you already had a live playbook — activate it when you're ready.`,
+            presetNote: "Applying a preset never replaces a live playbook: if one is already active, the new one arrives as a draft.",
+            appliesTo: "Applies to",
+            assignDefault: "everyone (default playbook)",
+            assignEveryone: "Everyone in the workspace",
+            assignScoped: (teams: number, people: number) => {
+                const parts: string[] = []
+                if (teams > 0)  parts.push(`${teams} team${teams !== 1 ? "s" : ""}`)
+                if (people > 0) parts.push(`${people} ${people !== 1 ? "people" : "person"}`)
+                return parts.join(" · ")
+            },
+            assignWholeOrg: "Whole workspace",
+            assignTeams: "Teams",
+            assignPeople: "People",
+            assignNoTeams: "No teams yet — create them under Members.",
+            assignPrecedence: "A rep gets the most specific playbook that names them: their own, then their team's, then the workspace default.",
         },
 
         practice: {
