@@ -508,6 +508,7 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
 
     useEffect(() => { load() }, [load])
 
+
     function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0]
         if (!file) return
@@ -2330,12 +2331,6 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
     const [msg, setMsg]           = useState<string | null>(null)
     const [isErr, setIsErr]       = useState(false)
 
-    // Back from Stripe Checkout: the webhook finalizes the org within seconds.
-    useEffect(() => {
-        const q = new URLSearchParams(window.location.search)
-        if (q.get("checkout") === "success") { setMsg(t.tabs.billing.checkoutSuccess); setIsErr(false) }
-        if (q.get("checkout") === "canceled") { setMsg(t.tabs.billing.checkoutCanceled); setIsErr(false) }
-    }, [t])
 
     const call = useCallback(async (action: string, extra: Record<string, unknown> = {}) => {
         const { data: { session } } = await supabase.auth.getSession()
@@ -2362,6 +2357,47 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
     }, [call])
 
     useEffect(() => { load() }, [load])
+
+    // Back from Stripe Checkout.
+    //
+    // This used to only print "payment received" and stop — so the page kept
+    // rendering the pre-payment state (still asking for billing, gate still
+    // up) under a green success line, and the only way out was a manual
+    // reload. Reported as "I paid and nothing changed".
+    //
+    // The subscription is attached asynchronously by stripe-webhook, so poll
+    // for it instead of asserting it. On success reload the whole page rather
+    // than just this tab: the shell resolves entitlement independently, and
+    // the activation gate has to come down too. If the webhook has not landed
+    // within the window, say exactly that instead of leaving a success message
+    // over a workspace that is still unpaid.
+    const [confirming, setConfirming] = useState(false)
+    useEffect(() => {
+        const q = new URLSearchParams(window.location.search)
+        if (q.get("checkout") === "canceled") { setMsg(t.tabs.billing.checkoutCanceled); setIsErr(false); return }
+        if (q.get("checkout") !== "success") return
+
+        let cancelled = false
+        setConfirming(true); setMsg(t.tabs.billing.checkoutSuccess); setIsErr(false)
+        ;(async () => {
+            for (let attempt = 0; attempt < 8 && !cancelled; attempt++) {
+                await new Promise(r => setTimeout(r, attempt === 0 ? 1500 : 2500))
+                if (cancelled) return
+                try {
+                    const data = await call("info") as BillingInfo
+                    if (data.has_stripe) {
+                        window.location.replace("/settings?tab=billing")
+                        return
+                    }
+                } catch { /* keep polling — a transient failure is not an answer */ }
+            }
+            if (!cancelled) {
+                setConfirming(false)
+                setMsg(t.tabs.billing.checkoutPending); setIsErr(true)
+            }
+        })()
+        return () => { cancelled = true }
+    }, [t, call])
 
     async function updateSeats() {
         if (!info || seatDraft === info.seats_purchased) return
@@ -2434,6 +2470,27 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                 <div className="mt-4 h-2.5 rounded-full bg-[var(--color-line-soft)] overflow-hidden flex">
                     <div className="bg-[var(--color-accent)] h-full" style={{ width: `${memberPct}%` }} />
                     <div className="bg-amber-400 h-full" style={{ width: `${pendingPct}%` }} />
+                </div>
+                {/* Three colours with no key is a puzzle, not a chart: the bar
+                    was shipping green/amber/grey and expecting the sentence
+                    above it to be decoded backwards into them. */}
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+                        <span className="w-2.5 h-2.5 rounded-sm bg-[var(--color-accent)]" aria-hidden="true" />
+                        {t.tabs.billing.legendMembers(info.seats_members)}
+                    </span>
+                    {info.seats_pending > 0 && (
+                        <span className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+                            <span className="w-2.5 h-2.5 rounded-sm bg-amber-400" aria-hidden="true" />
+                            {t.tabs.billing.legendPending(info.seats_pending)}
+                        </span>
+                    )}
+                    {info.seats_purchased > used && (
+                        <span className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+                            <span className="w-2.5 h-2.5 rounded-sm bg-[var(--color-line-soft)] border border-[var(--color-border)]" aria-hidden="true" />
+                            {t.tabs.billing.legendFree(info.seats_purchased - used)}
+                        </span>
+                    )}
                 </div>
                 {used >= info.seats_purchased && (
                     <p className="text-xs text-amber-700 mt-2">
@@ -2511,8 +2568,10 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                                     {t.tabs.billing.annual}
                                 </button>
                             </div>
-                            <button className={BTN_PRIMARY} onClick={startCheckout} disabled={checkoutBusy}>
-                                {checkoutBusy ? t.tabs.billing.openingCheckout : t.tabs.billing.startSubscription}
+                            <button className={BTN_PRIMARY} onClick={startCheckout} disabled={checkoutBusy || confirming}>
+                                {confirming ? t.tabs.billing.confirmingPayment
+                                 : checkoutBusy ? t.tabs.billing.openingCheckout
+                                 : t.tabs.billing.startSubscription}
                             </button>
                             <span className="text-xs text-[var(--color-muted)]">
                                 {t.tabs.billing.secureCheckout(info.seats_purchased)}

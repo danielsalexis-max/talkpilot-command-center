@@ -958,12 +958,17 @@ export const en = {
         billing: {
             loadingBilling: "Loading billing…",
             couldntLoad: "Couldn't load billing.",
+            confirmingPayment: "Confirming payment…",
+            checkoutPending: "Payment received, but the subscription hasn't been confirmed yet. This usually clears in a minute — reload the page. If it persists, email alexis@talkpilot.co and we'll finish it by hand.",
             checkoutSuccess: "Payment received — your subscription is active. Welcome aboard.",
             checkoutCanceled: "Checkout canceled — your trial continues unchanged.",
             seats: "Seats",
             seatUsage: (members: number, pending: number, purchased: number) =>
                 `${members} member${members !== 1 ? "s" : ""}${pending > 0 ? ` + ${pending} pending invite${pending !== 1 ? "s" : ""}` : ""} of ${purchased} seat${purchased !== 1 ? "s" : ""}`,
             planBadge: (plan: string) => `${plan} plan`,
+            legendMembers: (n: number) => `${n} in use`,
+            legendPending: (n: number) => `${n} awaiting acceptance`,
+            legendFree: (n: number) => `${n} free`,
             allSeatsUsed: "All seats are in use — new invites are blocked until you add seats.",
             seatCapNote: "The Teams plan includes up to 20 seats.",
             seatCapCta: "Need more? Talk to us about Enterprise →",

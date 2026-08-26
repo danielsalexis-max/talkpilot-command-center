@@ -945,12 +945,17 @@ export const es: Dict = {
         billing: {
             loadingBilling: "Cargando facturación…",
             couldntLoad: "No se pudo cargar la facturación.",
+            confirmingPayment: "Confirmando el pago…",
+            checkoutPending: "Recibimos el pago, pero la suscripción todavía no se confirma. Normalmente se resuelve en un minuto — recarga la página. Si sigue igual, escríbenos a alexis@talkpilot.co y lo terminamos a mano.",
             checkoutSuccess: "Pago recibido — tu suscripción está activa. Bienvenido a bordo.",
             checkoutCanceled: "Pago cancelado — tu prueba continúa sin cambios.",
             seats: "Asientos",
             seatUsage: (members: number, pending: number, purchased: number) =>
                 `${members} miembro${members !== 1 ? "s" : ""}${pending > 0 ? ` + ${pending === 1 ? "1 invitación pendiente" : `${pending} invitaciones pendientes`}` : ""} de ${purchased} asiento${purchased !== 1 ? "s" : ""}`,
             planBadge: (plan: string) => `plan ${plan}`,
+            legendMembers: (n: number) => `${n} en uso`,
+            legendPending: (n: number) => `${n} por aceptar`,
+            legendFree: (n: number) => `${n} ${n === 1 ? "libre" : "libres"}`,
             allSeatsUsed: "Todos los asientos están en uso — las nuevas invitaciones quedan bloqueadas hasta que agregues asientos.",
             seatCapNote: "El plan Teams incluye hasta 20 asientos.",
             seatCapCta: "¿Necesitas más? Hablemos de Enterprise →",
