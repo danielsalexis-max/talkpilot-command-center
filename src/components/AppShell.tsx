@@ -90,7 +90,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => {
             setEmail(data.user?.email ?? null)
-            if (!data.user) return
+            if (!data.user) {
+                // Signed out. The page itself routes to /login; unblock the
+                // render so it can, instead of holding a spinner forever.
+                setHasWorkspace(true)
+                return
+            }
             // The Command Center is the manager surface. A plain member landing
             // here (e.g. via the accept-invite footer link) saw a half-empty
             // dashboard instead of being pointed at the app (D-171) — RLS kept
@@ -203,6 +208,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <main>
             {children}
             <LocaleSwitcher variant="floating" />
+        </main>
+    )
+
+    // Nothing is painted until we know whether this account has a workspace.
+    // Rendering first and redirecting after is what made a brand-new account
+    // see the whole empty dashboard flash by on its way to the wizard — the
+    // membership query is a round-trip, and the dashboard paints long before
+    // it answers.
+    if (hasWorkspace === null) return (
+        <main className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
+            <span className="text-sm text-[var(--color-muted)]">{t.common.loading}</span>
+        </main>
+    )
+    // Resolved to "no workspace": the redirect in the effect above is already
+    // in flight. Holding the placeholder keeps the dashboard from appearing in
+    // the gap before the route changes.
+    if (hasWorkspace === false) return (
+        <main className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
+            <span className="text-sm text-[var(--color-muted)]">{t.common.loading}</span>
         </main>
     )
 
