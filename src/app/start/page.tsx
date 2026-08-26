@@ -324,13 +324,21 @@ export default function StartPage() {
     async function handleInvites(e: React.FormEvent) {
         e.preventDefault(); setError(null); setBusy(true)
         const emails = invites.map(v => v.trim()).filter(Boolean)
-        let sent = 0, failed = 0
+        let sent = 0, queued = 0, failed = 0
         for (const em of emails) {
-            try { await callFn("invite-member", { org_id: orgId, email: em, role: "member" }); sent++ }
+            try {
+                const r = await callFn("invite-member", { org_id: orgId, email: em, role: "member" })
+                if (r?.queued) queued++; else sent++
+            }
             catch { failed++ }
         }
         setBusy(false)
-        setInviteNote(sent ? t.start.inviteNote(sent, failed) : null)
+        // On the demo-first path the org has no billing yet, so invites queue
+        // rather than send — say that, or "1 invitación enviada" is false and
+        // the owner waits for an email that will not arrive until they pay.
+        setInviteNote(queued ? t.start.inviteQueuedNote(queued)
+                    : sent   ? t.start.inviteNote(sent, failed)
+                    : null)
         doneRef.current = true
         setStep("done")
     }
@@ -572,12 +580,11 @@ export default function StartPage() {
                                 <div className="mt-7 rounded-lg border border-[var(--color-accent-light)] bg-[var(--color-accent-subtle)] px-4 py-3.5 space-y-2">
                                     <p className="text-sm font-semibold text-[var(--color-accent-deep)]">{t.start.payTitle}</p>
                                     <p className="text-xs text-[var(--color-accent-deep)]">{t.start.paySub(seats)}</p>
-                                    <p className="text-xs text-[var(--color-accent-deep)] opacity-80">{t.start.couponHint}</p>
                                     <div className="flex flex-wrap gap-2 pt-1">
                                         <button onClick={startCheckout} disabled={checkoutBusy} className={BTN + " sm:w-auto px-5"}>
                                             {checkoutBusy ? t.start.openingCheckout : t.start.goToCheckout}
                                         </button>
-                                        <a href={DEMO_URL} className={BTN_GHOST + " sm:w-auto px-5 text-center"}>{t.start.bookDemoInstead}</a>
+                                        <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className={BTN_GHOST + " sm:w-auto px-5 text-center"}>{t.start.bookDemoInstead}</a>
                                     </div>
                                 </div>
                             )}

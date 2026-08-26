@@ -114,6 +114,13 @@ export const es: Dict = {
         sub: "Asigna un roleplay a un rep o a un equipo. Su puntaje regresa aquí cuando lo termina.",
     },
 
+    billingGate: {
+        title: "Activa tu espacio de trabajo",
+        bodyOwner: "Tu espacio y tu playbook están guardados — no se pierde nada. Inicia la suscripción para desbloquearlo para tu equipo, o platica primero con nosotros.",
+        bodyMember: "Este espacio de trabajo aún no está activo. Pide al dueño del espacio que active la facturación.",
+        addBilling: "Agregar facturación",
+        bookDemo: "Agenda una demo",
+    },
     memberGate: {
         title: "El Command Center es para managers",
         body1: "Eres miembro de",
@@ -210,7 +217,6 @@ export const es: Dict = {
         useAnotherAccount: "Usar otra cuenta",
         pricingBoxTitle: "$40 USD/asiento/mes — o $32 USD/asiento/mes con facturación anual.",
         payTitle: "Falta un paso: agrega la facturación",
-        couponHint: "¿Tienes un cupón? Ingrésalo en el checkout — Stripe muestra un campo \"Agregar código promocional\".",
         paySub: (seats: number) => `Tu espacio de trabajo y tu playbook ya están listos. Activa ${seats} asiento${seats !== 1 ? "s" : ""} para que tu equipo empiece a usarlo.`,
         goToCheckout: "Agregar facturación",
         openingCheckout: "Abriendo el checkout…",
@@ -247,6 +253,7 @@ export const es: Dict = {
         sendInvitesFinish: "Enviar invitaciones y terminar",
         finishSetup: "Terminar configuración",
         skipInvites: "Omitir — los invitaré después",
+        inviteQueuedNote: (n: number) => `${n === 1 ? "1 invitación guardada — se enviará" : `${n} invitaciones guardadas — se enviarán`} por correo en cuanto la facturación esté activa.`,
         inviteNote: (sent: number, failed: number) =>
             `${sent === 1 ? "1 invitación enviada" : `${sent} invitaciones enviadas`}${failed ? ` · ${failed} fallaron — reintenta desde Configuración → Miembros` : ""}`,
         doneTitle: (org: string) => `${org} ya está en vivo`,
@@ -857,6 +864,7 @@ export const es: Dict = {
             invitePlaceholder: "colega@empresa.com",
             sendingInvite: "Enviando…",
             sendInvite: "Enviar invitación",
+            inviteQueued: "Invitación guardada — se enviará por correo en cuanto la facturación esté activa.",
             inviteSent: "Invitación enviada — aparecerá como Pendiente abajo, y en Desempeño después de su primera llamada.",
             inviteError: (e: string) => `Error: ${e || "Intenta de nuevo en un minuto, o contacta a soporte."}`,
             activeMembers: (n: number) => `Miembros activos (${n})`,
@@ -963,7 +971,7 @@ export const es: Dict = {
             annual: "Anual · $32 USD/asiento",
             openingCheckout: "Abriendo el pago…",
             startSubscription: "Iniciar suscripción",
-            couponHint: "¿Tienes un cupón? Ingrésalo en el checkout — Stripe muestra un campo \"Agregar código promocional\".",
+            notActiveYet: "Este espacio de trabajo aún no está activo — inicia la suscripción para desbloquearlo para tu equipo.",
             secureCheckout: (n: number) => `${n} asientos · pago seguro con Stripe`,
             invoiceBilled1: "Este espacio de trabajo se factura directamente con TalkPilot (factura / transferencia). Para agregar o quitar asientos, escribe a",
             invoiceBilled2: "— los cambios suelen aplicarse el mismo día.",

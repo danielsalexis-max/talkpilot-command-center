@@ -117,6 +117,13 @@ export const en = {
         sub: "Assign a roleplay to a rep or a team. Their score comes back here when they finish.",
     },
 
+    billingGate: {
+        title: "Activate your workspace",
+        bodyOwner: "Your workspace and playbook are saved — nothing is lost. Start the subscription to unlock it for your team, or talk to us first.",
+        bodyMember: "This workspace isn't active yet. Ask your workspace owner to set up billing.",
+        addBilling: "Add billing",
+        bookDemo: "Book a demo",
+    },
     memberGate: {
         title: "The Command Center is for managers",
         body1: "You're a member of",
@@ -216,7 +223,6 @@ export const en = {
         useAnotherAccount: "Use a different account",
         pricingBoxTitle: "$40/seat/mo — or $32/seat/mo billed annually.",
         payTitle: "One step left: add billing",
-        couponHint: "Have a coupon? Enter it at checkout — Stripe shows an \"Add promotion code\" field.",
         paySub: (seats: number) => `Your workspace and playbook are ready. Activate ${seats} seat${seats !== 1 ? "s" : ""} to let your team start using it.`,
         goToCheckout: "Add billing",
         openingCheckout: "Opening checkout…",
@@ -255,6 +261,7 @@ export const en = {
         sendInvitesFinish: "Send invites & finish",
         finishSetup: "Finish setup",
         skipInvites: "Skip — I’ll invite them later",
+        inviteQueuedNote: (n: number) => `${n} invitation${n !== 1 ? "s" : ""} saved — ${n !== 1 ? "they" : "it"} will be emailed as soon as billing is active.`,
         inviteNote: (sent: number, failed: number) =>
             `${sent} invite${sent === 1 ? "" : "s"} sent${failed ? ` · ${failed} failed — retry from Settings → Members` : ""}`,
         // Done step
@@ -870,6 +877,7 @@ export const en = {
             invitePlaceholder: "colleague@company.com",
             sendingInvite: "Sending…",
             sendInvite: "Send invite",
+            inviteQueued: "Invitation saved — it will be emailed as soon as billing is active.",
             inviteSent: "Invite sent — they'll show as Pending below, and appear in Performance after their first call.",
             inviteError: (e: string) => `Error: ${e || "Try again in a minute, or contact support."}`,
             activeMembers: (n: number) => `Active members (${n})`,
@@ -976,7 +984,7 @@ export const en = {
             annual: "Annual · $32/seat",
             openingCheckout: "Opening checkout…",
             startSubscription: "Start subscription",
-            couponHint: "Have a coupon? Enter it at checkout — Stripe shows an \"Add promotion code\" field.",
+            notActiveYet: "This workspace isn't active yet — start the subscription to unlock it for your team.",
             secureCheckout: (n: number) => `${n} seats · secure Stripe checkout`,
             invoiceBilled1: "This workspace is billed directly by TalkPilot (invoice / ACH). To add or remove seats, email",
             invoiceBilled2: "— changes usually land the same day.",

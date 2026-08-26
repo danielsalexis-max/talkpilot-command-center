@@ -63,6 +63,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const [role, setRole]             = useState<string | null>(null)
     /// null = not resolved yet, false = signed in with no workspace at all.
     const [hasWorkspace, setHasWorkspace] = useState<boolean | null>(null)
+    const [signedIn, setSignedIn] = useState<boolean | null>(null)
+    /// Whether the workspace is allowed to be USED: a live subscription, an
+    /// unexpired trial, or an invoice-billed plan. null while resolving.
+    /// Under demo-first (D-192 #8) an unpaid org exists but is not usable —
+    /// without this gate its dashboard was fully reachable forever, so nobody
+    /// ever had a reason to finish checkout (found when the owner backed out
+    /// of the wizard's billing step and landed on a working dashboard).
+    const [entitled, setEntitled] = useState<boolean | null>(null)
     const isPublic = pathname === "/login" || pathname.startsWith("/accept-invite")
         || pathname.startsWith("/start") || pathname.startsWith("/reset-password")
 
@@ -90,6 +98,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => {
             setEmail(data.user?.email ?? null)
+            setSignedIn(!!data.user)
             if (!data.user) {
                 // Signed out. The page itself routes to /login; unblock the
                 // render so it can, instead of holding a spinner forever.
@@ -108,13 +117,30 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     setHasWorkspace(!!m)
                 })
         })
-        supabase.rpc("get_org_context").then(({ data }) => {
-            if (!data?.org_id) return
-            supabase.from("organizations").select("name, visibility, trial_ends_at, stripe_subscription_id").eq("id", data.org_id).single()
+        supabase.rpc("get_org_context").then(({ data, error }) => {
+            if (error) {
+                // A transient RPC failure must not lock a paying customer out
+                // behind the billing gate — fail open; RLS still protects data.
+                setEntitled(true)
+                return
+            }
+            if (!data?.org_id) {
+                // No context: either no workspace (handled via hasWorkspace) or
+                // a SUSPENDED org — the RPC returns null for those. Either way
+                // there is no entitled dashboard to show.
+                setEntitled(false)
+                return
+            }
+            supabase.from("organizations").select("name, visibility, plan, trial_ends_at, stripe_subscription_id").eq("id", data.org_id).single()
                 .then(({ data: o }) => {
-                    if (!o) return
+                    if (!o) { setEntitled(false); return }
                     setOrgName(o.name); setVisibility(o.visibility)
                     if (o.trial_ends_at && !o.stripe_subscription_id) setTrialEndsAt(o.trial_ends_at)
+                    setEntitled(
+                        !!o.stripe_subscription_id
+                        || (!!o.trial_ends_at && new Date(o.trial_ends_at) > new Date())
+                        || ["business", "enterprise"].includes(o.plan ?? "")
+                    )
                 })
         })
     }, [])
@@ -229,6 +255,53 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span className="text-sm text-[var(--color-muted)]">{t.common.loading}</span>
         </main>
     )
+
+    // A workspace exists — hold the paint until we also know whether it is
+    // ENTITLED, or the unpaid dashboard flashes by exactly the way the empty
+    // one used to. Signed-out visitors skip this: their page routes to /login.
+    if (signedIn && entitled === null) return (
+        <main className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
+            <span className="text-sm text-[var(--color-muted)]">{t.common.loading}</span>
+        </main>
+    )
+
+    // Workspace exists but billing was never activated (or the org is
+    // suspended). Everything except Settings — where Billing lives — is
+    // replaced by the activation gate. Settings stays reachable on purpose:
+    // it is the only page that can fix the situation.
+    if (signedIn && entitled === false && !pathname.startsWith("/settings")) {
+        const canPay = role === "owner" || role === "admin"
+        return (
+            <main className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center px-4">
+                <div className="w-full max-w-sm text-center space-y-5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/brand-mark.png" alt="" className="w-12 h-12 object-contain mx-auto" />
+                    <div>
+                        <h1 className="text-xl font-semibold text-[var(--color-text)]">{t.billingGate.title}</h1>
+                        <p className="text-sm text-[var(--color-text-secondary)] mt-2">
+                            {canPay ? t.billingGate.bodyOwner : t.billingGate.bodyMember}
+                        </p>
+                    </div>
+                    {canPay && (
+                        <div className="space-y-2">
+                            <Link href={"/settings?tab=billing" as Route}
+                                className="block w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-medium rounded-lg transition-colors">
+                                {t.billingGate.addBilling}
+                            </Link>
+                            <a href="https://talkpilot.co/demo" target="_blank" rel="noopener noreferrer"
+                                className="block w-full py-2.5 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors">
+                                {t.billingGate.bookDemo}
+                            </a>
+                        </div>
+                    )}
+                    <button onClick={() => supabase.auth.signOut().then(() => location.assign("/login"))}
+                        className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors">
+                        {t.common.signOut}
+                    </button>
+                </div>
+            </main>
+        )
+    }
 
     // Members get coached in the app, not administered here. Managers, admins
     // and owners pass through; everyone else gets pointed at the right door.

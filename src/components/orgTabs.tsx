@@ -1569,7 +1569,12 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
         })
         setInviting(false)
         if (res.ok) {
-            setMsg(t.tabs.members.inviteSent); setIsErr(false); setInviteEmail(""); await load()
+            const payload = await res.json().catch(() => ({}))
+            // Queued = the row exists and holds the seat, but the email waits
+            // for billing (D-198). Saying "sent" here would be a lie the admin
+            // discovers when the invitee never receives anything.
+            setMsg(payload.queued ? t.tabs.members.inviteQueued : t.tabs.members.inviteSent)
+            setIsErr(false); setInviteEmail(""); await load()
         } else {
             const e = await res.json().catch(() => ({}))
             setMsg(t.tabs.members.inviteError(errStr(e.error))); setIsErr(true)
@@ -2474,9 +2479,14 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                     )}
                     </div>
                     )
-                })() : trialEndsAt ? (
+                })() : info.plan === "team" ? (
                     <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
-                        {(() => {
+                        {/* Keyed on plan, not on the trial: a demo-first org
+                            (D-192 #8) has neither trial nor subscription, and
+                            keying on trialEndsAt sent its owner into the
+                            "billed by invoice, email us" branch — a workspace
+                            with literally no way to pay for itself. */}
+                        {trialEndsAt ? (() => {
                             const days = Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400e3)
                             return (
                                 <p className="text-sm text-[var(--color-text-secondary)]">
@@ -2485,7 +2495,11 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                                         : <>{t.tabs.billing.trialEnded1} <strong className="text-[var(--color-text)]">{t.tabs.billing.trialEnded2}</strong> {t.tabs.billing.trialEnded3}</>}
                                 </p>
                             )
-                        })()}
+                        })() : (
+                            <p className="text-sm text-[var(--color-text-secondary)]">
+                                {t.tabs.billing.notActiveYet}
+                            </p>
+                        )}
                         <div className="flex flex-wrap items-center gap-3 mt-4">
                             <div className="flex rounded-lg border border-[var(--color-border)] overflow-hidden text-xs font-medium">
                                 <button onClick={() => setInterval_("month")}
@@ -2503,9 +2517,6 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                             <span className="text-xs text-[var(--color-muted)]">
                                 {t.tabs.billing.secureCheckout(info.seats_purchased)}
                             </span>
-                        </div>
-                        <div className="mt-2">
-                            <span className="text-xs text-[var(--color-muted)]">{t.tabs.billing.couponHint}</span>
                         </div>
                     </div>
                 ) : (
