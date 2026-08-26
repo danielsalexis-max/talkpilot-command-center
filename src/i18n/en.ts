@@ -147,7 +147,7 @@ export const en = {
         noAccount: "Don't have an account? ",
         haveAccount: "Already have an account? ",
         newTeam: "New team?",
-        startTrial: "Start your 14-day free trial →",
+        startTrial: "Set up your workspace →",
     },
 
     resetPassword: {
@@ -194,7 +194,7 @@ export const en = {
         // Account step
         accountTitle: "Give your whole team your best rep’s instincts",
         accountSub: "Live coaching on every call, scored against your playbook.",
-        accountFree: "14 days free — no card.",
+        accountFree: "Set up in minutes.",
         choosePassword: "Choose a password (8+ characters)",
         createAndContinue: "Create account & continue",
         signInAndContinue: "Sign in & continue",
@@ -221,10 +221,9 @@ export const en = {
         bookDemoInstead: "Book a demo instead",
         checkoutFailed: "Couldn't open checkout. Try again, or book a demo and we'll set it up with you.",
         questionsBookDemo: "Rather talk first? Book a demo →",
-        trialBoxTitle: "14 days free, every feature, no card.",
-        trialBoxSub: "After the trial: $40/seat/mo, or $32/seat/mo billed annually.",
+        trialBoxSub: "Minimum 3 seats, up to 20 on Teams. Above that, talk to us about Enterprise.",
         creating: "Creating…",
-        startFreeTrial: "Start free trial",
+        startFreeTrial: "Create workspace",
         personalEmailError: "Workspaces need a work email. Sign up with your company address — your reps' invites and billing all hang off it.",
         // Brain step
         brainTitle: "Give your reps a playbook",
@@ -320,7 +319,7 @@ export const en = {
 
     home: {
         noWorkspaceTitle: "You're not in a workspace yet",
-        noWorkspaceBody: "Create one for your team — 14 days free, no card — or ask your manager for an invite link.",
+        noWorkspaceBody: "Create one for your team, or ask your manager for an invite link.",
         createWorkspace: "Create your workspace →",
         gotInvite: "Got an invite email? Open its link to join your team's workspace.",
         headerMeta: (plan: string, seats: number, visibility: string) => `${plan} plan · ${seats} seats · ${visibility} visibility`,

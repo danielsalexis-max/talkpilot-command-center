@@ -144,7 +144,7 @@ export const es: Dict = {
         noAccount: "¿No tienes cuenta? ",
         haveAccount: "¿Ya tienes cuenta? ",
         newTeam: "¿Equipo nuevo?",
-        startTrial: "Comienza tu prueba gratis de 14 días →",
+        startTrial: "Crea tu espacio de trabajo →",
     },
 
     resetPassword: {
@@ -189,7 +189,7 @@ export const es: Dict = {
         repsSeeOwn: "LOS REPS SIEMPRE VEN SUS PROPIOS SCORECARDS",
         accountTitle: "Dale a todo tu equipo el instinto de tu mejor rep",
         accountSub: "Coaching en vivo en cada llamada, evaluado contra tu playbook.",
-        accountFree: "14 días gratis — sin tarjeta.",
+        accountFree: "Se configura en minutos.",
         choosePassword: "Elige una contraseña (8+ caracteres)",
         createAndContinue: "Crear cuenta y continuar",
         signInAndContinue: "Iniciar sesión y continuar",
@@ -215,10 +215,9 @@ export const es: Dict = {
         bookDemoInstead: "Mejor agenda una demo",
         checkoutFailed: "No se pudo abrir el checkout. Inténtalo de nuevo, o agenda una demo y lo configuramos contigo.",
         questionsBookDemo: "¿Prefieres platicar primero? Agenda una demo →",
-        trialBoxTitle: "14 días gratis, todas las funciones, sin tarjeta.",
-        trialBoxSub: "Después de la prueba: $40 USD/asiento/mes, o $32 USD/asiento/mes con facturación anual.",
+        trialBoxSub: "Mínimo 3 asientos, hasta 20 en Teams. Arriba de eso, hablemos de Enterprise.",
         creating: "Creando…",
-        startFreeTrial: "Comenzar prueba gratis",
+        startFreeTrial: "Crear espacio de trabajo",
         personalEmailError: "Los espacios de trabajo necesitan un email de trabajo. Regístrate con la dirección de tu empresa — de ella dependen las invitaciones de tus reps y la facturación.",
         brainTitle: "Dale un playbook a tus reps",
         brainSub1: "Esto es lo que hace que el coaching sea ",
@@ -310,7 +309,7 @@ export const es: Dict = {
 
     home: {
         noWorkspaceTitle: "Aún no estás en un espacio de trabajo",
-        noWorkspaceBody: "Crea uno para tu equipo — 14 días gratis, sin tarjeta — o pide a tu manager un enlace de invitación.",
+        noWorkspaceBody: "Crea uno para tu equipo, o pide a tu manager un enlace de invitación.",
         createWorkspace: "Crea tu espacio de trabajo →",
         gotInvite: "¿Recibiste un email de invitación? Abre su enlace para unirte al espacio de tu equipo.",
         headerMeta: (plan: string, seats: number, visibility: string) => `Plan ${plan} · ${seats} asientos · visibilidad: ${visibility}`,
