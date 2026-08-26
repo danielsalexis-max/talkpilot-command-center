@@ -833,6 +833,7 @@ export const en = {
             assignTeams: "Teams",
             assignPeople: "People",
             assignNoTeams: "No teams yet — create them under Members.",
+            assignScopedWarning: "Only the teams and people named above get this playbook. Anyone else falls through to another active playbook that names them — or to none at all. Keep one playbook assigned to everyone as the workspace default.",
             assignPrecedence: "A rep gets the most specific playbook that names them: their own, then their team's, then the workspace default.",
         },
 

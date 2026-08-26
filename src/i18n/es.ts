@@ -820,6 +820,7 @@ export const es: Dict = {
             assignTeams: "Equipos",
             assignPeople: "Personas",
             assignNoTeams: "Aún no hay equipos — créalos en Miembros.",
+            assignScopedWarning: "Solo los equipos y las personas de arriba reciben este playbook. El resto cae en otro playbook activo que sí los nombre — o en ninguno. Deja un playbook asignado a todos como el default del espacio de trabajo.",
             assignPrecedence: "Cada rep recibe el playbook más específico que lo nombre: el suyo, luego el de su equipo, luego el del espacio de trabajo.",
         },
 

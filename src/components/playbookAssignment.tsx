@@ -148,6 +148,17 @@ export function PlaybookAssignment({
                     </div>
 
                     <p className="text-xs text-[var(--color-text-secondary)]">{t.tabs.playbooks.assignPrecedence}</p>
+
+                    {/* Scoping a playbook REMOVES it from everyone it doesn't
+                        name. That is the correct semantic and a genuine
+                        footgun: a manager aiming one playbook at one rep can
+                        silently leave the rest of the team with no playbook at
+                        all, and nothing else in the product would say so. */}
+                    {rows.length > 0 && !orgWide && (
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            {t.tabs.playbooks.assignScopedWarning}
+                        </p>
+                    )}
                     {error && <p className="text-xs text-red-600">{error}</p>}
                 </div>
             )}
