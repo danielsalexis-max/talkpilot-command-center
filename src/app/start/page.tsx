@@ -239,8 +239,13 @@ export default function StartPage() {
         }
     }
 
+    /// Sign out first — see the note on the login page's `oauth()`. With manual
+    /// identity linking enabled (needed for calendar connect, D-062), starting
+    /// OAuth on top of an existing session LINKS the new identity to that
+    /// account instead of switching to it.
     async function handleGoogle() {
         setError(null)
+        await supabase.auth.signOut()
         await supabase.auth.signInWithOAuth({
             provider: "google",
             options: { redirectTo: `${window.location.origin}/start` },
@@ -251,6 +256,7 @@ export default function StartPage() {
     // never reads a calendar; that scope belongs to the rep apps (D-187).
     async function handleMicrosoft() {
         setError(null)
+        await supabase.auth.signOut()
         await supabase.auth.signInWithOAuth({
             provider: "azure",
             options: { scopes: "openid profile email", redirectTo: `${window.location.origin}/start` },

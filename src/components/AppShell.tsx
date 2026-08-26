@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import type { Route } from "next"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useEffect, useState } from "react"
 import { applySkin, getSkinPref, setSkinPref, watchSystemSkin } from "@/lib/skin"
@@ -52,6 +52,7 @@ const ICONS = {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname()
+    const router = useRouter()
     const t = useT()
     const [email, setEmail]           = useState<string | null>(null)
     const [orgName, setOrgName]       = useState<string | null>(null)
@@ -60,8 +61,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const [dark, setDark]             = useState(false)
     const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
     const [role, setRole]             = useState<string | null>(null)
+    /// null = not resolved yet, false = signed in with no workspace at all.
+    const [hasWorkspace, setHasWorkspace] = useState<boolean | null>(null)
     const isPublic = pathname === "/login" || pathname.startsWith("/accept-invite")
         || pathname.startsWith("/start") || pathname.startsWith("/reset-password")
+
+    // A brand-new account has nowhere to be yet: it used to land on the full
+    // dashboard — nav, Calls, Settings, all empty — with a small "no workspace"
+    // card in the middle, so the first thing a new customer saw was a product
+    // that looked broken. Send them to the wizard instead, which is the only
+    // thing they can actually do.
+    //
+    // Keyed on MEMBERSHIP, deliberately, not on `get_org_context()`: that RPC
+    // also returns null for a SUSPENDED org, and bouncing a suspended owner to
+    // /start would trap them away from the Billing page they need to reach to
+    // fix it.
+    useEffect(() => {
+        if (isPublic || hasWorkspace !== false) return
+        router.replace("/start")
+    }, [isPublic, hasWorkspace, router])
 
     useEffect(() => {
         applySkin()
@@ -80,7 +98,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             // gate below.
             supabase.from("org_members").select("role")
                 .eq("user_id", data.user.id).eq("status", "active").maybeSingle()
-                .then(({ data: m }) => setRole(m?.role ?? null))
+                .then(({ data: m }) => {
+                    setRole(m?.role ?? null)
+                    setHasWorkspace(!!m)
+                })
         })
         supabase.rpc("get_org_context").then(({ data }) => {
             if (!data?.org_id) return
