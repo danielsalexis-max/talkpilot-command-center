@@ -566,6 +566,7 @@ export default function StartPage() {
                                 <div className="mt-7 rounded-lg border border-[var(--color-accent-light)] bg-[var(--color-accent-subtle)] px-4 py-3.5 space-y-2">
                                     <p className="text-sm font-semibold text-[var(--color-accent-deep)]">{t.start.payTitle}</p>
                                     <p className="text-xs text-[var(--color-accent-deep)]">{t.start.paySub(seats)}</p>
+                                    <p className="text-xs text-[var(--color-accent-deep)] opacity-80">{t.start.couponHint}</p>
                                     <div className="flex flex-wrap gap-2 pt-1">
                                         <button onClick={startCheckout} disabled={checkoutBusy} className={BTN + " sm:w-auto px-5"}>
                                             {checkoutBusy ? t.start.openingCheckout : t.start.goToCheckout}

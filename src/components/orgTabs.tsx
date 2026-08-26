@@ -2504,6 +2504,9 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                                 {t.tabs.billing.secureCheckout(info.seats_purchased)}
                             </span>
                         </div>
+                        <div className="mt-2">
+                            <span className="text-xs text-[var(--color-muted)]">{t.tabs.billing.couponHint}</span>
+                        </div>
                     </div>
                 ) : (
                     <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
