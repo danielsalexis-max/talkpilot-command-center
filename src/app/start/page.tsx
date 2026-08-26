@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { starterKitsFor, applyStarterKit, type StarterKit } from "@/lib/starterKit"
+import { isPersonalEmail } from "@/lib/workEmail"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
 import type { Dict } from "@/i18n"
 
@@ -20,19 +21,10 @@ const INPUT = "w-full bg-[var(--color-bg)] border border-[var(--color-border)] r
 const BTN = "w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors"
 const BTN_GHOST = "w-full py-2.5 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors"
 
-// Workspace creation wants a company identity behind it (D-171). Sign-IN with a
-// personal address stays fine — invited members are whatever address the org
-// invited — but the account that OWNS an org should be reachable at the company.
-const PERSONAL_DOMAINS = new Set([
-    "gmail.com", "googlemail.com", "yahoo.com", "yahoo.co.uk", "hotmail.com",
-    "hotmail.co.uk", "outlook.com", "live.com", "msn.com", "icloud.com", "me.com",
-    "mac.com", "aol.com", "proton.me", "protonmail.com", "pm.me", "gmx.com",
-    "gmx.de", "mail.com", "yandex.com", "yandex.ru", "zoho.com", "web.de",
-])
-function isPersonalEmail(email: string): boolean {
-    const domain = email.trim().toLowerCase().split("@").pop() ?? ""
-    return PERSONAL_DOMAINS.has(domain)
-}
+// The work-email rule and its domain list live in one place now — the login
+// page needed the same check, and three copies of a list like this is how they
+// drift. `create-org` keeps its own copy on purpose: it is the server-side
+// backstop and must refuse regardless of what any client believes (D-171).
 
 // The Teams plan tops out at 20 seats (mirrored in create-org and org-billing).
 // Beyond that it's an Enterprise conversation — the stepper stops here and

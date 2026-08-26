@@ -143,6 +143,7 @@ export const en = {
         forgotPassword: "Forgot password?",
         forgotNeedsEmail: "Enter your email above first, then tap Forgot password.",
         resetLinkSent: "Reset link sent — check your email.",
+        workEmailRequired: "Use your work email to create an account. A workspace's invites and billing hang off it, so a personal address can't own one — and if you were invited to a team, open your invitation link instead: it creates your account for you.",
         accountCreated: "Account created! Check your email to confirm, or sign in now if email confirmation is disabled.",
         noAccount: "Don't have an account? ",
         haveAccount: "Already have an account? ",

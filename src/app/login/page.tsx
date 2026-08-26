@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { isPersonalEmail } from "@/lib/workEmail"
 import { useT } from "@/i18n/LocaleProvider"
 
 export default function LoginPage() {
@@ -47,6 +48,16 @@ export default function LoginPage() {
                 }
                 router.replace("/")
             } else {
+                // Creating an account here with a consumer address is a dead
+                // end: they cannot own a workspace (create-org refuses), and a
+                // member joins through their invite link, which creates the
+                // account itself. Say so now rather than after the account
+                // exists. Sign-IN is deliberately not gated — an invited
+                // member's address is whatever the org invited.
+                if (isPersonalEmail(email)) {
+                    setError(t.login.workEmailRequired)
+                    return
+                }
                 const { error: authErr } = await supabase.auth.signUp({ email, password })
                 if (authErr) { setError(authErr.message); return }
                 setInfo(t.login.accountCreated)
@@ -145,6 +156,9 @@ export default function LoginPage() {
                             required
                             className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
                         />
+                        {mode === "signup" && isPersonalEmail(email) && (
+                            <p className="text-xs text-amber-700">{t.login.workEmailRequired}</p>
+                        )}
                         <input
                             type="password"
                             placeholder={t.common.password}

@@ -140,6 +140,7 @@ export const es: Dict = {
         forgotPassword: "¿Olvidaste tu contraseña?",
         forgotNeedsEmail: "Primero escribe tu email arriba y luego toca ¿Olvidaste tu contraseña?",
         resetLinkSent: "Enlace enviado — revisa tu email.",
+        workEmailRequired: "Usa tu email de trabajo para crear la cuenta. De él dependen las invitaciones y la facturación del espacio de trabajo, así que una dirección personal no puede ser dueña de uno — y si te invitaron a un equipo, abre el enlace de tu invitación: ahí se crea tu cuenta.",
         accountCreated: "¡Cuenta creada! Revisa tu email para confirmarla, o inicia sesión ahora si la confirmación por email está desactivada.",
         noAccount: "¿No tienes cuenta? ",
         haveAccount: "¿Ya tienes cuenta? ",
