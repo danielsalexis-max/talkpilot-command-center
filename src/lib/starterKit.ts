@@ -603,14 +603,20 @@ export async function applyStarterKit(orgId: string, kit: StarterKit): Promise<s
                 severity: o.severity,
                 active: true,
                 variants: null,
+                // A brand-new owner reading "we're already using a competitor"
+                // in their library assumes a data leak unless the row says
+                // where it came from.
+                source: "starter_kit",
             }))
         ).select("id")
         if (objErr) return objErr.message
 
         // Embed them, or the whole starter library is invisible to objection-lookup
-        // and the first call a new team makes coaches nothing. Non-fatal: the
-        // Objections tab shows an un-indexed count and offers a re-index.
-        await embedObjections(orgId, (inserted ?? []).map(r => r.id as string))
+        // and the first call a new team makes coaches nothing. Deliberately NOT
+        // awaited: it is the wizard's long pole (cold edge function + N
+        // embeddings) and it is already non-fatal — the Objections tab shows an
+        // un-indexed count and offers a re-index if this loses the race.
+        void embedObjections(orgId, (inserted ?? []).map(r => r.id as string))
     }
     return null
 }

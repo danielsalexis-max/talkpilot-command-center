@@ -79,7 +79,8 @@ export default function HomePage() {
                 supabase.from("org_knowledge").select("id", { count: "exact", head: true })
                     .eq("org_id", orgId),
                 supabase.from("org_invites").select("id", { count: "exact", head: true })
-                    .eq("org_id", orgId).is("accepted_at", null).gt("expires_at", new Date().toISOString()),
+                    .eq("org_id", orgId).is("accepted_at", null).is("revoked_at", null)
+                    .gt("expires_at", new Date().toISOString()),
             ])
             setOrg(orgInfo)
             setCards((scorecards ?? []) as Scorecard[])

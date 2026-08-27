@@ -38,6 +38,7 @@ export const en = {
         password: "Password",
         confirmPassword: "Confirm password",
         oneMoment: "One moment…",
+        emailCopied: "(address copied)",
         cancel: "Cancel",
         save: "Save",
         saving: "Saving…",
@@ -250,6 +251,8 @@ export const en = {
         dnaCard: "Clone your best rep instead (Team DNA)",
         dnaCardSub: "Upload 3–5 transcripts of your top performer — we extract their tone, phrases, objection responses and flow into a playbook. Takes ~5 minutes; we’ll take you there after setup.",
         skipBrain: "Skip for now — I’ll build my own under Playbook",
+        buildingBrain: (kit: string) => `Setting up “${kit}”…`,
+        buildingBrainSub: "Creating your playbook and objection library — this takes a few seconds.",
         // Invite step
         inviteTitle: "Invite your first reps",
         inviteSubWithKit1: "The ",
@@ -291,6 +294,7 @@ export const en = {
         invalidLink: "This invite link is invalid.",
         expiredLink: "This invite link has expired.",
         usedLink: "This invite link has already been used.",
+        revokedLink: "This invitation was withdrawn by your team's admin. Ask them to send a new one if you still need access.",
         acceptFailed: "Failed to accept invite.",
         askResend: "Ask your admin to re-send the invite if the link expired.",
         invitedTo1: "You've been invited to join",
@@ -645,6 +649,8 @@ export const en = {
     // ── orgTabs.tsx ──────────────────────────────────────────────────────────
     tabs: {
         cantDo: (doing: string) => `Couldn't ${doing}. Try again — and contact us if it repeats.`,
+        unsupportedFile: (ext: string) => `.${ext} files can't be read here — export it as PDF, .docx or plain text and upload that instead.`,
+        emptyDocument: "No readable text in that document — if it's a scan, export a text version and try again.",
         doingSaveSettings: "save your settings",
         doingSavePlaybook: "save the playbook",
         doingSaveThat: "save that",
@@ -683,6 +689,7 @@ export const en = {
             valuesPlaceholder: "e.g. We believe sales is about solving problems, not closing deals.",
             selfRef: "Self-reference (how reps should name the company)",
             selfRefPlaceholder: '"TalkPilot" — not "we" or "the company"',
+            phrasesUsage: "These feed the live coach on every call: suggestions avoid the banned phrases and lean on the required language. Scoring breaches is the playbook guardrails' job — set those under Playbook.",
             banned: "Banned phrases",
             noBanned: "No banned phrases yet.",
             bannedPlaceholder: "e.g. cheap, sorry to bother",
@@ -737,6 +744,13 @@ export const en = {
             errorPrefix: (e: string) => `Error: ${e}`,
             importErrorPrefix: (e: string) => `Import error: ${e}`,
             reviewExtracted: "Review extracted objections",
+            labelObjection: "Objection",
+            labelGuidance: "How to respond",
+            fromDoc: (name: string) => `from ${name}`,
+            sourceStarterKit: "Starter kit",
+            sourceTeamDna: "Team DNA",
+            sourceDocument: "Imported",
+            starterKitNote: "Rows marked “Starter kit” came with the coaching kit you picked at setup — edit or delete them freely.",
             selectAll: "Select all",
             none: "None",
             importing: "Importing…",
@@ -843,6 +857,7 @@ export const en = {
             assignNoTeams: "No teams yet — create them under Members.",
             assignScopedWarning: "Only the teams and people named above get this playbook. Anyone else falls through to another active playbook that names them — or to none at all. Keep one playbook assigned to everyone as the workspace default.",
             assignPrecedence: "A rep gets the most specific playbook that names them: their own, then their team's, then the workspace default.",
+            assignFailed: "That assignment didn't save — try again, and if it keeps failing, reload the page.",
         },
 
         practice: {
@@ -889,6 +904,9 @@ export const en = {
             accepted: "Accepted",
             expired: "Expired",
             pending: "Pending",
+            revoke: "Revoke",
+            revoked: "Revoked",
+            revokedMsg: (email: string) => `Invitation to ${email} revoked — the seat is free and the link no longer works.`,
         },
 
         dna: {

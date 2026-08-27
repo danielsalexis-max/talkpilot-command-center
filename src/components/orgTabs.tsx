@@ -11,6 +11,8 @@ import { PlaybookAssignment, type AssignTarget } from "@/components/playbookAssi
 import { TeamsSection } from "@/components/teamsSection"
 import { StarterKitPicker } from "@/components/starterKitPicker"
 import { VERTICALS, type Vertical } from "@/lib/starterKit"
+import { extractTextFromFile, UnsupportedFileError, EmptyDocumentError, EXTRACT_ACCEPT } from "@/lib/extractText"
+import { EmailLink } from "@/components/EmailLink"
 import { useLocale, useT } from "@/i18n/LocaleProvider"
 import { clientLocale, type Dict } from "@/i18n"
 
@@ -25,11 +27,11 @@ export interface OrgInfo {
     settings?: { rep_visibility?: { playbook?: boolean; knowledge?: boolean } } & Record<string, unknown>
 }
 interface KbRow    { id: string; title: string; kind: string; status: string; summary: string | null; created_at: string }
-interface ObjRow   { id: string; objection: string; response_guidance: string | null; approved_responses: { text?: string }[] | null; severity: string; active: boolean; variants: string[] | null }
+interface ObjRow   { id: string; objection: string; response_guidance: string | null; approved_responses: { text?: string }[] | null; severity: string; active: boolean; variants: string[] | null; source: string | null }
 interface PbStage  { key?: string; name: string; description: string; required?: string[]; required_items: string[]; guardrail_rules: Array<{type: string; keyword: string; action: string}> }
 interface PbRow    { id: string; name: string; methodology: string | null; status: string; version: number; stages: PbStage[]; created_at: string }
 interface MemberRow { user_id: string; email: string | null; role: string; status: string; joined_at: string }
-interface InviteRow { id: string; email: string; role: string; accepted_at: string | null; expires_at: string }
+interface InviteRow { id: string; email: string; role: string; accepted_at: string | null; expires_at: string; revoked_at: string | null }
 interface TeamRow  { id: string; name: string }
 interface PracticeAssignmentRow {
     id: string; title: string; note: string | null; due_at: string | null
@@ -217,6 +219,18 @@ function humanError(raw: string | null | undefined, doing: string, t: Dict): str
     return r
 }
 
+/// Provenance chip for an objection row. NULL source (manual adds, and every
+/// row that predates the column) shows no chip — "unlabeled = yours" is the
+/// right default; the chip exists so SEEDED content can't be mistaken for a
+/// data leak.
+function sourceBadge(source: string | null, t: Dict): string | null {
+    if (!source || source === "manual") return null
+    if (source === "starter_kit") return t.tabs.objections.sourceStarterKit
+    if (source === "team_dna")    return t.tabs.objections.sourceTeamDna
+    if (source.startsWith("document")) return t.tabs.objections.sourceDocument
+    return null
+}
+
 function errStr(e: unknown): string {
     if (!e) return ""
     if (typeof e === "string") return e
@@ -352,7 +366,12 @@ export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }
     const [toneChips, setToneChips]       = useState<string[]>(matchedChips)
     const [toneCustom, setToneCustom]     = useState(customRemainder)
     const [values, setValues]             = useState(org.voice_profile?.values ?? "")
-    const [selfRef, setSelfRef]           = useState(org.voice_profile?.self_reference ?? "")
+    // Self-reference lost its UI on 2026-08-27 (owner e2e: one config field
+    // nobody understood). The value still rides get_org_context as "Refer to
+    // the company as:" in the live prompt, so an org that set one keeps it —
+    // it just isn't editable here anymore; unset orgs let the coach use the
+    // workspace name naturally.
+    const selfRef = org.voice_profile?.self_reference ?? ""
     const [banned, setBanned]             = useState<string[]>(org.voice_profile?.banned_phrases ?? [])
     const [required, setRequired]         = useState<string[]>(org.voice_profile?.required_phrases ?? [])
     const [bannedInput, setBannedInput]   = useState("")
@@ -413,13 +432,11 @@ export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }
                     <textarea className={TEXTAREA} rows={2} placeholder={t.tabs.voice.valuesPlaceholder}
                         value={values} onChange={e => setValues(e.target.value)} />
                 </div>
-                <div className="space-y-1">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.voice.selfRef}</label>
-                    <input className={INPUT} placeholder={t.tabs.voice.selfRefPlaceholder}
-                        value={selfRef} onChange={e => setSelfRef(e.target.value)} />
-                </div>
-
-                {/* Phrases */}
+                {/* Phrases. Say what these actually do (owner e2e 2026-08-27):
+                    they ride the live-coach prompt on every client. They do NOT
+                    reach scoring — that is the playbook guardrails' job — so the
+                    copy must not promise it. */}
+                <p className="text-xs text-[var(--color-muted)]">{t.tabs.voice.phrasesUsage}</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Banned */}
                     <div className="space-y-2">
@@ -677,12 +694,15 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
     // Tracked explicitly rather than sniffing the message text — the copy is
     // translated, so "starts with Error" is not a reliable signal.
     const [extractErr, setExtractErr]         = useState(false)
+    /// Filename of the doc the current extraction came from — stored as the
+    /// imported rows' provenance ("where did this objection come from?").
+    const [sourceDoc, setSourceDoc]           = useState<string | null>(null)
     const extractFileRef = useRef<HTMLInputElement>(null)
 
     const load = useCallback(async () => {
         const [{ data }, { count }] = await Promise.all([
             supabase.from("org_objections")
-                .select("id, objection, response_guidance, approved_responses, severity, active, variants")
+                .select("id, objection, response_guidance, approved_responses, severity, active, variants, source")
                 .eq("org_id", orgId).order("severity"),
             // An objection with no embedding can never be matched mid-call, so
             // the library can look complete while doing nothing.
@@ -714,7 +734,19 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
         if (!file) return
         e.target.value = ""
         setExtracting(true); setExtractMsg(null); setExtractErr(false); setExtracted([]); setSelected(new Set())
-        const text = await file.text()
+        let text: string
+        try {
+            text = await extractTextFromFile(file)
+        } catch (err) {
+            setExtracting(false); setExtractErr(true)
+            setExtractMsg(err instanceof UnsupportedFileError
+                ? t.tabs.unsupportedFile(err.ext)
+                : err instanceof EmptyDocumentError
+                    ? t.tabs.emptyDocument
+                    : t.tabs.objections.errorPrefix(errStr(err)))
+            return
+        }
+        setSourceDoc(file.name)
         try {
             const { data: { session } } = await supabase.auth.getSession()
             const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/extract-content`, {
@@ -747,6 +779,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
             severity: normalizeSeverity(o.severity),
             variants: o.variants ?? [],
             active: true,
+            source: sourceDoc ? `document:${sourceDoc}` : "document",
         }))
         const { data: inserted, error } = await supabase.from("org_objections").insert(rows).select("id")
         if (error) { setImporting(false); setExtractMsg(t.tabs.objections.importErrorPrefix(error.message)); setExtractErr(true); return }
@@ -791,6 +824,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
             severity: normalizeSeverity(severity),
             variants: variants.split("\n").map(s => s.trim()).filter(Boolean),
             active: true,
+            source: "manual",
         }).select("id").single()
         if (error) { setSaving(false); setMsg(humanError(error.message, t.tabs.doingSavePlaybook, t)); setIsErr(true); return }
         const r = await embedObjections(orgId, inserted ? [inserted.id as string] : [])
@@ -837,7 +871,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                     fileRef={extractFileRef}
                     onChange={handleExtractFile}
                     loading={extracting}
-                    accept=".txt,.md,.csv,.pdf"
+                    accept={EXTRACT_ACCEPT}
                     title={t.tabs.objections.importTitle}
                     subtitle={t.tabs.objections.importSub}
                 />
@@ -864,10 +898,17 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                                     onChange={() => setSelected(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n })}
                                     className="mt-0.5 accent-[var(--color-accent)]" />
                                 <div className="min-w-0">
+                                    {/* Labeled rows: "which line is the objection and which is
+                                        what I say back?" is not answerable from font weight. */}
+                                    <p className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold">{t.tabs.objections.labelObjection}</p>
                                     <p className="text-sm text-[var(--color-text)] font-medium">{o.objection}</p>
-                                    {guidanceOf(o) && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{guidanceOf(o)}</p>}
-                                    <div className="flex items-center gap-2 mt-1">
+                                    {guidanceOf(o) && (<>
+                                        <p className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold mt-1.5">{t.tabs.objections.labelGuidance}</p>
+                                        <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{guidanceOf(o)}</p>
+                                    </>)}
+                                    <div className="flex items-center gap-2 mt-1.5">
                                         <StatusBadge label={t.data.severities[o.severity || "normal"] ?? o.severity} color={sevColor(o.severity || "normal")} />
+                                        {sourceDoc && <span className="text-xs text-[var(--color-muted)]">{t.tabs.objections.fromDoc(sourceDoc)}</span>}
                                         {o.variants?.length > 0 && <span className="text-xs text-[var(--color-muted)]">{t.tabs.objections.nVariants(o.variants.length)}</span>}
                                     </div>
                                 </div>
@@ -932,6 +973,9 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                     <SectionHeader title={t.tabs.objections.libraryTitle(objs.length)} />
                     {objs.length > 4 && <SearchBox value={query} onChange={setQuery} placeholder={t.tabs.objections.searchObjections} className="w-56" />}
                 </div>
+                {objs.some(o => o.source === "starter_kit") && (
+                    <p className="text-xs text-[var(--color-muted)] mb-3">{t.tabs.objections.starterKitNote}</p>
+                )}
                 {loading && <p className="text-sm text-[var(--color-text-secondary)]">{t.common.loading}</p>}
                 <div className="space-y-2">
                     {objs.filter(o => {
@@ -942,9 +986,13 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                     <p className="text-sm text-[var(--color-text)] font-medium">{o.objection}</p>
+                                    {sourceBadge(o.source, t) && <StatusBadge label={sourceBadge(o.source, t)!} color="slate" />}
                                     {!o.active && <StatusBadge label={t.data.statuses.disabled} color="slate" />}
                                 </div>
-                                {guidanceOf(o) && <p className="text-xs text-[var(--color-text-secondary)] mt-1">{guidanceOf(o)}</p>}
+                                {guidanceOf(o) && (<>
+                                    <p className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold mt-1">{t.tabs.objections.labelGuidance}</p>
+                                    <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{guidanceOf(o)}</p>
+                                </>)}
                                 {o.variants && o.variants.length > 0 && (
                                     <p className="text-xs text-[var(--color-muted)] mt-0.5">{t.tabs.objections.nVariants(o.variants.length)}</p>
                                 )}
@@ -1018,7 +1066,18 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
         if (!file) return
         e.target.value = ""
         setExtracting(true); setExtractMsg(null); setExtractErr(false)
-        const text = await file.text()
+        let text: string
+        try {
+            text = await extractTextFromFile(file)
+        } catch (err) {
+            setExtracting(false); setExtractErr(true)
+            setExtractMsg(err instanceof UnsupportedFileError
+                ? t.tabs.unsupportedFile(err.ext)
+                : err instanceof EmptyDocumentError
+                    ? t.tabs.emptyDocument
+                    : t.tabs.playbooks.errorPrefix(errStr(err)))
+            return
+        }
         try {
             const { data: { session } } = await supabase.auth.getSession()
             const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/extract-content`, {
@@ -1174,7 +1233,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                         <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.tabs.playbooks.sub}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                        <input ref={extractFileRef} type="file" accept=".txt,.md,.csv,.pdf" className="hidden" onChange={handleExtractFile} />
+                        <input ref={extractFileRef} type="file" accept={EXTRACT_ACCEPT} className="hidden" onChange={handleExtractFile} />
                         <button className={BTN_PRIMARY} onClick={() => extractFileRef.current?.click()} disabled={extracting}>
                             {extracting ? t.tabs.playbooks.extracting : t.tabs.playbooks.importFromDoc}
                         </button>
@@ -1527,7 +1586,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                 return r
             }),
             supabase.from("org_invites")
-                .select("id, email, role, accepted_at, expires_at")
+                .select("id, email, role, accepted_at, expires_at, revoked_at")
                 .eq("org_id", orgId).order("created_at", { ascending: false }).limit(30),
             supabase.from("org_playbooks").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "active"),
             supabase.from("org_objections").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("active", true),
@@ -1595,6 +1654,17 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
         setMembers(prev => prev.map(m => m.user_id === userId ? { ...m, role } : m))
         await auditWrite("member.role_changed", { user_id: userId, from: before, to: role })
         setIsErr(false); setMsg(`Role updated to ${role}.`)
+    }
+
+    // Revoking keeps the row (the accept page needs to say "withdrawn", which
+    // a deleted row can't) and frees the seat — pending counts exclude it.
+    async function revokeInvite(inv: InviteRow) {
+        const { error } = await supabase.from("org_invites")
+            .update({ revoked_at: new Date().toISOString() }).eq("id", inv.id)
+        if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true); return }
+        await auditWrite("invite.revoked", { invite_id: inv.id, email: inv.email })
+        setIsErr(false); setMsg(t.tabs.members.revokedMsg(inv.email))
+        await load()
     }
 
     async function removeMember(userId: string) {
@@ -1700,12 +1770,17 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                                 <span className="text-[var(--color-text-secondary)]">{inv.email}</span>
                                 <div className="flex items-center gap-3 text-xs">
                                     <span className="text-[var(--color-text-secondary)] capitalize">{t.data.roles[inv.role] ?? inv.role}</span>
-                                    {inv.accepted_at ? (
+                                    {inv.revoked_at ? (
+                                        <StatusBadge label={t.tabs.members.revoked} color="slate" />
+                                    ) : inv.accepted_at ? (
                                         <StatusBadge label={t.tabs.members.accepted} color="green" />
                                     ) : new Date(inv.expires_at) < new Date() ? (
                                         <StatusBadge label={t.tabs.members.expired} color="red" />
                                     ) : (
-                                        <StatusBadge label={t.tabs.members.pending} color="yellow" />
+                                        <>
+                                            <StatusBadge label={t.tabs.members.pending} color="yellow" />
+                                            <button className={BTN_DANGER} onClick={() => revokeInvite(inv)}>{t.tabs.members.revoke}</button>
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -1775,8 +1850,9 @@ export function transcriptIssue(text: string): TranscriptIssue | null {
 /// containers, not text — `file.text()` on them yields binary noise that would
 /// then fail validation with a confusing message, so they are refused by name
 /// with instructions instead.
-const TRANSCRIPT_TEXT_EXTENSIONS = ["txt", "md", "markdown", "srt", "vtt", "csv", "tsv", "text", "log", "json", "rtf"]
-const TRANSCRIPT_BINARY_EXTENSIONS = ["pdf", "doc", "docx", "pages", "odt"]
+// PDFs and .docx now parse for real (extractTextFromFile); only the formats
+// with no browser-side parser stay refused, by name, with the fix in the copy.
+const TRANSCRIPT_TEXT_EXTENSIONS = ["txt", "md", "markdown", "srt", "vtt", "csv", "tsv", "text", "log", "json", "pdf", "docx"]
 
 function TranscriptCard({ index, entry, onChange, onRemove }: {
     index: number
@@ -1793,17 +1869,14 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
         const file = e.target.files?.[0]
         if (!file) return
         setFileError("")
-        const ext = file.name.split(".").pop()?.toLowerCase() ?? ""
-        if (TRANSCRIPT_BINARY_EXTENSIONS.includes(ext)) {
-            setFileError(t.tabs.dna.binaryError(ext.toUpperCase()))
-            e.target.value = ""; return
-        }
         setLoadingFile(true)
         try {
-            const text = await file.text()
+            const text = await extractTextFromFile(file)
             onChange("text", text)
-        } catch {
-            setFileError(t.tabs.dna.fileError)
+        } catch (err) {
+            setFileError(err instanceof UnsupportedFileError
+                ? t.tabs.dna.binaryError(err.ext.toUpperCase())
+                : t.tabs.dna.fileError)
         } finally {
             setLoadingFile(false)
             e.target.value = ""
@@ -2019,6 +2092,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                     org_id: orgId, objection: o.objection, response_guidance: o.response_guidance,
                     approved_responses: approvedResponsesFrom(o.response_guidance),
                     severity: normalizeSeverity(o.severity), variants: null, active: true,
+                    source: "team_dna",
                 }))
             ).select("id")
             await embedObjections(orgId, (inserted ?? []).map(x => x.id as string))
@@ -2529,9 +2603,9 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                     {info.plan === "team" && seatDraft >= seatCap && (
                         <p className="text-xs text-[var(--color-text-secondary)] mt-2">
                             {t.tabs.billing.seatCapNote}{" "}
-                            <a href="mailto:hello@talkpilot.co?subject=TalkPilot%20Enterprise" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
+                            <EmailLink email="hello@talkpilot.co" subject="TalkPilot Enterprise" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
                                 {t.tabs.billing.seatCapCta}
-                            </a>
+                            </EmailLink>
                         </p>
                     )}
                     </div>
@@ -2582,7 +2656,7 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                     <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
                         <p className="text-sm text-[var(--color-text-secondary)]">
                             {t.tabs.billing.invoiceBilled1}{" "}
-                            <a className="text-[var(--color-accent)] hover:underline" href="mailto:alexis@talkpilot.co?subject=Seat change request">alexis@talkpilot.co</a>
+                            <EmailLink email="alexis@talkpilot.co" subject="Seat change request" className="text-[var(--color-accent)] hover:underline">alexis@talkpilot.co</EmailLink>
                             {" "}{t.tabs.billing.invoiceBilled2}
                         </p>
                     </div>

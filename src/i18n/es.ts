@@ -37,6 +37,7 @@ export const es: Dict = {
         password: "Contraseña",
         confirmPassword: "Confirma la contraseña",
         oneMoment: "Un momento…",
+        emailCopied: "(correo copiado)",
         cancel: "Cancelar",
         save: "Guardar",
         saving: "Guardando…",
@@ -243,6 +244,8 @@ export const es: Dict = {
         dnaCard: "Mejor clona a tu mejor rep (Team DNA)",
         dnaCardSub: "Sube 3–5 transcripciones de tu mejor rep — extraemos su tono, frases, respuestas a objeciones y flujo en un playbook. Toma ~5 minutos; te llevamos ahí al terminar la configuración.",
         skipBrain: "Omitir por ahora — armaré el mío en Playbook",
+        buildingBrain: (kit: string) => `Configurando “${kit}”…`,
+        buildingBrainSub: "Estamos creando tu playbook y tu librería de objeciones — toma unos segundos.",
         inviteTitle: "Invita a tus primeros reps",
         inviteSubWithKit1: "El playbook ",
         inviteSubWithKit2: " ya está activo — cualquiera que se una recibe coaching desde su primera llamada.",
@@ -282,6 +285,7 @@ export const es: Dict = {
         invalidLink: "Este enlace de invitación no es válido.",
         expiredLink: "Este enlace de invitación expiró.",
         usedLink: "Este enlace de invitación ya fue usado.",
+        revokedLink: "El admin de tu equipo retiró esta invitación. Pídele que te envíe una nueva si aún necesitas acceso.",
         acceptFailed: "No se pudo aceptar la invitación.",
         askResend: "Si el enlace expiró, pide a tu admin que reenvíe la invitación.",
         invitedTo1: "Te invitaron a unirte a",
@@ -632,6 +636,8 @@ export const es: Dict = {
 
     tabs: {
         cantDo: (doing: string) => `No se pudo ${doing}. Intenta de nuevo — y contáctanos si se repite.`,
+        unsupportedFile: (ext: string) => `Los archivos .${ext} no se pueden leer aquí — expórtalo como PDF, .docx o texto plano y sube ese.`,
+        emptyDocument: "Ese documento no tiene texto legible — si es un escaneo, exporta una versión de texto e inténtalo de nuevo.",
         doingSaveSettings: "guardar tu configuración",
         doingSavePlaybook: "guardar el playbook",
         doingSaveThat: "guardar eso",
@@ -670,6 +676,7 @@ export const es: Dict = {
             valuesPlaceholder: "p. ej. Creemos que vender es resolver problemas, no cerrar tratos.",
             selfRef: "Autorreferencia (cómo deben nombrar la empresa los reps)",
             selfRefPlaceholder: '"TalkPilot" — no "nosotros" ni "la empresa"',
+            phrasesUsage: "Esto alimenta al coach en vivo en cada llamada: las sugerencias evitan las frases prohibidas y refuerzan el lenguaje requerido. Puntuar infracciones es trabajo de los guardrails del playbook — configúralos en Playbook.",
             banned: "Frases prohibidas",
             noBanned: "Aún no hay frases prohibidas.",
             bannedPlaceholder: "p. ej. barato, perdón por molestar",
@@ -724,6 +731,13 @@ export const es: Dict = {
             errorPrefix: (e: string) => `Error: ${e}`,
             importErrorPrefix: (e: string) => `Error al importar: ${e}`,
             reviewExtracted: "Revisa las objeciones extraídas",
+            labelObjection: "Objeción",
+            labelGuidance: "Cómo responder",
+            fromDoc: (name: string) => `de ${name}`,
+            sourceStarterKit: "Kit inicial",
+            sourceTeamDna: "Team DNA",
+            sourceDocument: "Importada",
+            starterKitNote: "Las filas marcadas “Kit inicial” vienen del kit de coaching que elegiste al configurar — edítalas o bórralas con libertad.",
             selectAll: "Seleccionar todas",
             none: "Ninguna",
             importing: "Importando…",
@@ -830,6 +844,7 @@ export const es: Dict = {
             assignNoTeams: "Aún no hay equipos — créalos en Miembros.",
             assignScopedWarning: "Solo los equipos y las personas de arriba reciben este playbook. El resto cae en otro playbook activo que sí los nombre — o en ninguno. Deja un playbook asignado a todos como el default del espacio de trabajo.",
             assignPrecedence: "Cada rep recibe el playbook más específico que lo nombre: el suyo, luego el de su equipo, luego el del espacio de trabajo.",
+            assignFailed: "La asignación no se guardó — inténtalo de nuevo y, si sigue fallando, recarga la página.",
         },
 
         practice: {
@@ -876,6 +891,9 @@ export const es: Dict = {
             accepted: "Aceptada",
             expired: "Expirada",
             pending: "Pendiente",
+            revoke: "Revocar",
+            revoked: "Revocada",
+            revokedMsg: (email: string) => `Invitación a ${email} revocada — el asiento queda libre y el enlace deja de funcionar.`,
         },
 
         dna: {

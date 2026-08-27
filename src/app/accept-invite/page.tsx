@@ -23,9 +23,10 @@ type Platform = "mac" | "ios" | "android" | "windows" | "other"
 
 type InvitePreview = {
     valid: boolean
-    reason?: "invalid" | "expired" | "used"
+    reason?: "invalid" | "expired" | "used" | "revoked"
     org_name?: string
     role?: string
+    email?: string
     email_hint?: string
 }
 
@@ -35,6 +36,7 @@ function previewError(t: Dict, reason: InvitePreview["reason"]): string {
     switch (reason) {
         case "expired": return t.acceptInvite.expiredLink
         case "used":    return t.acceptInvite.usedLink
+        case "revoked": return t.acceptInvite.revokedLink
         default:        return t.acceptInvite.invalidLink
     }
 }
@@ -97,6 +99,10 @@ function AcceptInviteContent() {
                     setMessage(previewError(t, p.reason))
                     return
                 }
+                // The account must be created as the invited address —
+                // accept-invite enforces the match (D-169), so a free-form
+                // field only sets people up to fail after creating an account.
+                if (p.email) setEmail(p.email)
             } catch {
                 // The preview is context, not a gate. If it fails, carry on and let
                 // accept-invite stay the authority on whether the token is good.
@@ -132,7 +138,9 @@ function AcceptInviteContent() {
                 setStatus("done")
             } else {
                 setStatus("error")
-                setMessage(body.error?.message ?? body.error ?? t.acceptInvite.acceptFailed)
+                setMessage(body.error?.code === "invite_revoked"
+                    ? t.acceptInvite.revokedLink
+                    : body.error?.message ?? body.error ?? t.acceptInvite.acceptFailed)
             }
         } catch (e) {
             setStatus("error")
@@ -140,11 +148,20 @@ function AcceptInviteContent() {
         }
     }
 
-    async function googleAuth() {
+    /// Sign out before starting OAuth — same rule as /login and /start: manual
+    /// identity linking is enabled (D-062), so OAuth on top of an existing
+    /// session LINKS the new identity to that account instead of switching.
+    /// On this page that means an invitee on a machine with a leftover session
+    /// (the owner's, a colleague's) would join the org as the wrong account.
+    /// redirectTo keeps ?token= so the return trip re-runs boot() and accepts.
+    async function oauth(provider: "google" | "azure") {
         setMessage("")
+        await supabase.auth.signOut()
         await supabase.auth.signInWithOAuth({
-            provider: "google",
-            options: { redirectTo: window.location.href },
+            provider,
+            options: provider === "azure"
+                ? { scopes: "openid profile email", redirectTo: window.location.href }
+                : { redirectTo: window.location.href },
         })
     }
 
@@ -234,9 +251,13 @@ function AcceptInviteContent() {
                         </p>
                         <form onSubmit={submitAuth} className="space-y-3">
                             <input type="email" placeholder={t.common.workEmail} value={email} required
-                                onChange={e => setEmail(e.target.value)} className={INPUT} />
+                                readOnly={!!preview?.email} aria-readonly={!!preview?.email}
+                                autoComplete="email"
+                                onChange={e => setEmail(e.target.value)}
+                                className={`${INPUT} ${preview?.email ? "opacity-70 cursor-not-allowed" : ""}`} />
                             <input type="password" placeholder={mode === "signup" ? t.acceptInvite.choosePassword : t.common.password}
                                 value={password} required minLength={6}
+                                autoComplete={mode === "signup" ? "new-password" : "current-password"}
                                 onChange={e => setPassword(e.target.value)} className={INPUT} />
                             {message && <p className="text-xs text-red-600">{message}</p>}
                             <button type="submit" disabled={busy} className={BTN}>
@@ -248,10 +269,17 @@ function AcceptInviteContent() {
                             <span className="text-[11px] text-[var(--color-muted)]">{t.common.or}</span>
                             <span className="h-px flex-1 bg-[var(--color-border)]" />
                         </div>
-                        <button type="button" onClick={googleAuth}
+                        <button type="button" onClick={() => oauth("google")}
                             className="w-full py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors flex items-center justify-center gap-2.5">
                             <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.8 6.1C12.3 13.2 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.4 28.7a14.5 14.5 0 0 1 0-9.4l-7.8-6.1a24 24 0 0 0 0 21.6l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2.1 1.4-4.7 2.3-7.7 2.3-6.3 0-11.7-3.7-13.6-9l-7.8 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
                             {t.common.continueWithGoogle}
+                        </button>
+                        <button type="button" onClick={() => oauth("azure")}
+                            className="w-full py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors flex items-center justify-center gap-2.5">
+                            {/* Same basic scopes as /login — no Calendars.Read here (D-187);
+                                the rep apps request calendar at their own sign-in (D-062). */}
+                            <svg width="16" height="16" viewBox="0 0 23 23" aria-hidden="true"><path fill="#F25022" d="M0 0h11v11H0z"/><path fill="#7FBA00" d="M12 0h11v11H12z"/><path fill="#00A4EF" d="M0 12h11v11H0z"/><path fill="#FFB900" d="M12 12h11v11H12z"/></svg>
+                            {t.common.continueWithMicrosoft}
                         </button>
                         <p className="text-[10.5px] text-[var(--color-muted)] text-center">
                             {t.acceptInvite.boundToAddress}

@@ -105,7 +105,7 @@ function PerformanceTab({ onSeeMembers }: { onSeeMembers: () => void }) {
             // admins, so for managers this just stays 0.
             supabase.from("org_invites")
                 .select("id", { count: "exact", head: true })
-                .eq("org_id", ctx.org_id).is("accepted_at", null)
+                .eq("org_id", ctx.org_id).is("accepted_at", null).is("revoked_at", null)
                 .gt("expires_at", new Date().toISOString())
                 .then(({ count }) => setPendingInvites(count ?? 0))
 

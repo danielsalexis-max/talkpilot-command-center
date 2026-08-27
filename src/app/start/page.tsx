@@ -6,6 +6,7 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { starterKitsFor, applyStarterKit, type StarterKit } from "@/lib/starterKit"
 import { isPersonalEmail } from "@/lib/workEmail"
+import { EmailLink } from "@/components/EmailLink"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
 import type { Dict } from "@/i18n"
 
@@ -189,6 +190,8 @@ export default function StartPage() {
 
     const [teamType, setTeamType]     = useState<"sales" | "support">("sales")
     const [kitApplied, setKitApplied] = useState<string | null>(null)
+    /// Kit title while applyStarterKit runs — swaps the kit list for progress.
+    const [kitBuilding, setKitBuilding] = useState<string | null>(null)
     const [wantsDna, setWantsDna]     = useState(false)
     const [invites, setInvites]       = useState<string[]>(["", "", ""])
     const [inviteNote, setInviteNote] = useState<string | null>(null)
@@ -313,11 +316,16 @@ export default function StartPage() {
 
     async function handleKit(kit: StarterKit) {
         if (!orgId) return
-        setError(null); setBusy(true)
+        const title = kitDisplay(t, kit).title
+        // Applying a kit is the wizard's one genuinely slow click (playbook +
+        // objection inserts, then embeddings on a cold edge function) — the
+        // cards dimming 50% read as "nothing happened". Swap the whole step
+        // for a progress panel instead.
+        setError(null); setBusy(true); setKitBuilding(title)
         const err = await applyStarterKit(orgId, kit)
-        setBusy(false)
+        setBusy(false); setKitBuilding(null)
         if (err) { setError(err); return }
-        setKitApplied(kitDisplay(t, kit).title)
+        setKitApplied(title)
         setStep("invite")
     }
 
@@ -382,11 +390,13 @@ export default function StartPage() {
                             </p>
                             <form onSubmit={handleAccount} className="space-y-3 mt-7">
                                 <input type="email" required placeholder={t.common.workEmail} className={INPUT}
+                                    autoComplete="email" autoFocus
                                     value={email} onChange={e => setEmail(e.target.value)} />
                                 {mode === "signup" && isPersonalEmail(email) && (
                                     <p className="text-xs text-amber-700">{t.start.personalEmailError}</p>
                                 )}
                                 <input type="password" required minLength={8} placeholder={mode === "signup" ? t.start.choosePassword : t.common.password}
+                                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
                                     className={INPUT} value={password} onChange={e => setPassword(e.target.value)} />
                                 {error && <p className="text-xs text-red-600">{error}</p>}
                                 <button type="submit" disabled={busy} className={BTN}>
@@ -448,9 +458,9 @@ export default function StartPage() {
                                     {seats >= TEAM_SEAT_CAP && (
                                         <p className="text-xs text-[var(--color-text-secondary)] mt-2">
                                             {t.start.seatCapNote}{" "}
-                                            <a href="mailto:hello@talkpilot.co?subject=TalkPilot%20Enterprise" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
+                                            <EmailLink email="hello@talkpilot.co" subject="TalkPilot Enterprise" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
                                                 {t.start.seatCapCta}
-                                            </a>
+                                            </EmailLink>
                                         </p>
                                     )}
                                 </div>
@@ -474,9 +484,17 @@ export default function StartPage() {
                             <p className="text-sm text-[var(--color-text-secondary)] mt-2">
                                 {t.start.brainSub1}<em>{t.start.brainSubEm}</em>{t.start.brainSub2}
                             </p>
+                            {kitBuilding && (
+                                <div className="mt-6 rounded-xl border border-[var(--color-accent-light)] bg-[var(--color-accent-subtle)] px-5 py-6 text-center space-y-2" role="status" aria-live="polite">
+                                    <div className="mx-auto w-6 h-6 rounded-full border-2 border-[var(--color-accent)] border-t-transparent animate-spin" aria-hidden />
+                                    <p className="text-sm font-semibold text-[var(--color-accent-deep)]">{t.start.buildingBrain(kitBuilding)}</p>
+                                    <p className="text-xs text-[var(--color-accent-deep)]">{t.start.buildingBrainSub}</p>
+                                </div>
+                            )}
                             {/* One question, then two compact cards — the per-stage chips made
                                 this step read as a wall (D-171). Details live in a single meta
                                 line; everything is editable under Playbook afterwards. */}
+                            {!kitBuilding && (<>
                             <div className="flex rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] p-1 mt-6 max-w-xs">
                                 {([["sales", t.start.teamSales], ["support", t.start.teamSupport]] as const).map(([key, label]) => (
                                     <button key={key} type="button" onClick={() => setTeamType(key)}
@@ -516,6 +534,7 @@ export default function StartPage() {
                             <button onClick={() => setStep("invite")} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-4">
                                 {t.start.skipBrain}
                             </button>
+                            </>)}
                         </div>
                     )}
 
@@ -589,14 +608,21 @@ export default function StartPage() {
                                 </div>
                             )}
 
-                            <div className="flex flex-col sm:flex-row gap-3 mt-8">
-                                <button onClick={() => { window.location.href = wantsDna ? "/playbook?tab=dna" : "/" }} className={BTN + " sm:flex-1"}>
-                                    {wantsDna ? t.start.setUpDna : t.start.openCommandCenter}
-                                </button>
-                                {wantsDna && (
-                                    <button onClick={() => { window.location.href = "/" }} className={BTN_GHOST + " sm:flex-1"}>{t.start.commandCenter}</button>
-                                )}
-                            </div>
+                            {/* Only an entitled workspace gets a door into the
+                                Command Center — without a trial or sub the app
+                                shell is one big billing gate, so the primary
+                                CTA above (checkout / demo) must stay the only
+                                primary action. */}
+                            {hasTrial && (
+                                <div className="flex flex-col sm:flex-row gap-3 mt-8">
+                                    <button onClick={() => { window.location.href = wantsDna ? "/playbook?tab=dna" : "/" }} className={BTN + " sm:flex-1"}>
+                                        {wantsDna ? t.start.setUpDna : t.start.openCommandCenter}
+                                    </button>
+                                    {wantsDna && (
+                                        <button onClick={() => { window.location.href = "/" }} className={BTN_GHOST + " sm:flex-1"}>{t.start.commandCenter}</button>
+                                    )}
+                                </div>
+                            )}
                             <p className="text-[11px] text-[var(--color-muted)] mt-5">
                                 {t.start.doneFooter1}{" "}
                                 <a className="underline" href="https://apps.apple.com/app/id6763953639" target="_blank" rel="noreferrer">{t.start.iphone}</a> · <a className="underline" href="https://talkpilot.co" target="_blank" rel="noreferrer">{t.start.mac}</a>
@@ -608,7 +634,7 @@ export default function StartPage() {
                 <p className="text-[11px] text-[var(--color-muted)] mt-10">
                     {t.start.alreadyUsing} <Link href="/login" className="text-[var(--color-accent-deep)] hover:underline">{t.common.signIn}</Link>
                     <span className="mx-2">·</span>
-                    {t.start.questions} <a href="mailto:alexis@talkpilot.co" className="text-[var(--color-accent-deep)] hover:underline">{t.start.talkToUs}</a>
+                    {t.start.questions} <EmailLink email="alexis@talkpilot.co" className="text-[var(--color-accent-deep)] hover:underline">{t.start.talkToUs}</EmailLink>
                 </p>
                 </div>
             </div>

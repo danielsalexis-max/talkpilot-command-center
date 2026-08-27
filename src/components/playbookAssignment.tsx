@@ -68,10 +68,11 @@ export function PlaybookAssignment({
                        : kind === "team" ? teamIds.has(id!)
                        : userIds.has(id!)
             if (isOn) {
-                let q = supabase.from("org_playbook_assignments").delete().eq("playbook_id", playbookId)
+                let q = supabase.from("org_playbook_assignments").delete()
+                    .eq("playbook_id", playbookId).eq("org_id", orgId)
                 q = kind === "org"  ? q.is("team_id", null).is("user_id", null)
-                  : kind === "team" ? q.eq("team_id", id!)
-                  :                   q.eq("user_id", id!)
+                  : kind === "team" ? q.eq("team_id", id!).is("user_id", null)
+                  :                   q.eq("user_id", id!).is("team_id", null)
                 const { error } = await q
                 if (error) throw error
             } else {
@@ -81,12 +82,16 @@ export function PlaybookAssignment({
                     team_id: kind === "team" ? id! : null,
                     user_id: kind === "user" ? id! : null,
                 })
-                if (error) throw error
+                // 23505 = the row already exists (a double-click, or a stale
+                // view). The desired end state — "assigned" — already holds,
+                // so it is a success, not an error to show the manager.
+                if (error && (error as { code?: string }).code !== "23505") throw error
             }
             await load()
             onChanged?.()
         } catch (e) {
-            setError((e as Error).message)
+            console.error("Assignment change failed:", e)
+            setError(t.tabs.playbooks.assignFailed)
         } finally {
             setBusy(false)
         }

@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase"
 import type { OrgInfo } from "@/components/orgTabs"
 import { useT } from "@/i18n/LocaleProvider"
 import { intlLocale, clientLocale } from "@/i18n"
+import { EmailLink } from "@/components/EmailLink"
 
 /// Security & access, and the audit trail (D-176). These are the surfaces a
 /// procurement or security review asks to see. MFA and SCIM work on any plan;
@@ -146,10 +147,10 @@ function EnterpriseLock({ title, body }: { title: string; body: string }) {
                 </span>
             </div>
             <p className="text-xs text-[var(--color-text-secondary)]">{body}</p>
-            <a href="mailto:hello@talkpilot.co?subject=Enterprise%20—%20SSO%20%2F%20SCIM"
+            <EmailLink email="hello@talkpilot.co" subject="Enterprise — SSO / SCIM"
                className="inline-block text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">
                 {t.security.enterpriseTalk}
-            </a>
+            </EmailLink>
         </div>
     )
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import type { OrgInfo } from "@/components/orgTabs"
 import { useLocale } from "@/i18n/LocaleProvider"
+import { EmailLink } from "@/components/EmailLink"
 
 /// Shared org loader for the config surfaces (/playbook, /settings).
 /// Mirrors the old Admin page's bootstrap: get_org_context first, then a
@@ -47,7 +48,7 @@ export function OrgBanners({ org }: { org: OrgInfo }) {
                     <p className="text-sm font-medium text-red-700">{t.orgBanners.suspendedTitle}</p>
                     <p className="text-xs text-red-600 mt-1">
                         {t.orgBanners.suspendedBody1}{" "}
-                        <a className="underline" href="mailto:alexis@talkpilot.co?subject=Reactivate workspace">alexis@talkpilot.co</a>.
+                        <EmailLink email="alexis@talkpilot.co" subject="Reactivate workspace" className="underline">alexis@talkpilot.co</EmailLink>.
                     </p>
                 </div>
             )}
