@@ -16,7 +16,7 @@ import { LocaleSwitcher } from "@/components/LocaleSwitcher"
 /// The old flat top-nav + "Admin" gear is gone: the coaching library lives
 /// under Playbook, org administration under Settings.
 
-interface NavItem { href: Route; label: string; icon: React.ReactNode; match: (p: string) => boolean }
+interface NavItem { href: Route; label: string; icon: React.ReactNode; match: (p: string) => boolean; attention?: boolean }
 
 const ICONS = {
     home: <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5" />,
@@ -71,6 +71,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     /// ever had a reason to finish checkout (found when the owner backed out
     /// of the wizard's billing step and landed on a working dashboard).
     const [entitled, setEntitled] = useState<boolean | null>(null)
+    /// Nav attention dots — off until proven needed, so a slow or failed count
+    /// never invents an alarm.
+    const [needsSetup, setNeedsSetup] = useState(false)
+    const [needsTeam, setNeedsTeam]   = useState(false)
     const isPublic = pathname === "/login" || pathname.startsWith("/accept-invite")
         || pathname.startsWith("/start") || pathname.startsWith("/reset-password")
 
@@ -142,6 +146,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         || ["business", "enterprise"].includes(o.plan ?? "")
                     )
                 })
+
+            // Attention dots. Four head-only counts, deliberately fired after
+            // the shell has already rendered — a nav badge is never worth
+            // delaying the page for, and any failure just leaves the dots off.
+            Promise.all([
+                supabase.from("org_playbooks").select("id", { count: "exact", head: true })
+                    .eq("org_id", data.org_id).eq("status", "active"),
+                supabase.from("org_objections").select("id", { count: "exact", head: true })
+                    .eq("org_id", data.org_id).eq("active", true),
+                supabase.from("org_members").select("user_id", { count: "exact", head: true })
+                    .eq("org_id", data.org_id).eq("status", "active"),
+                supabase.from("org_invites").select("id", { count: "exact", head: true })
+                    .eq("org_id", data.org_id).is("accepted_at", null).is("revoked_at", null)
+                    .gt("expires_at", new Date().toISOString()),
+            ]).then(([pb, obj, mem, inv]) => {
+                // Same required bar the Home checklist uses (D-175): an active
+                // playbook and enough objections to actually coach a call.
+                setNeedsSetup((pb.count ?? 0) < 1 || (obj.count ?? 0) < 3)
+                // Nobody but the owner, and nobody invited — the workspace has
+                // no team yet, which is the one thing Teams is for.
+                setNeedsTeam((mem.count ?? 0) <= 1 && (inv.count ?? 0) === 0)
+            }).catch(() => {})
         })
     }, [])
 
@@ -154,19 +180,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         setDark(nowDark)
     }
 
+    // Playbook sits second (2026-08-27): everything an owner configures lives
+    // behind it, and in a workspace's first weeks it is the most-visited page —
+    // it used to be second-to-last, under pages that show data a new org does
+    // not have yet. Calls/Review/Team follow, which is roughly the order they
+    // become useful.
     const nav: NavItem[] = [
         { href: "/",          label: t.nav.home,     icon: ICONS.home,     match: p => p === "/" },
+        { href: "/playbook",  label: t.nav.playbook, icon: ICONS.playbook, match: p => p.startsWith("/playbook"),
+          attention: needsSetup },
         { href: "/calls",     label: t.nav.calls,    icon: ICONS.calls,    match: p => p.startsWith("/calls") || p.startsWith("/scorecard") },
-        { href: "/team",      label: t.nav.team,     icon: ICONS.team,     match: p => p.startsWith("/team") },
         // "Coaching" next to "Playbook" read as two names for one thing; the page
         // is a review queue, so it's called Review (D-175). Insights folded into
         // Home the same change — five ways to look at the same scorecards was
         // the "convoluted" feeling in one sentence.
         { href: "/coaching",  label: t.nav.review,   icon: ICONS.coaching, match: p => p.startsWith("/coaching") },
+        { href: "/team",      label: t.nav.team,     icon: ICONS.team,     match: p => p.startsWith("/team"),
+          attention: needsTeam },
         // Practice is its own page (D-192): Review is about calls that already
         // happened, practice is about the next one.
         { href: "/practice",  label: t.nav.practice, icon: ICONS.practice, match: p => p.startsWith("/practice") },
-        { href: "/playbook",  label: t.nav.playbook, icon: ICONS.playbook, match: p => p.startsWith("/playbook") },
         // Managers can't edit org settings or billing (RLS would silently
         // refuse) — don't show them doors they can't open.
         ...(role === "manager" ? [] : [
@@ -190,6 +223,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     {n.icon}
                 </svg>
                 {n.label}
+                {/* A section that needs the owner's attention says so where
+                    they already look, instead of waiting to be discovered. */}
+                {n.attention && (
+                    <span
+                        className="ml-auto h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0"
+                        aria-label={t.nav.needsAttention}
+                        title={t.nav.needsAttention}
+                    />
+                )}
             </Link>
         )
     }

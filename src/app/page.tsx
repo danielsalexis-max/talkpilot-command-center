@@ -84,12 +84,19 @@ export default function HomePage() {
             ])
             setOrg(orgInfo)
             setCards((scorecards ?? []) as Scorecard[])
-            setMembers(((mems ?? []) as MemberInfo[]).filter(m => m.status === "active" || !m.status))
+            const activeMems = ((mems ?? []) as MemberInfo[]).filter(m => m.status === "active" || !m.status)
+            setMembers(activeMems)
             setSetup({
                 activePlaybooks: pbCount ?? 0,
                 objections: objCount ?? 0,
                 knowledge: kbCount ?? 0,
                 voiceSet: !!(orgInfo?.voice_profile?.tone),
+                // The activation half (2026-08-27): scoredCalls uses the same
+                // 30-day scorecard window the dashboard renders, so "first call
+                // scored" and "the dashboard has data" can never disagree.
+                members: activeMems.length,
+                pendingInvites: invCount ?? 0,
+                scoredCalls: (scorecards ?? []).length,
             })
             setPendingInvites(invCount ?? 0)
         } catch (e) {

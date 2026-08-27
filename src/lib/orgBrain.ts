@@ -106,3 +106,41 @@ export function guidanceOf(row: {
 export function normalizeSeverity(raw: string | null | undefined): "normal" | "critical" {
     return (raw ?? "").trim().toLowerCase() === "critical" ? "critical" : "normal"
 }
+
+/// The ingest function reports `knowledge_id` and `chunk_count` on success.
+/// The original helpers above collapse that to error-or-null; these keep it,
+/// so the UI can say "N chunks indexed" (a verifiable claim) instead of a
+/// generic "done", and the edit flow can find the row an inline ingest created.
+export interface IngestOutcome {
+    error: string | null
+    knowledgeId: string | null
+    chunkCount: number | null
+}
+
+async function ingestOutcome(body: Record<string, unknown>): Promise<IngestOutcome> {
+    const none = { knowledgeId: null, chunkCount: null }
+    try {
+        const res = await callIngest(body)
+        if (!res) return { error: "Your session expired — sign in again and retry.", ...none }
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) return { error: typeof json?.error?.message === "string" ? json.error.message : res.statusText, ...none }
+        if (json?.status === "failed") return { error: typeof json.error === "string" ? json.error : "Ingest failed.", ...none }
+        return {
+            error:       null,
+            knowledgeId: typeof json.knowledge_id === "string" ? json.knowledge_id : null,
+            chunkCount:  typeof json.chunk_count === "number" ? json.chunk_count : null,
+        }
+    } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e), ...none }
+    }
+}
+
+export function ingestKnowledgeInlineVerbose(
+    orgId: string, title: string, kind: string, content: string,
+): Promise<IngestOutcome> {
+    return ingestOutcome({ org_id: orgId, title, kind, content })
+}
+
+export function reindexKnowledgeVerbose(orgId: string, knowledgeId: string): Promise<IngestOutcome> {
+    return ingestOutcome({ org_id: orgId, knowledge_id: knowledgeId })
+}

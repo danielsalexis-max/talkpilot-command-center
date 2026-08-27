@@ -39,9 +39,19 @@ export interface SetupState {
     objections: number
     knowledge: number
     voiceSet: boolean
+    /// Activation, as distinct from configuration. The content half of this
+    /// checklist self-satisfies the moment the /start wizard applies a starter
+    /// kit, so an owner who finished the wizard saw a checklist that was
+    /// already done and no next step at all — while the workspace still had
+    /// nobody in it and no call ever scored.
+    members: number
+    pendingInvites: number
+    scoredCalls: number
 }
 
-export type SetupCheckKey = "playbook" | "objections" | "voice" | "knowledge"
+export type SetupCheckKey =
+    | "playbook" | "objections" | "voice" | "knowledge"
+    | "invite" | "repJoined" | "firstCall"
 
 export interface SetupCheck {
     key: SetupCheckKey; done: boolean; required: boolean
@@ -56,6 +66,11 @@ export function setupChecks(r: SetupState): SetupCheck[] {
         { key: "objections", done: r.objections >= 3,      required: true,  href: "/playbook?tab=objections" as Route },
         { key: "voice",      done: r.voiceSet,             required: false, href: "/playbook?tab=voice" as Route },
         { key: "knowledge",  done: r.knowledge >= 1,       required: false, href: "/playbook?tab=knowledge" as Route },
+        // A sent invite counts: the owner did their part, and the rest is the
+        // invitee's move.
+        { key: "invite",     done: r.members > 1 || r.pendingInvites > 0, required: true, href: "/team?tab=members" as Route },
+        { key: "repJoined",  done: r.members > 1,          required: false, href: "/team?tab=members" as Route },
+        { key: "firstCall",  done: r.scoredCalls > 0,      required: false, href: "/calls" as Route },
     ]
 }
 

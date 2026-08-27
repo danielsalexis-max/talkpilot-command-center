@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState, useCallback, useRef } from "react"
-import { embedObjections, reindexObjections, ingestKnowledgeInline, reindexKnowledge, approvedResponsesFrom, guidanceOf, normalizeSeverity } from "@/lib/orgBrain"
+import { embedObjections, reindexObjections, ingestKnowledgeInline, ingestKnowledgeInlineVerbose, reindexKnowledgeVerbose, approvedResponsesFrom, guidanceOf, normalizeSeverity } from "@/lib/orgBrain"
 import { supabase } from "@/lib/supabase"
 import { SearchBox } from "@/components/SearchBox"
 import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
@@ -26,8 +26,8 @@ export interface OrgInfo {
     voice_profile: { tone?: string; values?: string; self_reference?: string; banned_phrases?: string[]; required_phrases?: string[] }
     settings?: { rep_visibility?: { playbook?: boolean; knowledge?: boolean } } & Record<string, unknown>
 }
-interface KbRow    { id: string; title: string; kind: string; status: string; summary: string | null; created_at: string }
-interface ObjRow   { id: string; objection: string; response_guidance: string | null; approved_responses: { text?: string }[] | null; severity: string; active: boolean; variants: string[] | null; source: string | null }
+interface KbRow    { id: string; title: string; kind: string; status: string; summary: string | null; created_at: string; team_id: string | null; user_id: string | null }
+interface ObjRow   { id: string; objection: string; response_guidance: string | null; approved_responses: { text?: string }[] | null; severity: string; active: boolean; variants: string[] | null; source: string | null; team_id: string | null; user_id: string | null }
 interface PbStage  { key?: string; name: string; description: string; required?: string[]; required_items: string[]; guardrail_rules: Array<{type: string; keyword: string; action: string}> }
 interface PbRow    { id: string; name: string; methodology: string | null; status: string; version: number; stages: PbStage[]; created_at: string }
 interface MemberRow { user_id: string; email: string | null; role: string; status: string; joined_at: string }
@@ -55,6 +55,10 @@ interface TranscriptEntry {
     id: string
     text: string
     expertSpeaker: string
+    // Optional "whose call was this" tag, stored with the transcript so the
+    // review step can say where the analysis came from. Display-only — the
+    // model is never told about it and no per-rep analysis is claimed.
+    repLabel: string
     detectedSpeakers: string[]
 }
 
@@ -236,6 +240,88 @@ function errStr(e: unknown): string {
     if (typeof e === "string") return e
     if (typeof e === "object" && "message" in (e as Record<string, unknown>)) return String((e as Record<string, unknown>).message)
     return JSON.stringify(e)
+}
+
+/// One audience per knowledge/objection row — the whole workspace, one team, or
+/// one person — written straight onto team_id/user_id. Deliberately simpler
+/// than playbooks' multi-row assignments: scope here is a retrieval filter the
+/// matching RPCs already honor, not a rollout plan.
+interface AudienceScope { team_id: string | null; user_id: string | null }
+
+function audienceValue(s: AudienceScope): string {
+    return s.user_id ? `user:${s.user_id}` : s.team_id ? `team:${s.team_id}` : "all"
+}
+
+function audienceFromValue(v: string): AudienceScope {
+    if (v.startsWith("team:")) return { team_id: v.slice(5), user_id: null }
+    if (v.startsWith("user:")) return { team_id: null, user_id: v.slice(5) }
+    return { team_id: null, user_id: null }
+}
+
+function AudienceSelect({ scope, teams, people, onChange }: {
+    scope: AudienceScope
+    teams: AssignTarget[]
+    people: AssignTarget[]
+    onChange: (next: AudienceScope) => void
+}) {
+    const t = useT()
+    const isEveryone = !scope.team_id && !scope.user_id
+    return (
+        <select
+            aria-label={t.tabs.audience.label}
+            title={t.tabs.audience.label}
+            value={audienceValue(scope)}
+            onChange={e => onChange(audienceFromValue(e.target.value))}
+            className={`max-w-[9rem] text-xs px-2 py-1 rounded-lg border bg-[var(--color-bg)] transition-colors focus:outline-none focus:border-[var(--color-accent)] ${
+                isEveryone ? "border-[var(--color-border)] text-[var(--color-muted)]"
+                           : "border-teal-200 text-teal-700"}`}
+        >
+            <option value="all">{t.tabs.audience.everyone}</option>
+            {teams.length > 0 && (
+                <optgroup label={t.tabs.audience.teamsGroup}>
+                    {teams.map(x => <option key={x.id} value={`team:${x.id}`}>{x.label}</option>)}
+                </optgroup>
+            )}
+            {people.length > 0 && (
+                <optgroup label={t.tabs.audience.peopleGroup}>
+                    {people.map(x => <option key={x.id} value={`user:${x.id}`}>{x.label}</option>)}
+                </optgroup>
+            )}
+        </select>
+    )
+}
+
+/// The knowledge kind options are the `org_knowledge_kind_check` CHECK
+/// constraint, verbatim. They used to be a different vocabulary entirely
+/// (product / competitive / methodology / objection_playbook / other) of which
+/// only case_study was accepted, so every upload through the form died on a
+/// constraint violation — D-190. One list, used by every form that writes kind.
+function KindOptions({ t }: { t: Dict }) {
+    return (<>
+        <option value="doc">{t.tabs.knowledge.kindDoc}</option>
+        <option value="pricing">{t.tabs.knowledge.kindPricing}</option>
+        <option value="battlecard">{t.tabs.knowledge.kindBattlecard}</option>
+        <option value="faq">{t.tabs.knowledge.kindFaq}</option>
+        <option value="objection">{t.tabs.knowledge.kindObjection}</option>
+        <option value="compliance">{t.tabs.knowledge.kindCompliance}</option>
+        <option value="case_study">{t.tabs.knowledge.kindCaseStudy}</option>
+    </>)
+}
+
+/// Rebuild a document's text from its indexed chunks — the only copy the
+/// browser can reach (the storage bucket has no client-side read policy).
+/// ingest-knowledge writes 500-token chunks with a 50-token overlap, and both
+/// are word-based (1 token ≈ 0.75 words), so dropping each later chunk's
+/// overlap prefix reconstructs the exact word sequence. What it can NOT
+/// reconstruct is formatting: chunking split on /\s+/, so line breaks are
+/// gone — the edit UI says so instead of pretending this is the original file.
+const CHUNK_OVERLAP_WORDS = Math.ceil(50 / 0.75)
+
+function reassembleChunks(chunks: { chunk_index: number; content: string }[]): string {
+    return [...chunks]
+        .sort((a, b) => a.chunk_index - b.chunk_index)
+        .map((c, i) => i === 0 ? c.content : c.content.split(/\s+/).slice(CHUNK_OVERLAP_WORDS).join(" "))
+        .join(" ")
 }
 
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
@@ -504,53 +590,151 @@ export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }
 export function KnowledgeTab({ orgId }: { orgId: string }) {
     const t = useT()
     const [docs, setDocs]           = useState<KbRow[]>([])
+    const [chunkCounts, setChunkCounts] = useState<Record<string, number>>({})
+    const [teams, setTeams]         = useState<AssignTarget[]>([])
+    const [people, setPeople]       = useState<AssignTarget[]>([])
     const [query, setQuery]         = useState("")
     const [loading, setLoading]     = useState(true)
     const [title, setTitle]         = useState("")
     const [kind, setKind]           = useState("doc")
     const [content, setContent]     = useState("")
     const [uploading, setUploading] = useState(false)
+    const [parsing, setParsing]     = useState(false)
+    /// Set once a file has been parsed: the confirm card is showing and the
+    /// user has not yet pressed Add. Manual entry leaves this null.
+    const [stagedFile, setStagedFile] = useState<string | null>(null)
+    /// The doc being edited, or null. Editing replaces the document's content
+    /// under the same title — see `saveEdit`.
+    const [editing, setEditing]     = useState<KbRow | null>(null)
+    const [editBody, setEditBody]   = useState("")
+    const [editBusy, setEditBusy]   = useState(false)
     const [reindexing, setReindexing] = useState<string | null>(null)
     const [msg, setMsg]             = useState<string | null>(null)
     const [isErr, setIsErr]         = useState(false)
     const fileRef = useRef<HTMLInputElement>(null)
 
     const load = useCallback(async () => {
-        const { data } = await supabase.from("org_knowledge")
-            .select("id, title, kind, status, summary, created_at")
-            .eq("org_id", orgId).order("created_at", { ascending: false })
+        const [{ data }, { data: chunkRows }, { data: teamRows }, { data: memberRows }] = await Promise.all([
+            supabase.from("org_knowledge")
+                .select("id, title, kind, status, summary, created_at, team_id, user_id")
+                .eq("org_id", orgId).order("created_at", { ascending: false }),
+            // Chunk counts decide which docs actually need repair. A doc can
+            // read "ready" with zero chunks (a half-failed ingest), and that
+            // doc contributes a summary but can never be retrieved mid-call.
+            supabase.from("org_knowledge_chunks").select("knowledge_id").eq("org_id", orgId),
+            supabase.from("org_teams").select("id, name").eq("org_id", orgId).order("name"),
+            supabase.rpc("get_org_members_with_email", { p_org: orgId }),
+        ])
         setDocs((data ?? []) as KbRow[])
+        const counts: Record<string, number> = {}
+        for (const r of (chunkRows ?? []) as { knowledge_id: string }[]) {
+            counts[r.knowledge_id] = (counts[r.knowledge_id] ?? 0) + 1
+        }
+        setChunkCounts(counts)
+        setTeams(((teamRows ?? []) as { id: string; name: string }[]).map(x => ({ id: x.id, label: x.name })))
+        setPeople(((memberRows ?? []) as MemberRow[])
+            .filter(m => m.status === "active" || !m.status)
+            .map(m => ({ id: m.user_id, label: m.email ?? m.user_id.slice(0, 8) })))
         setLoading(false)
     }, [orgId])
 
     useEffect(() => { load() }, [load])
 
-
-    function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    /// Parse → stage → confirm. The type selector used to live inside the
+    /// collapsed "add manually" panel, which auto-expanded *after* the file
+    /// was read; people never saw it and every document landed as "doc".
+    /// Now a file always lands on a confirmation card that shows the title,
+    /// the type and a preview before anything is ingested.
+    async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0]
         if (!file) return
-        if (!title) setTitle(file.name.replace(/\.[^.]+$/, ""))
-        const reader = new FileReader()
-        reader.onload = () => setContent(reader.result as string)
-        reader.readAsText(file)
         e.target.value = ""
+        setParsing(true); setMsg(null); setIsErr(false)
+        try {
+            const text = await extractTextFromFile(file)
+            setContent(text)
+            setTitle(file.name.replace(/\.[^.]+$/, ""))
+            setStagedFile(file.name)
+        } catch (err) {
+            setIsErr(true)
+            setMsg(err instanceof UnsupportedFileError ? t.tabs.unsupportedFile(err.ext)
+                 : err instanceof EmptyDocumentError   ? t.tabs.emptyDocument
+                 : t.tabs.knowledge.errorPrefix(errStr(err)))
+        } finally {
+            setParsing(false)
+        }
+    }
+
+    function clearStaged() {
+        setStagedFile(null); setTitle(""); setContent(""); setKind("doc")
     }
 
     async function upload() {
         if (!title.trim() || !content.trim()) return
         setUploading(true); setMsg(null)
         try {
-            const failure = await ingestKnowledgeInline(orgId, title.trim(), kind, content.trim())
-            if (failure) {
-                setMsg(t.tabs.knowledge.errorPrefix(failure)); setIsErr(true)
+            const r = await ingestKnowledgeInlineVerbose(orgId, title.trim(), kind, content.trim())
+            if (r.error) {
+                setMsg(t.tabs.knowledge.errorPrefix(r.error)); setIsErr(true)
             } else {
-                setMsg(t.tabs.knowledge.added); setIsErr(false)
-                setTitle(""); setContent(""); setKind("doc")
+                // Say what the ingest actually did. "Document ready" told the
+                // owner nothing about whether it can be retrieved in a call,
+                // which is the only thing that matters.
+                setMsg(r.chunkCount !== null ? t.tabs.knowledge.addedN(r.chunkCount) : t.tabs.knowledge.added)
+                setIsErr(false)
+                clearStaged()
             }
             await load()
         } finally {
             setUploading(false)
         }
+    }
+
+    /// Open the editor with the stored text. Chunks hold the document verbatim
+    /// (ordered by chunk_index), so the original is reassembled rather than
+    /// asking the owner to find the source file again.
+    async function startEdit(d: KbRow) {
+        setEditing(d); setEditBody(""); setEditBusy(true); setMsg(null)
+        const { data } = await supabase.from("org_knowledge_chunks")
+            .select("content, chunk_index").eq("knowledge_id", d.id).order("chunk_index")
+        setEditBody(((data ?? []) as { content: string }[]).map(c => c.content).join("\n\n"))
+        setEditBusy(false)
+    }
+
+    /// Title and type are a plain row update. Changed body text has to go back
+    /// through ingest — chunks and embeddings are derived, not editable — so
+    /// the old chunks are dropped and the row is re-ingested under its own id.
+    async function saveEdit(newTitle: string, newKind: string, body: string) {
+        if (!editing) return
+        setEditBusy(true); setMsg(null)
+        try {
+            const { error } = await supabase.from("org_knowledge")
+                .update({ title: newTitle.trim(), kind: newKind }).eq("id", editing.id)
+            if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true); return }
+
+            const original = ((await supabase.from("org_knowledge_chunks")
+                .select("content, chunk_index").eq("knowledge_id", editing.id).order("chunk_index")
+            ).data ?? []) as { content: string }[]
+            const unchanged = original.map(c => c.content).join("\n\n").trim() === body.trim()
+
+            if (!unchanged && body.trim()) {
+                await supabase.from("org_knowledge_chunks").delete().eq("knowledge_id", editing.id)
+                const r = await reindexKnowledgeVerbose(orgId, editing.id)
+                if (r.error) { setMsg(t.tabs.knowledge.errorPrefix(r.error)); setIsErr(true); return }
+            }
+            setMsg(t.tabs.knowledge.editSaved); setIsErr(false)
+            setEditing(null)
+            await load()
+        } finally {
+            setEditBusy(false)
+        }
+    }
+
+    async function setAudience(d: KbRow, scope: AudienceScope) {
+        const { error } = await supabase.from("org_knowledge")
+            .update({ team_id: scope.team_id, user_id: scope.user_id }).eq("id", d.id)
+        if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true); return }
+        setDocs(prev => prev.map(x => x.id === d.id ? { ...x, ...scope } : x))
     }
 
     async function deleteDoc(id: string) {
@@ -560,13 +744,19 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
 
     // Repair path: a document can read "ready" while having no chunks at all
     // (seeded rows, or an ingest that failed halfway). Without chunks it
-    // contributes a summary but can never be retrieved during a call.
+    // contributes a summary but can never be retrieved during a call. Only
+    // offered on the docs that need it — it used to sit on every row, where
+    // it read as an action everyone was supposed to understand and take.
     async function reindexDoc(id: string) {
         setReindexing(id); setMsg(null)
         try {
-            const failure = await reindexKnowledge(orgId, id)
-            setMsg(failure ? t.tabs.knowledge.reindexFailed(failure) : t.tabs.knowledge.reindexed)
-            setIsErr(!!failure)
+            const r = await reindexKnowledgeVerbose(orgId, id)
+            // Report the chunk count when the function gives one — "repaired"
+            // with no number is the same unverifiable claim as the old copy.
+            setMsg(r.error ? t.tabs.knowledge.reindexFailed(r.error)
+                 : r.chunkCount !== null ? t.tabs.knowledge.reindexedN(r.chunkCount)
+                 : t.tabs.knowledge.reindexed)
+            setIsErr(!!r.error)
             await load()
         } finally { setReindexing(null) }
     }
@@ -582,22 +772,55 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
     return (
         <div className="space-y-6">
             {/* Upload zone — primary action */}
-            <UploadZone
-                fileRef={fileRef}
-                onChange={handleFile}
-                loading={false}
-                accept=".txt,.md,.csv,.json"
-                title={t.tabs.knowledge.uploadTitle}
-                subtitle={t.tabs.knowledge.uploadSub}
-            />
+            {!stagedFile && (
+                <UploadZone
+                    fileRef={fileRef}
+                    onChange={handleFile}
+                    loading={parsing}
+                    accept={`${EXTRACT_ACCEPT},.json`}
+                    title={t.tabs.knowledge.uploadTitle}
+                    subtitle={t.tabs.knowledge.uploadSub}
+                />
+            )}
 
-            <ManualSection
-                label={t.tabs.knowledge.orAddManually}
-                openLabel={content ? t.tabs.knowledge.reviewSave : t.tabs.knowledge.orAddManually}
-                forceOpen={!!content}
-            >
+            {/* Step 2: confirm what was read, name it, and say what it is. */}
+            {stagedFile && (
+                <div className={CARD + " space-y-4"}>
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.knowledge.confirmTitle}</p>
+                        <button className={BTN_GHOST} onClick={clearStaged}>{t.common.cancel}</button>
+                    </div>
+                    <p className="text-xs text-[var(--color-muted)]">{t.tabs.knowledge.readFrom(stagedFile, content.length)}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="col-span-2 space-y-1">
+                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.title}</label>
+                            <input className={INPUT} placeholder={t.tabs.knowledge.titlePlaceholder} value={title} onChange={e => setTitle(e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.type}</label>
+                            <select className={INPUT} value={kind} onChange={e => setKind(e.target.value)}>
+                                <KindOptions t={t} />
+                            </select>
+                        </div>
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.preview}</label>
+                        <p className="text-xs text-[var(--color-text-secondary)] bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 max-h-24 overflow-y-auto whitespace-pre-wrap">
+                            {content.slice(0, 300)}{content.length > 300 ? "…" : ""}
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <button className={BTN_PRIMARY} onClick={upload} disabled={uploading || !title.trim() || !content.trim()}>
+                            {uploading ? t.tabs.knowledge.uploading : t.tabs.knowledge.addDocument}
+                        </button>
+                        <Msg msg={msg} error={isErr} />
+                    </div>
+                </div>
+            )}
+
+            {!stagedFile && (
+            <ManualSection label={t.tabs.knowledge.orAddManually}>
             <div className={CARD + " space-y-4"}>
-                {content && <p className="text-xs text-emerald-600">{t.tabs.knowledge.fileLoaded}</p>}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="col-span-2 space-y-1">
                         <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.title}</label>
@@ -606,18 +829,7 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                     <div className="space-y-1">
                         <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.type}</label>
                         <select className={INPUT} value={kind} onChange={e => setKind(e.target.value)}>
-                            {/* These values are the `org_knowledge_kind_check` CHECK constraint,
-                                verbatim. They used to be a different vocabulary entirely
-                                (product / competitive / methodology / objection_playbook /
-                                other) of which only case_study was accepted, so every upload
-                                through this form died on a constraint violation — D-190. */}
-                            <option value="doc">{t.tabs.knowledge.kindDoc}</option>
-                            <option value="pricing">{t.tabs.knowledge.kindPricing}</option>
-                            <option value="battlecard">{t.tabs.knowledge.kindBattlecard}</option>
-                            <option value="faq">{t.tabs.knowledge.kindFaq}</option>
-                            <option value="objection">{t.tabs.knowledge.kindObjection}</option>
-                            <option value="compliance">{t.tabs.knowledge.kindCompliance}</option>
-                            <option value="case_study">{t.tabs.knowledge.kindCaseStudy}</option>
+                            <KindOptions t={t} />
                         </select>
                     </div>
                 </div>
@@ -634,6 +846,7 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                 </div>
             </div>
             </ManualSection>
+            )}
 
             <div>
                 <div className="flex items-center justify-between gap-4 mb-3">
@@ -650,18 +863,94 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm text-[var(--color-text)] font-medium">{d.title}</p>
                                 {d.summary && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 truncate">{d.summary}</p>}
+                                <p className="text-xs text-[var(--color-muted)] mt-0.5">
+                                    {(chunkCounts[d.id] ?? 0) > 0
+                                        ? t.tabs.knowledge.indexedN(chunkCounts[d.id])
+                                        : t.tabs.knowledge.notIndexed}
+                                </p>
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
+                                <AudienceSelect
+                                    scope={{ team_id: d.team_id, user_id: d.user_id }}
+                                    teams={teams} people={people}
+                                    onChange={s => setAudience(d, s)}
+                                />
                                 <StatusBadge label={t.data.kinds[d.kind] ?? d.kind.replace("_"," ")} color={kindColor(d.kind)} />
                                 <StatusBadge label={t.data.statuses[d.status] ?? d.status} color={d.status === "ready" ? "green" : d.status === "error" ? "red" : "yellow"} />
-                                <button className={BTN_GHOST} disabled={reindexing === d.id} onClick={() => reindexDoc(d.id)}>
-                                    {reindexing === d.id ? t.tabs.knowledge.reindexing : t.tabs.knowledge.reindex}
-                                </button>
+                                <button className={BTN_GHOST} onClick={() => startEdit(d)}>{t.common.edit}</button>
+                                {/* Repair, not refresh — so it shows only where
+                                    there is something to repair. */}
+                                {(chunkCounts[d.id] ?? 0) === 0 && (
+                                    <button className={BTN_GHOST} disabled={reindexing === d.id} onClick={() => reindexDoc(d.id)}>
+                                        {reindexing === d.id ? t.tabs.knowledge.repairing : t.tabs.knowledge.repairIndex}
+                                    </button>
+                                )}
                                 <button className={BTN_DANGER} onClick={() => deleteDoc(d.id)}>{t.common.delete}</button>
                             </div>
                         </div>
                     ))}
                     {!loading && docs.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">{t.tabs.knowledge.noDocs}</p>}
+                </div>
+            </div>
+
+            {editing && (
+                <KnowledgeEditor
+                    doc={editing}
+                    body={editBody}
+                    busy={editBusy}
+                    onCancel={() => setEditing(null)}
+                    onSave={saveEdit}
+                />
+            )}
+        </div>
+    )
+}
+
+/// Edit a stored document. Body text round-trips through the chunk table, so
+/// changing it re-ingests (chunks and embeddings are derived); leaving it
+/// alone updates only the row, which is the common case (a typo in a title,
+/// or a document filed under the wrong type).
+function KnowledgeEditor({ doc, body, busy, onCancel, onSave }: {
+    doc: KbRow
+    body: string
+    busy: boolean
+    onCancel: () => void
+    onSave: (title: string, kind: string, body: string) => void
+}) {
+    const t = useT()
+    const [title, setTitle] = useState(doc.title)
+    const [kind, setKind]   = useState(doc.kind)
+    const [text, setText]   = useState(body)
+    useEffect(() => { setText(body) }, [body])
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8">
+            <div className={CARD + " w-full max-w-2xl space-y-4 my-auto"}>
+                <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.knowledge.editTitle}</h3>
+                    <button className={BTN_GHOST} onClick={onCancel}>{t.common.cancel}</button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="col-span-2 space-y-1">
+                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.title}</label>
+                        <input className={INPUT} value={title} onChange={e => setTitle(e.target.value)} />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.type}</label>
+                        <select className={INPUT} value={kind} onChange={e => setKind(e.target.value)}>
+                            <KindOptions t={t} />
+                        </select>
+                    </div>
+                </div>
+                <div className="space-y-1">
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.knowledge.content}</label>
+                    <textarea className={TEXTAREA} rows={12} value={text} onChange={e => setText(e.target.value)} />
+                    <p className="text-xs text-[var(--color-muted)]">{t.tabs.knowledge.editBodyNote}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <button className={BTN_PRIMARY} onClick={() => onSave(title, kind, text)} disabled={busy || !title.trim()}>
+                        {busy ? t.common.saving : t.common.save}
+                    </button>
                 </div>
             </div>
         </div>
@@ -697,23 +986,41 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
     /// Filename of the doc the current extraction came from — stored as the
     /// imported rows' provenance ("where did this objection come from?").
     const [sourceDoc, setSourceDoc]           = useState<string | null>(null)
+    const [teams, setTeams]                   = useState<AssignTarget[]>([])
+    const [people, setPeople]                 = useState<AssignTarget[]>([])
     const extractFileRef = useRef<HTMLInputElement>(null)
 
     const load = useCallback(async () => {
-        const [{ data }, { count }] = await Promise.all([
+        const [{ data }, { count }, { data: teamRows }, { data: memberRows }] = await Promise.all([
             supabase.from("org_objections")
-                .select("id, objection, response_guidance, approved_responses, severity, active, variants, source")
+                .select("id, objection, response_guidance, approved_responses, severity, active, variants, source, team_id, user_id")
                 .eq("org_id", orgId).order("severity"),
             // An objection with no embedding can never be matched mid-call, so
             // the library can look complete while doing nothing.
             supabase.from("org_objections")
                 .select("id", { count: "exact", head: true })
                 .eq("org_id", orgId).is("embedding", null),
+            supabase.from("org_teams").select("id, name").eq("org_id", orgId).order("name"),
+            supabase.rpc("get_org_members_with_email", { p_org: orgId }),
         ])
         setObjs((data ?? []) as ObjRow[])
         setUnindexed(count ?? 0)
+        setTeams(((teamRows ?? []) as { id: string; name: string }[]).map(x => ({ id: x.id, label: x.name })))
+        setPeople(((memberRows ?? []) as MemberRow[])
+            .filter(m => m.status === "active" || !m.status)
+            .map(m => ({ id: m.user_id, label: m.email ?? m.user_id.slice(0, 8) })))
         setLoading(false)
     }, [orgId])
+
+    /// Objections are scoped exactly like knowledge docs: one audience per
+    /// row, honored by `match_org_objections` at retrieval time. A mixed
+    /// workspace should not coach a support rep with the sales library.
+    async function setAudience(o: ObjRow, scope: AudienceScope) {
+        const { error } = await supabase.from("org_objections")
+            .update({ team_id: scope.team_id, user_id: scope.user_id }).eq("id", o.id)
+        if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true); return }
+        setObjs(prev => prev.map(x => x.id === o.id ? { ...x, ...scope } : x))
+    }
 
     async function runReindex() {
         setReindexing(true); setMsg(null)
@@ -998,6 +1305,11 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                                 )}
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
+                                <AudienceSelect
+                                    scope={{ team_id: o.team_id, user_id: o.user_id }}
+                                    teams={teams} people={people}
+                                    onChange={s => setAudience(o, s)}
+                                />
                                 <StatusBadge label={t.data.severities[o.severity] ?? o.severity} color={sevColor(o.severity)} />
                                 <button className={BTN_GHOST} onClick={() => toggle(o)}>{o.active ? t.tabs.objections.disable : t.tabs.objections.enable}</button>
                                 <button className={BTN_DANGER} onClick={() => deleteObj(o.id)}>{t.common.delete}</button>
@@ -1857,7 +2169,7 @@ const TRANSCRIPT_TEXT_EXTENSIONS = ["txt", "md", "markdown", "srt", "vtt", "csv"
 function TranscriptCard({ index, entry, onChange, onRemove }: {
     index: number
     entry: TranscriptEntry
-    onChange: (field: "text" | "expertSpeaker", val: string) => void
+    onChange: (field: "text" | "expertSpeaker" | "repLabel", val: string) => void
     onRemove?: () => void
 }) {
     const { t, intl } = useLocale()
@@ -1979,19 +2291,57 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
                             {t.tabs.dna.noSpeakers}
                         </p>
                     )}
+                    <div className="pt-1 space-y-1">
+                        <label className="text-xs font-semibold text-[var(--color-text-secondary)] block">
+                            {t.tabs.dna.repLabel}
+                        </label>
+                        <input type="text" value={entry.repLabel}
+                            placeholder={t.tabs.dna.repLabelPlaceholder}
+                            onChange={e => onChange("repLabel", e.target.value)}
+                            className={INPUT} />
+                    </div>
                 </div>
             )}
         </div>
     )
 }
 
+/// Shape of the `transcripts` jsonb column on org_team_dna. Snake_case on the
+/// wire like every other row shape; the camelCase TranscriptEntry is UI state.
+interface StoredTranscript { text: string; expert_speaker: string; rep_label: string | null }
+
+function freshEntry(): TranscriptEntry {
+    return { id: crypto.randomUUID(), text: "", expertSpeaker: "", repLabel: "", detectedSpeakers: [] }
+}
+
+function allIndices(n: number): Set<number> {
+    return new Set(Array.from({ length: n }, (_, i) => i))
+}
+
+function toggleIndex(setSel: React.Dispatch<React.SetStateAction<Set<number>>>, i: number) {
+    setSel(prev => {
+        const n = new Set(prev)
+        if (n.has(i)) n.delete(i); else n.add(i)
+        return n
+    })
+}
+
+/// Same Select all / None pair the objection-extraction review uses — per-item
+/// apply keeps "everything" one click away in both directions.
+function SelectAllNone({ t, count, setSel }: { t: Dict; count: number; setSel: (s: Set<number>) => void }) {
+    return (
+        <div className="flex gap-2 flex-shrink-0">
+            <button className={BTN_GHOST} onClick={() => setSel(allIndices(count))}>{t.tabs.dna.selectAll}</button>
+            <button className={BTN_GHOST} onClick={() => setSel(new Set())}>{t.tabs.dna.none}</button>
+        </div>
+    )
+}
+
 export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgInfo; onApplied: () => void }) {
-    const t = useT()
+    const { t, intl } = useLocale()
     const [step, setStep]               = useState<DNAStep>("collect")
     const [expertName, setExpertName]   = useState("")
-    const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([
-        { id: crypto.randomUUID(), text: "", expertSpeaker: "", detectedSpeakers: [] }
-    ])
+    const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([freshEntry()])
     const [dnaResult, setDnaResult]     = useState<DNAResult | null>(null)
     const [error, setError]             = useState("")
     const [reviewTab, setReviewTab]     = useState<DNAReviewTab>("tone")
@@ -2000,14 +2350,72 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
     const [applyingObjections, setApplyingObjections] = useState(false)
     const [applyingFlow, setApplyingFlow]           = useState(false)
     const [appliedSections, setAppliedSections]     = useState<Set<string>>(new Set())
+    // The exact transcripts the model saw (valid ones only) — what the Sources
+    // card shows. Kept separate from the collect-step entries, which may
+    // include the auto-opened empty slot.
+    const [analyzedTranscripts, setAnalyzedTranscripts] = useState<StoredTranscript[]>([])
+    const [analyzedAt, setAnalyzedAt]   = useState<string | null>(null)
+    // Restoring a stored analysis has to gate the first paint: rendering the
+    // collect step and then jumping to review reads as a glitch.
+    const [loadingStored, setLoadingStored] = useState(true)
+    // Per-item selection, one set per section, everything pre-checked —
+    // "apply all" stays the default and unticking is the exception.
+    const [selPower, setSelPower]           = useState<Set<number>>(new Set())
+    const [selAvoid, setSelAvoid]           = useState<Set<number>>(new Set())
+    const [selObjections, setSelObjections] = useState<Set<number>>(new Set())
+    const [selFlow, setSelFlow]             = useState<Set<number>>(new Set())
+    // Where the flow playbook landed ("draft" vs "active") — the manager has
+    // to be told, because a draft is invisible until activated.
+    const [flowLanded, setFlowLanded]       = useState<"draft" | "active" | null>(null)
+
+    function enterReview(result: DNAResult, applied: Set<string>) {
+        setDnaResult(result)
+        setAppliedSections(applied)
+        setSelPower(allIndices(result.power_phrases.length))
+        setSelAvoid(allIndices(result.phrases_to_avoid.length))
+        setSelObjections(allIndices(result.objections.length))
+        setSelFlow(allIndices(result.conversation_flow.stages.length))
+        setFlowLanded(null)
+        setStep("review")
+    }
+
+    // An analysis is minutes of work by the model and the manager; the tab
+    // unmounts on every navigation, so it lives in org_team_dna, not in state.
+    useEffect(() => {
+        let cancelled = false
+        ;(async () => {
+            try {
+                const { data } = await supabase.from("org_team_dna")
+                    .select("result, transcripts, expert_name, applied_sections, analyzed_at")
+                    .eq("org_id", orgId).maybeSingle()
+                if (cancelled || !data) return
+                const stored = (data.transcripts ?? []) as StoredTranscript[]
+                setAnalyzedTranscripts(stored)
+                setTranscripts(stored.length > 0
+                    ? stored.map(s => ({
+                        id: crypto.randomUUID(), text: s.text, expertSpeaker: s.expert_speaker,
+                        repLabel: s.rep_label ?? "", detectedSpeakers: detectSpeakers(s.text),
+                    }))
+                    : [freshEntry()])
+                setExpertName((data.expert_name as string | null) ?? "")
+                setAnalyzedAt((data.analyzed_at as string | null) ?? null)
+                enterReview(data.result as DNAResult, new Set((data.applied_sections ?? []) as string[]))
+            } finally {
+                if (!cancelled) setLoadingStored(false)
+            }
+        })()
+        return () => { cancelled = true }
+        // enterReview is stable in behavior; listing it would force useCallback noise.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [orgId])
 
     function addTranscript() {
-        setTranscripts(prev => [...prev, { id: crypto.randomUUID(), text: "", expertSpeaker: "", detectedSpeakers: [] }])
+        setTranscripts(prev => [...prev, freshEntry()])
     }
     function removeTranscript(id: string) {
         setTranscripts(prev => prev.filter(t => t.id !== id))
     }
-    function updateTranscript(id: string, field: "text" | "expertSpeaker", value: string) {
+    function updateTranscript(id: string, field: "text" | "expertSpeaker" | "repLabel", value: string) {
         setTranscripts(prev => {
             const next = prev.map(t => {
                 if (t.id !== id) return t
@@ -2021,10 +2429,19 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
             // people got to "1 of 3" and stopped, with no idea what was wrong.
             const complete = next.filter(t => !transcriptIssue(t.text) && t.expertSpeaker)
             if (complete.length < MIN && complete.length === next.length) {
-                return [...next, { id: crypto.randomUUID(), text: "", expertSpeaker: "", detectedSpeakers: [] }]
+                return [...next, freshEntry()]
             }
             return next
         })
+    }
+
+    /// Green "applied" markers must survive navigation like the analysis
+    /// itself does, so every Apply writes the section list back to the row.
+    async function persistApplied(section: string) {
+        const next = new Set(appliedSections); next.add(section)
+        setAppliedSections(next)
+        await supabase.from("org_team_dna")
+            .update({ applied_sections: Array.from(next) }).eq("org_id", orgId)
     }
 
     async function analyze() {
@@ -2050,8 +2467,24 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
             )
             const json = await res.json().catch(() => ({}))
             if (!res.ok) { setError(errStr((json as Record<string, unknown>).error) || t.tabs.dna.analysisFailed); setStep("collect"); return }
-            setDnaResult(json as DNAResult)
-            setStep("review")
+            const stored: StoredTranscript[] = valid.map(t =>
+                ({ text: t.text, expert_speaker: t.expertSpeaker, rep_label: t.repLabel.trim() || null }))
+            const now = new Date().toISOString()
+            setAnalyzedTranscripts(stored)
+            setAnalyzedAt(now)
+            enterReview(json as DNAResult, new Set())
+            // One row per org: a new analysis overwrites the previous one.
+            // Persist failure is non-fatal — the review is already on screen.
+            const { data: { user } } = await supabase.auth.getUser()
+            await supabase.from("org_team_dna").upsert({
+                org_id: orgId,
+                result: json,
+                transcripts: stored,
+                expert_name: expertName.trim() || null,
+                applied_sections: [],
+                analyzed_at: now,
+                analyzed_by: user?.id ?? null,
+            })
         } catch (e) {
             setError(errStr(e))
             setStep("collect")
@@ -2066,29 +2499,29 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
             const existing = org.voice_profile?.tone ?? ""
             const merged = existing ? `${existing}, ${newDescriptors}` : newDescriptors
             await supabase.from("organizations").update({ voice_profile: { ...org.voice_profile, tone: merged } }).eq("id", orgId)
-            setAppliedSections(prev => new Set([...prev, "tone"]))
+            await persistApplied("tone")
             onApplied()
         } finally { setApplyingTone(false) }
     }
 
     async function applyPhrases() {
-        if (!dnaResult) return
+        if (!dnaResult || selPower.size + selAvoid.size === 0) return
         setApplyingPhrases(true)
         try {
-            const required = [...(org.voice_profile?.required_phrases ?? []), ...dnaResult.power_phrases.map(p => p.phrase)]
-            const banned   = [...(org.voice_profile?.banned_phrases   ?? []), ...dnaResult.phrases_to_avoid.map(p => p.pattern)]
+            const required = [...(org.voice_profile?.required_phrases ?? []), ...dnaResult.power_phrases.filter((_, i) => selPower.has(i)).map(p => p.phrase)]
+            const banned   = [...(org.voice_profile?.banned_phrases   ?? []), ...dnaResult.phrases_to_avoid.filter((_, i) => selAvoid.has(i)).map(p => p.pattern)]
             await supabase.from("organizations").update({ voice_profile: { ...org.voice_profile, required_phrases: required, banned_phrases: banned } }).eq("id", orgId)
-            setAppliedSections(prev => new Set([...prev, "phrases"]))
+            await persistApplied("phrases")
             onApplied()
         } finally { setApplyingPhrases(false) }
     }
 
     async function applyObjections() {
-        if (!dnaResult) return
+        if (!dnaResult || selObjections.size === 0) return
         setApplyingObjections(true)
         try {
             const { data: inserted } = await supabase.from("org_objections").insert(
-                dnaResult.objections.map(o => ({
+                dnaResult.objections.filter((_, i) => selObjections.has(i)).map(o => ({
                     org_id: orgId, objection: o.objection, response_guidance: o.response_guidance,
                     approved_responses: approvedResponsesFrom(o.response_guidance),
                     severity: normalizeSeverity(o.severity), variants: null, active: true,
@@ -2096,28 +2529,31 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 }))
             ).select("id")
             await embedObjections(orgId, (inserted ?? []).map(x => x.id as string))
-            setAppliedSections(prev => new Set([...prev, "objections"]))
+            await persistApplied("objections")
         } finally { setApplyingObjections(false) }
     }
 
     async function applyFlow() {
-        if (!dnaResult) return
+        if (!dnaResult || selFlow.size === 0) return
         setApplyingFlow(true)
         try {
-            // Exactly one playbook may be active — get_org_context takes the
-            // first active one, so leaving the old one active makes which
-            // playbook coaches the team a coin flip.
-            await supabase.from("org_playbooks").update({ status: "draft" })
-                .eq("org_id", orgId).eq("status", "active")
+            // Never demote what's already active: under D-192 scoping an org
+            // can have correctly-scoped team playbooks live, and a blanket
+            // "active → draft" here silently un-assigned all of them. Mirror
+            // applyStarterKit instead — land as draft when anything is active,
+            // active only into an empty slot — and say where it landed.
+            const { data: activeExisting } = await supabase.from("org_playbooks")
+                .select("id").eq("org_id", orgId).eq("status", "active").limit(1)
+            const status = (activeExisting?.length ?? 0) > 0 ? "draft" : "active"
             await supabase.from("org_playbooks").insert({
                 org_id: orgId,
                 name: `${expertName.trim() || "Expert"} Playbook (Team DNA)`,
                 methodology: dnaResult.conversation_flow.methodology_guess,
-                status: "active", version: 1,
+                status, version: 1,
                 // Same stage shape the coach reads (required / talking_points /
                 // exit_criteria). The old `required_items` key was silently
                 // dropped on the way into the prompt.
-                stages: dnaResult.conversation_flow.stages.map(s => ({
+                stages: dnaResult.conversation_flow.stages.filter((_, i) => selFlow.has(i)).map(s => ({
                     key: s.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""),
                     name: s.name,
                     description: s.description,
@@ -2126,7 +2562,8 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                     exit_criteria: "",
                 })),
             })
-            setAppliedSections(prev => new Set([...prev, "flow"]))
+            setFlowLanded(status)
+            await persistApplied("flow")
         } finally { setApplyingFlow(false) }
     }
 
@@ -2134,6 +2571,10 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
     // a card can't count toward 3 of 3 and then be rejected on submit.
     const completedCount = transcripts.filter(t => !transcriptIssue(t.text) && t.expertSpeaker).length
     const MIN = 3
+
+    if (loadingStored) {
+        return <div className="text-[var(--color-text-secondary)] text-sm">{t.tabs.dna.loadingStored}</div>
+    }
 
     if (step === "analyzing") {
         return (
@@ -2148,11 +2589,14 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
     }
 
     if (step === "review" && dnaResult) {
+        // Tone → Flow → Objections → Phrases: the framework before the
+        // vocabulary. Leading with phrases right after tone front-loaded the
+        // two shallowest sections and buried the playbook.
         const reviewTabs: { key: DNAReviewTab; label: string }[] = [
             { key: "tone",       label: t.tabs.dna.reviewTabs.tone       },
-            { key: "phrases",    label: t.tabs.dna.reviewTabs.phrases    },
-            { key: "objections", label: t.tabs.dna.reviewTabs.objections },
             { key: "flow",       label: t.tabs.dna.reviewTabs.flow       },
+            { key: "objections", label: t.tabs.dna.reviewTabs.objections },
+            { key: "phrases",    label: t.tabs.dna.reviewTabs.phrases    },
         ]
         return (
             <div className="space-y-4">
@@ -2160,11 +2604,19 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                     <div className="flex items-start justify-between gap-4">
                         <div>
                             <p className="text-xs font-medium text-[var(--color-accent)] uppercase tracking-wide mb-1">{t.tabs.dna.analysisComplete}</p>
+                            {analyzedAt && (
+                                <p className="text-xs text-[var(--color-muted)] mb-1">
+                                    {t.tabs.dna.analysisOf(new Date(analyzedAt).toLocaleDateString(intl, { dateStyle: "long" }))}
+                                </p>
+                            )}
                             <p className="text-[var(--color-text)] text-sm leading-relaxed">{dnaResult.summary}</p>
                         </div>
-                        <button onClick={() => { setStep("collect"); setDnaResult(null); setAppliedSections(new Set()) }}
+                        {/* Back to collect with the analyzed transcripts pre-filled.
+                            The stored row stays — only a new analysis replaces it,
+                            so backing out costs nothing. */}
+                        <button onClick={() => setStep("collect")}
                             className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] whitespace-nowrap flex-shrink-0">
-                            {t.tabs.dna.startOver}
+                            {t.tabs.dna.newAnalysis}
                         </button>
                     </div>
                 </div>
@@ -2210,27 +2662,47 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 {reviewTab === "phrases" && (
                     <div className="space-y-4">
                         <div className={CARD + " space-y-3"}>
-                            <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.powerPhrases(dnaResult.power_phrases.length)}</p>
-                            <p className="text-xs text-[var(--color-text-secondary)]">{t.tabs.dna.powerPhrasesSub}</p>
-                            <div className="divide-y divide-[var(--color-border)]">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.powerPhrases(dnaResult.power_phrases.length)}</p>
+                                    <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.tabs.dna.powerPhrasesSub}</p>
+                                </div>
+                                <SelectAllNone t={t} count={dnaResult.power_phrases.length} setSel={setSelPower} />
+                            </div>
+                            <div className="space-y-2">
                                 {dnaResult.power_phrases.map((p, i) => (
-                                    <div key={i} className="py-3 first:pt-0 last:pb-0">
-                                        <p className="text-sm text-[var(--color-text)] font-medium">"{p.phrase}"</p>
-                                        <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{p.context} · {p.appears_in}</p>
-                                    </div>
+                                    <label key={i} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selPower.has(i) ? "border-[var(--color-accent)] bg-teal-50" : "border-[var(--color-border)] bg-[var(--color-bg)]"}`}>
+                                        <input type="checkbox" checked={selPower.has(i)}
+                                            onChange={() => toggleIndex(setSelPower, i)}
+                                            className="mt-0.5 accent-[var(--color-accent)]" />
+                                        <div className="min-w-0">
+                                            <p className="text-sm text-[var(--color-text)] font-medium">"{p.phrase}"</p>
+                                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{p.context} · {p.appears_in}</p>
+                                        </div>
+                                    </label>
                                 ))}
                             </div>
                         </div>
                         <div className={CARD + " space-y-3"}>
-                            <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.avoidPhrases(dnaResult.phrases_to_avoid.length)}</p>
-                            <p className="text-xs text-[var(--color-text-secondary)]">{t.tabs.dna.avoidPhrasesSub}</p>
-                            <div className="divide-y divide-[var(--color-border)]">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.avoidPhrases(dnaResult.phrases_to_avoid.length)}</p>
+                                    <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.tabs.dna.avoidPhrasesSub}</p>
+                                </div>
+                                <SelectAllNone t={t} count={dnaResult.phrases_to_avoid.length} setSel={setSelAvoid} />
+                            </div>
+                            <div className="space-y-2">
                                 {dnaResult.phrases_to_avoid.map((p, i) => (
-                                    <div key={i} className="py-3 first:pt-0 last:pb-0">
-                                        <p className="text-sm text-[var(--color-text)] font-medium">{p.pattern}</p>
-                                        <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{p.why}</p>
-                                        <p className="text-xs text-teal-600 mt-0.5">{t.tabs.dna.instead} {p.better_alternative}</p>
-                                    </div>
+                                    <label key={i} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selAvoid.has(i) ? "border-[var(--color-accent)] bg-teal-50" : "border-[var(--color-border)] bg-[var(--color-bg)]"}`}>
+                                        <input type="checkbox" checked={selAvoid.has(i)}
+                                            onChange={() => toggleIndex(setSelAvoid, i)}
+                                            className="mt-0.5 accent-[var(--color-accent)]" />
+                                        <div className="min-w-0">
+                                            <p className="text-sm text-[var(--color-text)] font-medium">{p.pattern}</p>
+                                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{p.why}</p>
+                                            <p className="text-xs text-teal-600 mt-0.5">{t.tabs.dna.instead} {p.better_alternative}</p>
+                                        </div>
+                                    </label>
                                 ))}
                             </div>
                         </div>
@@ -2242,81 +2714,125 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                                 </p>
                             </div>
                         )}
-                        <button onClick={applyPhrases} disabled={applyingPhrases || appliedSections.has("phrases")}
+                        <button onClick={applyPhrases} disabled={applyingPhrases || appliedSections.has("phrases") || selPower.size + selAvoid.size === 0}
                             className={BTN_PRIMARY + (appliedSections.has("phrases") ? " opacity-60" : "")}>
-                            {appliedSections.has("phrases") ? t.tabs.dna.applied : applyingPhrases ? t.tabs.dna.applying : t.tabs.dna.applyPhrases}
+                            {appliedSections.has("phrases") ? t.tabs.dna.applied : applyingPhrases ? t.tabs.dna.applying : t.tabs.dna.applyPhrasesN(selPower.size + selAvoid.size)}
                         </button>
                     </div>
                 )}
 
                 {reviewTab === "objections" && (
                     <div className={CARD + " space-y-4"}>
-                        <div>
-                            <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.objectionHandlers(dnaResult.objections.length)}</p>
-                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.tabs.dna.objectionHandlersSub}</p>
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.objectionHandlers(dnaResult.objections.length)}</p>
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.tabs.dna.objectionHandlersSub}</p>
+                            </div>
+                            <SelectAllNone t={t} count={dnaResult.objections.length} setSel={setSelObjections} />
                         </div>
                         <div className="space-y-3">
                             {dnaResult.objections.map((o, i) => (
-                                <div key={i} className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-xl p-4 space-y-2">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <p className="text-sm font-medium text-[var(--color-text)]">{o.objection}</p>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                            o.severity === "critical" ? "bg-red-100 text-red-700" :
-                                                                        "bg-[var(--color-line-soft)] text-[var(--color-text-secondary)]"
-                                        }`}>{t.data.severities[o.severity] ?? o.severity}</span>
+                                <label key={i} className={`flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${selObjections.has(i) ? "border-[var(--color-accent)] bg-teal-50/40" : "border-[var(--color-border)] bg-[var(--color-bg)]"}`}>
+                                    <input type="checkbox" checked={selObjections.has(i)}
+                                        onChange={() => toggleIndex(setSelObjections, i)}
+                                        className="mt-0.5 accent-[var(--color-accent)]" />
+                                    <div className="min-w-0 flex-1 space-y-2">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <p className="text-sm font-medium text-[var(--color-text)]">{o.objection}</p>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
+                                                o.severity === "critical" ? "bg-red-100 text-red-700" :
+                                                                            "bg-[var(--color-line-soft)] text-[var(--color-text-secondary)]"
+                                            }`}>{t.data.severities[o.severity] ?? o.severity}</span>
+                                        </div>
+                                        <p className="text-xs text-[var(--color-text-secondary)]">{o.expert_response_summary}</p>
+                                        {o.example_quote && (
+                                            <p className="text-xs text-teal-700 bg-teal-50 rounded-lg px-3 py-2 italic">"{o.example_quote}"</p>
+                                        )}
+                                        <p className="text-xs text-[var(--color-text-secondary)] border-t border-[var(--color-border)] pt-2">{o.response_guidance}</p>
                                     </div>
-                                    <p className="text-xs text-[var(--color-text-secondary)]">{o.expert_response_summary}</p>
-                                    {o.example_quote && (
-                                        <p className="text-xs text-teal-700 bg-teal-50 rounded-lg px-3 py-2 italic">"{o.example_quote}"</p>
-                                    )}
-                                    <p className="text-xs text-[var(--color-text-secondary)] border-t border-[var(--color-border)] pt-2">{o.response_guidance}</p>
-                                </div>
+                                </label>
                             ))}
                         </div>
-                        <button onClick={applyObjections} disabled={applyingObjections || appliedSections.has("objections")}
+                        <button onClick={applyObjections} disabled={applyingObjections || appliedSections.has("objections") || selObjections.size === 0}
                             className={BTN_PRIMARY + (appliedSections.has("objections") ? " opacity-60" : "")}>
-                            {appliedSections.has("objections") ? t.tabs.dna.applied : applyingObjections ? t.tabs.dna.addingObjections : t.tabs.dna.addObjections(dnaResult.objections.length)}
+                            {appliedSections.has("objections") ? t.tabs.dna.applied : applyingObjections ? t.tabs.dna.addingObjections : t.tabs.dna.addObjections(selObjections.size)}
                         </button>
                     </div>
                 )}
 
                 {reviewTab === "flow" && (
                     <div className={CARD + " space-y-4"}>
-                        <div>
-                            <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.convFramework}</p>
-                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                                {t.tabs.dna.detectedMethodology} <span className="font-medium text-[var(--color-text-secondary)]">{dnaResult.conversation_flow.methodology_guess}</span> {t.tabs.dna.savedAsPlaybook}
-                            </p>
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.convFramework}</p>
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+                                    {t.tabs.dna.detectedMethodology} <span className="font-medium text-[var(--color-text-secondary)]">{dnaResult.conversation_flow.methodology_guess}</span> {t.tabs.dna.savedAsPlaybook}
+                                </p>
+                            </div>
+                            <SelectAllNone t={t} count={dnaResult.conversation_flow.stages.length} setSel={setSelFlow} />
                         </div>
                         <div className="space-y-3">
                             {dnaResult.conversation_flow.stages.map((s, i) => (
-                                <div key={i} className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-xl p-4 space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <span className="w-6 h-6 rounded-full bg-teal-100 text-[var(--color-accent)] text-xs font-semibold flex items-center justify-center flex-shrink-0">{i + 1}</span>
-                                        <p className="text-sm font-semibold text-[var(--color-text)]">{s.name}</p>
+                                <label key={i} className={`flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-colors ${selFlow.has(i) ? "border-[var(--color-accent)] bg-teal-50/40" : "border-[var(--color-border)] bg-[var(--color-bg)]"}`}>
+                                    <input type="checkbox" checked={selFlow.has(i)}
+                                        onChange={() => toggleIndex(setSelFlow, i)}
+                                        className="mt-1 accent-[var(--color-accent)]" />
+                                    <div className="min-w-0 flex-1 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-6 h-6 rounded-full bg-teal-100 text-[var(--color-accent)] text-xs font-semibold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                                            <p className="text-sm font-semibold text-[var(--color-text)]">{s.name}</p>
+                                        </div>
+                                        <p className="text-xs text-[var(--color-text-secondary)] pl-8">{s.description}</p>
+                                        {s.required_items.length > 0 && (
+                                            <ul className="pl-8 space-y-0.5">
+                                                {s.required_items.map((item, j) => (
+                                                    <li key={j} className="text-xs text-[var(--color-text-secondary)] flex items-start gap-1.5">
+                                                        <span className="text-[var(--color-accent)] flex-shrink-0">·</span>{item}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                        {s.transition_signal && (
+                                            <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-1.5 pl-8">
+                                                <span className="font-medium">{t.tabs.dna.moveOnWhen}</span> {s.transition_signal}
+                                            </p>
+                                        )}
                                     </div>
-                                    <p className="text-xs text-[var(--color-text-secondary)] pl-8">{s.description}</p>
-                                    {s.required_items.length > 0 && (
-                                        <ul className="pl-8 space-y-0.5">
-                                            {s.required_items.map((item, j) => (
-                                                <li key={j} className="text-xs text-[var(--color-text-secondary)] flex items-start gap-1.5">
-                                                    <span className="text-[var(--color-accent)] flex-shrink-0">·</span>{item}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                    {s.transition_signal && (
-                                        <p className="text-xs text-green-700 bg-green-50 rounded-lg px-3 py-1.5 pl-8">
-                                            <span className="font-medium">{t.tabs.dna.moveOnWhen}</span> {s.transition_signal}
-                                        </p>
-                                    )}
-                                </div>
+                                </label>
                             ))}
                         </div>
-                        <button onClick={applyFlow} disabled={applyingFlow || appliedSections.has("flow")}
+                        <button onClick={applyFlow} disabled={applyingFlow || appliedSections.has("flow") || selFlow.size === 0}
                             className={BTN_PRIMARY + (appliedSections.has("flow") ? " opacity-60" : "")}>
                             {appliedSections.has("flow") ? t.tabs.dna.applied : applyingFlow ? t.tabs.dna.savingFlow : t.tabs.dna.addAsPlaybook}
                         </button>
+                        {flowLanded && (
+                            <Msg msg={flowLanded === "draft" ? t.tabs.dna.flowSavedDraft : t.tabs.dna.flowSavedActive} />
+                        )}
+                    </div>
+                )}
+
+                {/* Sources — the transcripts this analysis is built from. Honest
+                    display only: label, size, expert speaker. The model returns
+                    one blended result, so no per-rep breakdown is invented. */}
+                {analyzedTranscripts.length > 0 && (
+                    <div className={CARD + " space-y-3"}>
+                        <div>
+                            <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.sources}</p>
+                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.tabs.dna.sourcesSub}</p>
+                        </div>
+                        <div className="divide-y divide-[var(--color-border)]">
+                            {analyzedTranscripts.map((s, i) => {
+                                const words = s.text.split(/\s+/).filter(Boolean).length
+                                return (
+                                    <div key={i} className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3">
+                                        <p className="text-sm text-[var(--color-text)] font-medium truncate">{s.rep_label || t.tabs.dna.transcriptN(i + 1)}</p>
+                                        <p className="text-xs text-[var(--color-text-secondary)] whitespace-nowrap flex-shrink-0">
+                                            {t.tabs.dna.nWords(words.toLocaleString(intl))} · {t.tabs.dna.sourceExpert(s.expert_speaker)}
+                                        </p>
+                                    </div>
+                                )
+                            })}
+                        </div>
                     </div>
                 )}
             </div>
