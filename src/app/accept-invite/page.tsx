@@ -68,13 +68,16 @@ function AcceptInviteContent() {
     const params = useSearchParams()
     const t = useT()
     const token  = params.get("token") ?? ""
-    const [status, setStatus]   = useState<"loading" | "auth_required" | "confirm_email" | "accepting" | "done" | "error">("loading")
+    const [status, setStatus]   = useState<"loading" | "auth_required" | "confirm_email" | "accepting" | "done" | "error" | "wrong_account">("loading")
     const [message, setMessage] = useState("")
     const [mode, setMode]       = useState<"signup" | "signin">("signup")
     const [email, setEmail]     = useState("")
     const [password, setPassword] = useState("")
     const [busy, setBusy]       = useState(false)
     const [preview, setPreview] = useState<InvitePreview | null>(null)
+    /// Who is actually signed in — shown on the wrong-account screen so the
+    /// invitee can see WHICH identity is in the way before signing it out.
+    const [currentEmail, setCurrentEmail] = useState<string | null>(null)
 
     useEffect(() => {
         let cancelled = false
@@ -84,6 +87,7 @@ function AcceptInviteContent() {
 
             // Who invited you, and to what — resolved before the sign-up form so the
             // page can name the organization and stop a dead link early.
+            let pv: InvitePreview | null = null
             try {
                 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
                 const res = await fetch(`${supabaseUrl}/functions/v1/invite-preview`, {
@@ -93,6 +97,7 @@ function AcceptInviteContent() {
                 })
                 const p = (await res.json()) as InvitePreview
                 if (cancelled) return
+                pv = p
                 setPreview(p)
                 if (!p.valid) {
                     setStatus("error")
@@ -110,8 +115,20 @@ function AcceptInviteContent() {
 
             const { data: { user } } = await supabase.auth.getUser()
             if (cancelled) return
-            if (!user) setStatus("auth_required")
-            else acceptInvite()
+            if (!user) { setStatus("auth_required"); return }
+            setCurrentEmail(user.email ?? null)
+            // Compare BEFORE calling accept-invite: the server enforces the
+            // email binding anyway (D-169), but auto-accepting with a known
+            // mismatched session produced the same 403 dead end on every click
+            // of the invite link, with no way out. Catch it here and offer the
+            // sign-out path instead.
+            const invited = (pv?.email ?? "").trim().toLowerCase()
+            const current = (user.email ?? "").trim().toLowerCase()
+            if (invited && current && invited !== current) {
+                setStatus("wrong_account")
+                return
+            }
+            acceptInvite()
         }
 
         boot()
@@ -136,6 +153,12 @@ function AcceptInviteContent() {
             const body = await res.json().catch(() => ({}))
             if (res.ok) {
                 setStatus("done")
+            } else if (body.error?.code === "invite_email_mismatch") {
+                // Server-side backstop for the same case boot() pre-checks —
+                // reached when the preview didn't load. Same recovery screen.
+                const { data: { user: u } } = await supabase.auth.getUser()
+                setCurrentEmail(u?.email ?? null)
+                setStatus("wrong_account")
             } else {
                 setStatus("error")
                 setMessage(body.error?.code === "invite_revoked"
@@ -156,13 +179,30 @@ function AcceptInviteContent() {
     /// redirectTo keeps ?token= so the return trip re-runs boot() and accepts.
     async function oauth(provider: "google" | "azure") {
         setMessage("")
-        await supabase.auth.signOut()
+        await supabase.auth.signOut({ scope: "local" })
+        // login_hint pins the provider's account chooser to the invited
+        // address — the password form locks its email field for the same
+        // reason, and without this OAuth was the open side door into the
+        // wrong-account 403 (Google happily offered every signed-in account).
+        const hint = preview?.email ? { login_hint: preview.email } : undefined
         await supabase.auth.signInWithOAuth({
             provider,
             options: provider === "azure"
-                ? { scopes: "openid profile email", redirectTo: window.location.href }
-                : { redirectTo: window.location.href },
+                ? { scopes: "openid profile email", redirectTo: window.location.href, ...(hint ? { queryParams: hint } : {}) }
+                : { redirectTo: window.location.href, ...(hint ? { queryParams: hint } : {}) },
         })
+    }
+
+    /// The escape hatch from the wrong-account screen: drop the session that's
+    /// in the way and land back on the auth form, prefilled with the invited
+    /// address.
+    async function signOutAndRetry() {
+        await supabase.auth.signOut({ scope: "local" })
+        setCurrentEmail(null)
+        setPassword("")
+        if (preview?.email) setEmail(preview.email)
+        setMessage("")
+        setStatus("auth_required")
     }
 
     async function submitAuth(e: React.FormEvent) {
@@ -207,6 +247,26 @@ function AcceptInviteContent() {
                     <div className="text-center space-y-3">
                         <p className="text-red-600 text-sm">{message}</p>
                         <p className="text-xs text-[var(--color-muted)]">{t.acceptInvite.askResend}</p>
+                    </div>
+                )}
+
+                {status === "wrong_account" && (
+                    <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6 space-y-4 shadow-sm text-center">
+                        <p className="text-sm font-semibold text-[var(--color-text)]">{t.acceptInvite.wrongAccountTitle}</p>
+                        <p className="text-sm text-[var(--color-text-secondary)]">
+                            {t.acceptInvite.wrongAccountInvited}{" "}
+                            <span className="font-medium text-[var(--color-text)]">{preview?.email ?? preview?.email_hint ?? t.acceptInvite.theInvitedAddress}</span>
+                            {currentEmail && (
+                                <>
+                                    {" — "}{t.acceptInvite.wrongAccountCurrent}{" "}
+                                    <span className="font-medium text-[var(--color-text)]">{currentEmail}</span>
+                                </>
+                            )}.
+                        </p>
+                        <button onClick={signOutAndRetry} className={BTN}>
+                            {t.acceptInvite.switchAndAccept}
+                        </button>
+                        <p className="text-xs text-[var(--color-muted)]">{t.acceptInvite.askAdminMismatch}</p>
                     </div>
                 )}
 

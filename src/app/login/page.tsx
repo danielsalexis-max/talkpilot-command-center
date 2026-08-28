@@ -83,7 +83,7 @@ export default function LoginPage() {
     /// On a sign-in page the intent is never "link" — it is always "get me in
     /// as this identity". So drop any existing session first.
     async function oauth(provider: "google" | "azure", redirectTo: string) {
-        await supabase.auth.signOut()
+        await supabase.auth.signOut({ scope: "local" })
         await supabase.auth.signInWithOAuth({
             provider,
             options: provider === "azure"
@@ -162,7 +162,7 @@ export default function LoginPage() {
                             {loading ? t.login.signingIn : t.login.mfaVerify}
                         </button>
                         <button type="button"
-                            onClick={async () => { await supabase.auth.signOut(); setMfaFactorId(null); setMfaCode(""); setError(null) }}
+                            onClick={async () => { await supabase.auth.signOut({ scope: "local" }); setMfaFactorId(null); setMfaCode(""); setError(null) }}
                             className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors">
                             {t.login.mfaBackToSignIn}
                         </button>

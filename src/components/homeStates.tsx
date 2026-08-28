@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import type { Route } from "next"
+import { useState } from "react"
 import { useT } from "@/i18n/LocaleProvider"
 
 /// The three lives of the Home page (D-175). A brand-new org spends its whole
@@ -78,10 +79,20 @@ export function setupRequiredMet(r: SetupState): boolean {
     return setupChecks(r).filter(c => c.required).every(c => c.done)
 }
 
-export function SetupChecklistCard({ state }: { state: SetupState }) {
+/// The card stays up after the required items are done (D-217) — the
+/// recommended ones are the point of keeping it — and only the owner's own X
+/// (which appears once the required bar is met) hides it, per browser, via
+/// localStorage keyed by org.
+export function SetupChecklistCard({ state, orgId }: { state: SetupState; orgId: string }) {
     const t = useT()
+    const storageKey = `tp-setup-checklist-dismissed-${orgId}`
+    const [dismissed, setDismissed] = useState(() => {
+        try { return localStorage.getItem(storageKey) === "1" } catch { return false }
+    })
     const checks = setupChecks(state)
     const done = checks.filter(c => c.done).length
+    const requiredMet = setupRequiredMet(state)
+    if (dismissed) return null
     return (
         <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 shadow-sm max-w-2xl">
             <div className="flex items-start justify-between gap-4">
@@ -91,7 +102,21 @@ export function SetupChecklistCard({ state }: { state: SetupState }) {
                         {t.homeStates.setupSub}
                     </p>
                 </div>
-                <span className="font-mono text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-full px-2.5 py-1 shrink-0">{done}/{checks.length}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-mono text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-full px-2.5 py-1">{done}/{checks.length}</span>
+                    {requiredMet && (
+                        <button
+                            onClick={() => { try { localStorage.setItem(storageKey, "1") } catch {} ; setDismissed(true) }}
+                            aria-label={t.homeStates.dismissChecklist}
+                            title={t.homeStates.dismissChecklist}
+                            className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)] transition-colors"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
             </div>
             <div className="mt-5 space-y-3">
                 {checks.map(c => (

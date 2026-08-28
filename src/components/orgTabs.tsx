@@ -23,6 +23,7 @@ export interface OrgInfo {
     visibility: string; seats_purchased: number
     status: string; cancel_at: string | null
     trial_ends_at?: string | null
+    stripe_subscription_id?: string | null
     voice_profile: { tone?: string; values?: string; self_reference?: string; banned_phrases?: string[]; required_phrases?: string[] }
     settings?: { rep_visibility?: { playbook?: boolean; knowledge?: boolean } } & Record<string, unknown>
 }
@@ -2523,7 +2524,13 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
             const { data: inserted } = await supabase.from("org_objections").insert(
                 dnaResult.objections.filter((_, i) => selObjections.has(i)).map(o => ({
                     org_id: orgId, objection: o.objection, response_guidance: o.response_guidance,
-                    approved_responses: approvedResponsesFrom(o.response_guidance),
+                    // The expert's verbatim line is the strongest approved
+                    // response there is — it used to be shown on the review
+                    // card and then dropped on save.
+                    approved_responses: [
+                        ...approvedResponsesFrom(o.response_guidance),
+                        ...(o.example_quote?.trim() ? [{ text: o.example_quote.trim() }] : []),
+                    ],
                     severity: normalizeSeverity(o.severity), variants: null, active: true,
                     source: "team_dna",
                 }))
@@ -2737,18 +2744,34 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                                         onChange={() => toggleIndex(setSelObjections, i)}
                                         className="mt-0.5 accent-[var(--color-accent)]" />
                                     <div className="min-w-0 flex-1 space-y-2">
+                                        {/* Labeled rows, same rule as the doc-extraction review
+                                            list: which line is the objection, which is the
+                                            technique, and which is what you say back is not
+                                            answerable from font weight alone. */}
                                         <div className="flex items-start justify-between gap-2">
-                                            <p className="text-sm font-medium text-[var(--color-text)]">{o.objection}</p>
+                                            <div className="min-w-0">
+                                                <p className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold">{t.tabs.objections.labelObjection}</p>
+                                                <p className="text-sm font-medium text-[var(--color-text)]">{o.objection}</p>
+                                            </div>
                                             <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
                                                 o.severity === "critical" ? "bg-red-100 text-red-700" :
                                                                             "bg-[var(--color-line-soft)] text-[var(--color-text-secondary)]"
                                             }`}>{t.data.severities[o.severity] ?? o.severity}</span>
                                         </div>
-                                        <p className="text-xs text-[var(--color-text-secondary)]">{o.expert_response_summary}</p>
+                                        <div>
+                                            <p className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold">{t.tabs.dna.labelTechnique}</p>
+                                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{o.expert_response_summary}</p>
+                                        </div>
                                         {o.example_quote && (
-                                            <p className="text-xs text-teal-700 bg-teal-50 rounded-lg px-3 py-2 italic">"{o.example_quote}"</p>
+                                            <div>
+                                                <p className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold">{t.tabs.dna.labelQuote}</p>
+                                                <p className="text-xs text-teal-700 bg-teal-50 rounded-lg px-3 py-2 italic mt-0.5">"{o.example_quote}"</p>
+                                            </div>
                                         )}
-                                        <p className="text-xs text-[var(--color-text-secondary)] border-t border-[var(--color-border)] pt-2">{o.response_guidance}</p>
+                                        <div className="border-t border-[var(--color-border)] pt-2">
+                                            <p className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold">{t.tabs.objections.labelGuidance}</p>
+                                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{o.response_guidance}</p>
+                                        </div>
                                     </div>
                                 </label>
                             ))}

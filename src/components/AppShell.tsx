@@ -252,7 +252,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     const SignOut = ({ className = "" }: { className?: string }) => (
         <button
-            onClick={() => supabase.auth.signOut().then(() => { window.location.href = "/login" })}
+            onClick={() => supabase.auth.signOut({ scope: "local" }).then(() => { window.location.href = "/login" })}
             className={`text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors ${className}`}
         >
             {t.common.signOut}
@@ -336,7 +336,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                             </a>
                         </div>
                     )}
-                    <button onClick={() => supabase.auth.signOut().then(() => location.assign("/login"))}
+                    <button onClick={() => supabase.auth.signOut({ scope: "local" }).then(() => location.assign("/login"))}
                         className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors">
                         {t.common.signOut}
                     </button>
@@ -378,7 +378,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <p className="text-xs text-[var(--color-muted)]">
                     {t.memberGate.askAdmin}
                 </p>
-                <button onClick={() => supabase.auth.signOut().then(() => { window.location.href = "/login" })}
+                <button onClick={() => supabase.auth.signOut({ scope: "local" }).then(() => { window.location.href = "/login" })}
                     className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] underline">
                     {t.common.signOut}
                 </button>

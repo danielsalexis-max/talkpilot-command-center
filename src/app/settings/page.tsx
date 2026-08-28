@@ -51,8 +51,20 @@ function SettingsPageInner() {
         { key: "billing",  label: t.settingsPage.tabBilling  },
     ]
 
+    // An unpaid workspace gets exactly ONE settings surface: Billing. The
+    // AppShell gate exempts /settings wholesale (it is the road to Billing),
+    // which used to leave Org settings, Security & access and the Audit log
+    // fully usable before any payment — enforce billing-only here, where the
+    // tab param actually lives.
+    const entitled = !!org && (
+        !!org.stripe_subscription_id
+        || (!!org.trial_ends_at && new Date(org.trial_ends_at) > new Date())
+        || ["business", "enterprise"].includes(org.plan ?? "")
+    )
+    const visibleTabs = entitled ? TABS : TABS.filter(tb => tb.key === "billing")
     const raw = params.get("tab")
-    const tab: Tab = raw === "billing" || raw === "security" || raw === "audit"
+    const tab: Tab = !entitled ? "billing"
+        : raw === "billing" || raw === "security" || raw === "audit"
         ? (raw as Tab) : "org"
     const setTab = (t: Tab) => router.replace(`/settings?tab=${t}`, { scroll: false })
 
@@ -85,8 +97,14 @@ function SettingsPageInner() {
 
             <OrgBanners org={org} />
 
+            {!entitled && (
+                <p className="text-xs text-[var(--color-text-secondary)] bg-[var(--color-accent-subtle)] border border-[var(--color-accent-light)] rounded-lg px-4 py-3">
+                    {t.settingsPage.billingLockedNote}
+                </p>
+            )}
+
             <div className="border-b border-[var(--color-border)] flex gap-1 overflow-x-auto">
-                {TABS.map(t => (
+                {visibleTabs.map(t => (
                     <button key={t.key} onClick={() => setTab(t.key)}
                         className={`px-4 py-2 text-sm border-b-2 transition-colors -mb-px whitespace-nowrap ${
                             tab === t.key

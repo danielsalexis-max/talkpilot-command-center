@@ -4,19 +4,20 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
-import { starterKitsFor, applyStarterKit, type StarterKit } from "@/lib/starterKit"
 import { isPersonalEmail } from "@/lib/workEmail"
 import { EmailLink } from "@/components/EmailLink"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
 import type { Dict } from "@/i18n"
 
 /// /start — self-serve Teams onboarding (D-163).
-/// account → workspace → coaching brain → invite → live.
-/// 14-day full trial, no card. The right-hand panel shows what reps actually
-/// get — the product sells itself while the owner types.
+/// account → workspace → invite → live. The playbook step moved into the
+/// dashboard (D-215): asking for a playbook here — but not objections — left
+/// owners half-configured either way, so the whole coaching-brain setup now
+/// happens in Playbook, after billing. The right-hand panel shows what reps
+/// actually get — the product sells itself while the owner types.
 
-type Step = "account" | "workspace" | "brain" | "invite" | "done"
-const STEPS: Step[] = ["account", "workspace", "brain", "invite", "done"]
+type Step = "account" | "workspace" | "invite" | "done"
+const STEPS: Step[] = ["account", "workspace", "invite", "done"]
 
 const INPUT = "w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
 const BTN = "w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors"
@@ -36,13 +37,6 @@ const TEAM_SEAT_CAP = 20
 /// (D-192 #8) — teams.talkpilot.co keeps working for whoever lands on it
 /// directly, but the default motion is a conversation.
 const DEMO_URL = "https://talkpilot.co/demo"
-
-/// Starter-kit content is seeded into the org's playbook in English (the
-/// coaching data itself is not localized yet) — but the /start cards show the
-/// localized title/tagline so a LATAM prospect reads them in their language.
-function kitDisplay(t: Dict, kit: StarterKit): { title: string; tagline: string } {
-    return t.start.kits[kit.key] ?? { title: kit.title, tagline: kit.tagline }
-}
 
 async function callFn(name: string, body: unknown) {
     const { data: { session } } = await supabase.auth.getSession()
@@ -165,12 +159,7 @@ function Showcase() {
 
 export default function StartPage() {
     const router = useRouter()
-    const { locale, t } = useLocale()
-    // The kit BODY (stage text, guardrail keywords, objections) is inserted
-    // into the org's database as their real playbook, so it follows the
-    // locale the owner is signing up in — not just the labels on screen.
-    // An English guardrail keyword can never match a Spanish call (D-177).
-    const kits = starterKitsFor(locale)
+    const { t } = useLocale()
     const [step, setStep]         = useState<Step>("account")
     const [checking, setChecking] = useState(true)
     const [busy, setBusy]         = useState(false)
@@ -188,26 +177,48 @@ export default function StartPage() {
     const [hasTrial, setHasTrial] = useState(false)
     const [checkoutBusy, setCheckoutBusy] = useState(false)
 
-    const [teamType, setTeamType]     = useState<"sales" | "support">("sales")
-    const [kitApplied, setKitApplied] = useState<string | null>(null)
-    /// Kit title while applyStarterKit runs — swaps the kit list for progress.
-    const [kitBuilding, setKitBuilding] = useState<string | null>(null)
-    const [wantsDna, setWantsDna]     = useState(false)
     const [invites, setInvites]       = useState<string[]>(["", "", ""])
     const [inviteNote, setInviteNote] = useState<string | null>(null)
     const doneRef = useRef(false)
 
-    // Signed-in users skip the account step; users already in an org go home.
+    // Signed-in users skip the account step. Users already in an org: if the
+    // workspace is entitled, onboarding is over — go home. If it is NOT paid
+    // yet and this is the payer, resume the wizard at its final step — this is
+    // where Stripe's back button and stale tabs land, and bouncing those users
+    // to the dashboard's billing gate lost the wizard forever.
     const routeForUser = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { setChecking(false); return }
         const { data: member } = await supabase.from("org_members")
-            .select("org_id").eq("user_id", user.id).eq("status", "active").maybeSingle()
-        if (member && !doneRef.current) { router.replace("/"); return }
+            .select("org_id, role").eq("user_id", user.id).eq("status", "active").maybeSingle()
+        if (member && !doneRef.current) {
+            const { data: o } = await supabase.from("organizations")
+                .select("name, plan, seats_purchased, trial_ends_at, stripe_subscription_id")
+                .eq("id", member.org_id).single()
+            const entitled = !!o && (
+                !!o.stripe_subscription_id
+                || (!!o.trial_ends_at && new Date(o.trial_ends_at) > new Date())
+                || ["business", "enterprise"].includes(o.plan ?? "")
+            )
+            const canPay = member.role === "owner" || member.role === "admin"
+            if (!o || entitled || !canPay) { router.replace("/"); return }
+            setOrgId(member.org_id)
+            setOrgName(o.name ?? "")
+            setSeats(o.seats_purchased ?? 3)
+            setHasTrial(false)
+            setEmail(user.email ?? "")
+            if (new URLSearchParams(window.location.search).get("checkout") === "canceled") {
+                setError(t.start.checkoutCanceledNote)
+            }
+            doneRef.current = true
+            setStep("done")
+            setChecking(false)
+            return
+        }
         setEmail(user.email ?? "")
         setStep(s => (s === "account" ? "workspace" : s))
         setChecking(false)
-    }, [router])
+    }, [router, t])
 
     useEffect(() => { routeForUser() }, [routeForUser])
 
@@ -248,7 +259,7 @@ export default function StartPage() {
     /// account instead of switching to it.
     async function handleGoogle() {
         setError(null)
-        await supabase.auth.signOut()
+        await supabase.auth.signOut({ scope: "local" })
         await supabase.auth.signInWithOAuth({
             provider: "google",
             options: { redirectTo: `${window.location.origin}/start` },
@@ -259,7 +270,7 @@ export default function StartPage() {
     // never reads a calendar; that scope belongs to the rep apps (D-187).
     async function handleMicrosoft() {
         setError(null)
-        await supabase.auth.signOut()
+        await supabase.auth.signOut({ scope: "local" })
         await supabase.auth.signInWithOAuth({
             provider: "azure",
             options: { scopes: "openid profile email", redirectTo: `${window.location.origin}/start` },
@@ -270,7 +281,7 @@ export default function StartPage() {
     // check can't run before the account exists the way it does for the email
     // form. The recovery path is a real one: sign out and start over.
     async function switchAccount() {
-        await supabase.auth.signOut()
+        await supabase.auth.signOut({ scope: "local" })
         setEmail(""); setPassword(""); setError(null)
         setStep("account")
     }
@@ -290,7 +301,7 @@ export default function StartPage() {
             // the brain either way — a half-configured workspace is worthless
             // to them and to us — but the final step becomes checkout.
             setHasTrial(!!res.trial_ends_at)
-            setStep("brain")
+            setStep("invite")
         } catch (e) {
             const msg = (e as Error).message
             if (msg.includes("already part")) { router.replace("/"); return }
@@ -304,7 +315,7 @@ export default function StartPage() {
         if (!orgId) return
         setCheckoutBusy(true); setError(null)
         try {
-            const res = await callFn("org-billing", { org_id: orgId, action: "checkout", interval: "month" })
+            const res = await callFn("org-billing", { org_id: orgId, action: "checkout", interval: "month", context: "onboarding" })
             if (res?.url) { window.location.href = res.url as string; return }
             setError(t.start.checkoutFailed)
         } catch (e) {
@@ -312,21 +323,6 @@ export default function StartPage() {
         } finally {
             setCheckoutBusy(false)
         }
-    }
-
-    async function handleKit(kit: StarterKit) {
-        if (!orgId) return
-        const title = kitDisplay(t, kit).title
-        // Applying a kit is the wizard's one genuinely slow click (playbook +
-        // objection inserts, then embeddings on a cold edge function) — the
-        // cards dimming 50% read as "nothing happened". Swap the whole step
-        // for a progress panel instead.
-        setError(null); setBusy(true); setKitBuilding(title)
-        const err = await applyStarterKit(orgId, kit)
-        setBusy(false); setKitBuilding(null)
-        if (err) { setError(err); return }
-        setKitApplied(title)
-        setStep("invite")
     }
 
     async function handleInvites(e: React.FormEvent) {
@@ -478,73 +474,11 @@ export default function StartPage() {
                         </div>
                     )}
 
-                    {step === "brain" && (
-                        <div className="max-w-md">
-                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">{t.start.brainTitle}</h1>
-                            <p className="text-sm text-[var(--color-text-secondary)] mt-2">
-                                {t.start.brainSub1}<em>{t.start.brainSubEm}</em>{t.start.brainSub2}
-                            </p>
-                            {kitBuilding && (
-                                <div className="mt-6 rounded-xl border border-[var(--color-accent-light)] bg-[var(--color-accent-subtle)] px-5 py-6 text-center space-y-2" role="status" aria-live="polite">
-                                    <div className="mx-auto w-6 h-6 rounded-full border-2 border-[var(--color-accent)] border-t-transparent animate-spin" aria-hidden />
-                                    <p className="text-sm font-semibold text-[var(--color-accent-deep)]">{t.start.buildingBrain(kitBuilding)}</p>
-                                    <p className="text-xs text-[var(--color-accent-deep)]">{t.start.buildingBrainSub}</p>
-                                </div>
-                            )}
-                            {/* One question, then two compact cards — the per-stage chips made
-                                this step read as a wall (D-171). Details live in a single meta
-                                line; everything is editable under Playbook afterwards. */}
-                            {!kitBuilding && (<>
-                            <div className="flex rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] p-1 mt-6 max-w-xs">
-                                {([["sales", t.start.teamSales], ["support", t.start.teamSupport]] as const).map(([key, label]) => (
-                                    <button key={key} type="button" onClick={() => setTeamType(key)}
-                                        className={`flex-1 py-1.5 text-xs rounded-md transition-colors ${
-                                            teamType === key
-                                                ? "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-semibold"
-                                                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
-                                        }`}>{label}</button>
-                                ))}
-                            </div>
-                            <div className="space-y-3 mt-3">
-                                {kits.filter(kit => kit.team === teamType).map(kit => (
-                                    <button key={kit.key} disabled={busy} onClick={() => handleKit(kit)}
-                                        className="w-full text-left bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent-light)] rounded-xl px-4 py-3.5 transition-colors disabled:opacity-50 group">
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-sm font-semibold text-[var(--color-text)]">{kitDisplay(t, kit).title}</p>
-                                            <span className="text-xs font-semibold text-[var(--color-accent-deep)] opacity-0 group-hover:opacity-100 transition-opacity">{t.start.useThis}</span>
-                                        </div>
-                                        <p className="text-xs text-[var(--color-text-secondary)] mt-1">{kitDisplay(t, kit).tagline}</p>
-                                        <p className="text-[10.5px] text-[var(--color-muted)] mt-1.5">
-                                            {t.start.kitMeta(kit.stages.length, kit.objections.length)}
-                                        </p>
-                                    </button>
-                                ))}
-                                <button disabled={busy} onClick={() => { setWantsDna(true); setStep("invite") }}
-                                    className="w-full text-left bg-[var(--color-surface)] border border-dashed border-[var(--color-accent-light)] rounded-xl p-4 transition-colors hover:bg-[var(--color-accent-subtle)] disabled:opacity-50">
-                                    <p className="text-sm font-semibold text-[var(--color-accent-deep)] inline-flex items-center gap-1.5">
-                                        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent)] shrink-0" />
-                                        {t.start.dnaCard}
-                                    </p>
-                                    <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                                        {t.start.dnaCardSub}
-                                    </p>
-                                </button>
-                            </div>
-                            {error && <p className="text-xs text-red-600 mt-3">{error}</p>}
-                            <button onClick={() => setStep("invite")} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-4">
-                                {t.start.skipBrain}
-                            </button>
-                            </>)}
-                        </div>
-                    )}
-
                     {step === "invite" && (
                         <div>
                             <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">{t.start.inviteTitle}</h1>
                             <p className="text-sm text-[var(--color-text-secondary)] mt-2">
-                                {kitApplied
-                                    ? <>{t.start.inviteSubWithKit1}<strong>{kitApplied}</strong>{t.start.inviteSubWithKit2}</>
-                                    : t.start.inviteSubNoKit}
+                                {t.start.inviteSubNoKit}
                             </p>
                             <form onSubmit={handleInvites} className="space-y-3 mt-7">
                                 {invites.map((v, i) => (
@@ -559,9 +493,6 @@ export default function StartPage() {
                                 </button>
                             </form>
                             <div className="flex items-center gap-4 mt-4">
-                                <button onClick={() => setStep("brain")} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">
-                                    {t.common.back}
-                                </button>
                                 <button onClick={() => { doneRef.current = true; setStep("done") }} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">
                                     {t.start.skipInvites}
                                 </button>
@@ -583,9 +514,7 @@ export default function StartPage() {
                                         <div>
                                             <p className="text-sm font-semibold text-[var(--color-text)]">{s.title}</p>
                                             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                                                {i === 1
-                                                    ? (kitApplied ? t.start.doneStep2WithKit(kitApplied) : t.start.doneStep2NoKit)
-                                                    : s.sub}
+                                                {i === 1 ? t.start.doneStep2NoKit : s.sub}
                                             </p>
                                         </div>
                                     </div>
@@ -605,6 +534,7 @@ export default function StartPage() {
                                         </button>
                                         <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className={BTN_GHOST + " sm:w-auto px-5 text-center"}>{t.start.bookDemoInstead}</a>
                                     </div>
+                                    {error && <p className="text-xs text-amber-700">{error}</p>}
                                 </div>
                             )}
 
@@ -615,12 +545,9 @@ export default function StartPage() {
                                 primary action. */}
                             {hasTrial && (
                                 <div className="flex flex-col sm:flex-row gap-3 mt-8">
-                                    <button onClick={() => { window.location.href = wantsDna ? "/playbook?tab=dna" : "/" }} className={BTN + " sm:flex-1"}>
-                                        {wantsDna ? t.start.setUpDna : t.start.openCommandCenter}
+                                    <button onClick={() => { window.location.href = "/" }} className={BTN + " sm:flex-1"}>
+                                        {t.start.openCommandCenter}
                                     </button>
-                                    {wantsDna && (
-                                        <button onClick={() => { window.location.href = "/" }} className={BTN_GHOST + " sm:flex-1"}>{t.start.commandCenter}</button>
-                                    )}
                                 </div>
                             )}
                             <p className="text-[11px] text-[var(--color-muted)] mt-5">

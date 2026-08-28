@@ -7,7 +7,7 @@ import type { Route } from "next"
 import { supabase, type Scorecard } from "@/lib/supabase"
 import { ScoreRing } from "@/components/ScoreRing"
 import { InsightsSections } from "@/components/InsightsSections"
-import { PageSkeleton, SetupChecklistCard, WaitingRoomCard, setupRequiredMet, type SetupState } from "@/components/homeStates"
+import { PageSkeleton, SetupChecklistCard, WaitingRoomCard, type SetupState } from "@/components/homeStates"
 import { useLocale } from "@/i18n/LocaleProvider"
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
@@ -74,8 +74,11 @@ export default function HomePage() {
                 // and whether anyone is still en route.
                 supabase.from("org_playbooks").select("id", { count: "exact", head: true })
                     .eq("org_id", orgId).eq("status", "active"),
+                // active-only, matching the AppShell nav dot (D-175) — the two
+                // counts disagreed and an org with only deactivated objections
+                // got a permanent amber dot but no checklist.
                 supabase.from("org_objections").select("id", { count: "exact", head: true })
-                    .eq("org_id", orgId),
+                    .eq("org_id", orgId).eq("active", true),
                 supabase.from("org_knowledge").select("id", { count: "exact", head: true })
                     .eq("org_id", orgId),
                 supabase.from("org_invites").select("id", { count: "exact", head: true })
@@ -241,9 +244,12 @@ export default function HomePage() {
                  Home alone was "empty and broken", and the two required items
                  are already satisfied by finishing /start — so the wizard
                  handed you a second checklist for work you had just done.
-                 Now it is a banner, and whatever data exists still shows. ── */}
-            {setup && !setupRequiredMet(setup) && (
-                <SetupChecklistCard state={setup} />
+                 Now it is a banner, and whatever data exists still shows.
+                 It no longer vanishes when the required items are done (D-217):
+                 the recommended items stay visible until the owner dismisses it
+                 themselves — the X only appears once the required bar is met. ── */}
+            {setup && org && (
+                <SetupChecklistCard state={setup} orgId={org.id} />
             )}
 
             {/* ── Nobody has made a call yet ── */}
