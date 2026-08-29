@@ -87,7 +87,11 @@ export default function LoginPage() {
         await supabase.auth.signInWithOAuth({
             provider,
             options: provider === "azure"
-                ? { scopes: "openid profile email", redirectTo }
+                // prompt=select_account: without it Entra silently reuses the
+                // browser's existing Microsoft session, so /authorize -> /callback
+                // round-trips in ~2s with no account picker and you sign in as
+                // whatever account was already there.
+                ? { scopes: "openid profile email", redirectTo, queryParams: { prompt: "select_account" } }
                 : { redirectTo },
         })
     }

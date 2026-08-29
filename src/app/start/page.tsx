@@ -273,7 +273,11 @@ export default function StartPage() {
         await supabase.auth.signOut({ scope: "local" })
         await supabase.auth.signInWithOAuth({
             provider: "azure",
-            options: { scopes: "openid profile email", redirectTo: `${window.location.origin}/start` },
+            options: {
+                scopes: "openid profile email",
+                redirectTo: `${window.location.origin}/start`,
+                queryParams: { prompt: "select_account" },
+            },
         })
     }
 
