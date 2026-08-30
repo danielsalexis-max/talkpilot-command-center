@@ -58,7 +58,21 @@ export default function HomePage() {
             if (!user) { router.replace("/login"); return }
 
             const { data: orgData } = await supabase.rpc("get_org_context")
-            if (!orgData?.org_id) { setError("no_org"); setLoading(false); return }
+            if (!orgData?.org_id) {
+                // No workspace yet. Two very different people land here, and
+                // sending both to the same place is what made onboarding feel
+                // optional: someone who just signed up needs the wizard, while
+                // an invited member has no org *by design* and must use their
+                // invite link — pushing them into "create a workspace" is the
+                // wrong-account hazard of D-062/D-169. So ask first, and fail
+                // safe to the card if the check itself errors.
+                const { data: invited, error: invErr } = await supabase.rpc("has_pending_invite")
+                if (invErr || invited) { setError("no_org"); setLoading(false); return }
+                // Leave `loading` true: the skeleton holds until the route
+                // changes, so the dashboard never flashes on the way to /start.
+                router.replace("/start")
+                return
+            }
             const orgId = orgData.org_id
 
             const [{ data: orgInfo }, { data: scorecards }, { data: mems },
