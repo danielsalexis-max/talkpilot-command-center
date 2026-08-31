@@ -1962,11 +1962,27 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     }
 
     async function changeRole(userId: string, role: string) {
-        const before = members.find(m => m.user_id === userId)?.role
-        await supabase.from("org_members").update({ role }).eq("org_id", orgId).eq("user_id", userId)
+        const target = members.find(m => m.user_id === userId)
+        const before = target?.role
+        if (before === role) return
+        // The workspace creator's role is not editable — see the note on the
+        // select. Belt and braces: the control is disabled, this refuses too.
+        if (before === "owner") { setMsg(t.tabs.members.creatorLocked); setIsErr(true); return }
+        // Never leave a workspace with nobody who can administer it. Only
+        // owner/admin can invite, bill, or configure the coaching brain, so
+        // demoting the last one locks everyone out of their own workspace with
+        // no in-product way back.
+        const adminsLeft = members.filter(m => (m.role === "owner" || m.role === "admin") && m.user_id !== userId).length
+        if ((before === "admin") && role !== "admin" && adminsLeft === 0) {
+            setMsg(t.tabs.members.lastAdmin); setIsErr(true); return
+        }
+        const { error } = await supabase.from("org_members")
+            .update({ role }).eq("org_id", orgId).eq("user_id", userId)
+        if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true); return }
         setMembers(prev => prev.map(m => m.user_id === userId ? { ...m, role } : m))
         await auditWrite("member.role_changed", { user_id: userId, from: before, to: role })
-        setIsErr(false); setMsg(`Role updated to ${role}.`)
+        setIsErr(false)
+        setMsg(t.tabs.members.roleUpdated(t.data.roles[role] ?? role))
     }
 
     // Revoking keeps the row (the accept page needs to say "withdrawn", which
@@ -1981,11 +1997,14 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     }
 
     async function removeMember(userId: string) {
-        const who = members.find(m => m.user_id === userId)?.email
-        await supabase.from("org_members").delete().eq("org_id", orgId).eq("user_id", userId)
+        const target = members.find(m => m.user_id === userId)
+        if (target?.role === "owner") { setMsg(t.tabs.members.creatorLocked); setIsErr(true); return }
+        const { error } = await supabase.from("org_members")
+            .delete().eq("org_id", orgId).eq("user_id", userId)
+        if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true); return }
         setMembers(prev => prev.filter(m => m.user_id !== userId))
-        await auditWrite("member.removed", { user_id: userId, email: who })
-        setIsErr(false); setMsg("Removed — their seat is free. Their personal TalkPilot account is untouched.")
+        await auditWrite("member.removed", { user_id: userId, email: target?.email })
+        setIsErr(false); setMsg(t.tabs.members.removedMsg)
     }
 
     const roleColor = (r: string): "indigo"|"yellow"|"slate" =>
@@ -2055,17 +2074,30 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                             </div>
                             <div className="flex items-center gap-2">
                                 <StatusBadge label={t.data.roles[m.role] ?? m.role} color={roleColor(m.role)} />
+                                {/* `owner` is deliberately absent as a choice (D-227): it is a
+                                    database role, not a rank the UI sells. The workspace creator
+                                    renders as Admin like any other, but their row is locked —
+                                    demoting them would silently break org-lifecycle's trial and
+                                    suspension emails, which select on role = 'owner', and change
+                                    what delete-account is willing to do. */}
                                 <select
-                                    value={m.role}
+                                    value={m.role === "owner" ? "admin" : m.role}
+                                    disabled={m.role === "owner"}
+                                    title={m.role === "owner" ? t.tabs.members.creatorLocked : undefined}
                                     onChange={e => changeRole(m.user_id, e.target.value)}
-                                    className="w-24 text-xs bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-2 py-1 text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent)]"
+                                    className="w-24 text-xs bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-2 py-1 text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent)] disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <option value="member">{t.data.roles.member}</option>
                                     <option value="manager">{t.data.roles.manager}</option>
                                     <option value="admin">{t.data.roles.admin}</option>
-                                    <option value="owner">{t.data.roles.owner}</option>
                                 </select>
-                                <button className={BTN_DANGER} onClick={() => removeMember(m.user_id)}>{t.common.remove}</button>
+                                {m.role === "owner" ? (
+                                    <span className="text-xs text-[var(--color-muted)] px-2" title={t.tabs.members.creatorLocked}>
+                                        {t.tabs.members.creator}
+                                    </span>
+                                ) : (
+                                    <button className={BTN_DANGER} onClick={() => removeMember(m.user_id)}>{t.common.remove}</button>
+                                )}
                             </div>
                         </div>
                     ))}

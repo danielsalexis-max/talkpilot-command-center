@@ -59,14 +59,17 @@ export const en = {
         passwordsDontMatch: "Passwords don't match.",
         scoredCall: "Scored call",
         noOrgMembership: "No org membership found.",
-        adminAccessRequired: "Admin access required. Make sure you're an org owner or admin.",
+        adminAccessRequired: "Admin access required. Ask an admin on your team to grant it.",
     },
 
     // Display labels for enum-ish values coming from the database. The stored
     // values themselves are never translated — only how they render.
     data: {
         roles: {
-            owner: "Owner", admin: "Admin", manager: "Manager", member: "Member",
+            // "owner" is a database role, not a concept the UI exposes: it
+            // renders as Admin so admins read as peers (2026-08-31, D-227).
+            // The row itself stays uneditable — see MembersTab.
+            owner: "Admin", admin: "Admin", manager: "Manager", member: "Member",
         } as Record<string, string>,
         statuses: {
             active: "active", draft: "draft", archived: "archived",
@@ -122,7 +125,7 @@ export const en = {
     billingGate: {
         title: "Activate your workspace",
         bodyOwner: "Your workspace and playbook are saved — nothing is lost. Start the subscription to unlock it for your team, or talk to us first.",
-        bodyMember: "This workspace isn't active yet. Ask your workspace owner to set up billing.",
+        bodyMember: "This workspace isn't active yet. Ask an admin on your team to set up billing.",
         addBilling: "Add billing",
         bookDemo: "Book a demo",
     },
@@ -440,7 +443,7 @@ export const en = {
         sub: "Who's improving, who needs you this week — and everyone's seat, role and invite in one place.",
         tabPerformance: "Performance",
         tabMembers: "Members & invites",
-        membersManagedBy: "Members are managed by workspace owners and admins.",
+        membersManagedBy: "Members are managed by admins.",
         thirtyDayAvg: "30-day averages — click a rep for their full history.",
         invitesPending: (n: number) => `${n} invite${n === 1 ? "" : "s"} pending →`,
         searchReps: "Search reps…",
@@ -940,6 +943,11 @@ export const en = {
             revoke: "Revoke",
             revoked: "Revoked",
             revokedMsg: (email: string) => `Invitation to ${email} revoked — the seat is free and the link no longer works.`,
+            roleUpdated: (role: string) => `Role updated to ${role}.`,
+            removedMsg: "Removed — their seat is free. Their personal TalkPilot account is untouched.",
+            creator: "Workspace creator",
+            creatorLocked: "This is the account that created the workspace and receives billing and trial notices. Its access can't be changed here.",
+            lastAdmin: "Someone has to keep admin access — this is the only admin left. Promote another person first, then change this one.",
         },
 
         dna: {

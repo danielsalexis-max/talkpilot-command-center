@@ -58,12 +58,14 @@ export const es: Dict = {
         passwordsDontMatch: "Las contraseñas no coinciden.",
         scoredCall: "Llamada evaluada",
         noOrgMembership: "No encontramos una organización asociada a tu cuenta.",
-        adminAccessRequired: "Se requiere acceso de administrador. Asegúrate de ser dueño o admin de la organización.",
+        adminAccessRequired: "Se requiere acceso de administrador. Pide a un admin de tu equipo que te lo dé.",
     },
 
     data: {
         roles: {
-            owner: "Dueño", admin: "Admin", manager: "Manager", member: "Miembro",
+            // "owner" es un rol de base de datos, no un concepto de la UI:
+            // se muestra como Admin (D-227).
+            owner: "Admin", admin: "Admin", manager: "Manager", member: "Miembro",
         } as Record<string, string>,
         statuses: {
             active: "activo", draft: "borrador", archived: "archivado",
@@ -119,7 +121,7 @@ export const es: Dict = {
     billingGate: {
         title: "Activa tu espacio de trabajo",
         bodyOwner: "Tu espacio y tu playbook están guardados — no se pierde nada. Inicia la suscripción para desbloquearlo para tu equipo, o platica primero con nosotros.",
-        bodyMember: "Este espacio de trabajo aún no está activo. Pide al dueño del espacio que active la facturación.",
+        bodyMember: "Este espacio de trabajo aún no está activo. Pide a un admin de tu equipo que active la facturación.",
         addBilling: "Agregar facturación",
         bookDemo: "Agenda una demo",
     },
@@ -430,7 +432,7 @@ export const es: Dict = {
         sub: "Quién mejora, quién te necesita esta semana — y el asiento, rol e invitación de cada quien en un solo lugar.",
         tabPerformance: "Desempeño",
         tabMembers: "Miembros e invitaciones",
-        membersManagedBy: "Los miembros los administran los dueños y admins del espacio de trabajo.",
+        membersManagedBy: "Los miembros los administran los admins.",
         thirtyDayAvg: "Promedios de 30 días — haz clic en un rep para ver su historial completo.",
         invitesPending: (n: number) => `${n === 1 ? "1 invitación pendiente" : `${n} invitaciones pendientes`} →`,
         searchReps: "Buscar reps…",
@@ -927,6 +929,11 @@ export const es: Dict = {
             revoke: "Revocar",
             revoked: "Revocada",
             revokedMsg: (email: string) => `Invitación a ${email} revocada — el asiento queda libre y el enlace deja de funcionar.`,
+            roleUpdated: (role: string) => `Rol actualizado a ${role}.`,
+            removedMsg: "Eliminado — su asiento queda libre. Su cuenta personal de TalkPilot no se toca.",
+            creator: "Creador del espacio",
+            creatorLocked: "Esta es la cuenta que creó el espacio de trabajo y recibe los avisos de facturación y prueba. Su acceso no se puede cambiar aquí.",
+            lastAdmin: "Alguien tiene que conservar el acceso de admin — este es el único que queda. Promueve a otra persona primero y luego cambia este.",
         },
 
         dna: {
