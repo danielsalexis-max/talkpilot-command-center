@@ -100,6 +100,7 @@ export const en = {
     },
 
     nav: {
+        getApp: "Get the app",
         home: "Home",
         calls: "Calls",
         team: "Team",
@@ -324,6 +325,16 @@ export const en = {
         onTheTeam: "✓ You're on the team!",
         getTheApp: "Now get the TalkPilot app",
         getTheAppSub: "TalkPilot runs on your Mac, iPhone or Android during your conversations — that's where the magic happens.",
+        androidSub: "Download the Android app (.apk)",
+        sameCredentials: "Sign in to the app with the same email and password you just used.",
+        managerLink: "Manager or admin? Open the Command Center instead",
+    },
+
+    // Shared "get the app" surface (D-230). These used to live under
+    // acceptInvite, back when the invited rep was the only role that got a
+    // real download screen. Same list now serves the rep, the owner finishing
+    // the wizard, and /apps.
+    getApp: {
         downloadMac: "Download TalkPilot for Mac",
         getAppStore: "Get TalkPilot on the App Store",
         macSub: "Download the desktop app (.dmg)",
@@ -331,14 +342,18 @@ export const en = {
         androidPlaySub: "Google Play",
         androidApkLink: "Or download the APK directly",
         playStore: "Play Store",
-        androidSub: "Download the Android app (.apk)",
         comingSoon: "Coming soon",
         thisDevice: "(this device)",
         soon: "Soon",
         download: "Download",
         appStore: "App Store",
-        sameCredentials: "Sign in to the app with the same email and password you just used.",
-        managerLink: "Manager or admin? Open the Command Center instead",
+        // Owner-facing framing: the Command Center is not the product, it's
+        // the console. The app is where the coaching actually happens.
+        wizardTitle: "Now get the app for yourself",
+        wizardSub: "The Command Center is where you set the playbook and read the scorecards. The app is where the coaching happens — install it on the device you take calls on.",
+        pageTitle: "Get the TalkPilot app",
+        pageSub: "TalkPilot runs on your Mac, iPhone or Android during your conversations. Install it on every device you take calls on — your workspace and playbook follow you.",
+        pageCredentials: "Sign in to the app with the same email and password you use here.",
     },
 
     home: {

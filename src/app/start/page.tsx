@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { isPersonalEmail } from "@/lib/workEmail"
+import { GetTheApp } from "@/components/GetTheApp"
 import { EmailLink } from "@/components/EmailLink"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
 import type { Dict } from "@/i18n"
@@ -548,15 +549,26 @@ export default function StartPage() {
                                 CTA above (checkout / demo) must stay the only
                                 primary action. */}
                             {hasTrial && (
-                                <div className="flex flex-col sm:flex-row gap-3 mt-8">
-                                    <button onClick={() => { window.location.href = "/" }} className={BTN + " sm:flex-1"}>
-                                        {t.start.openCommandCenter}
-                                    </button>
-                                </div>
+                                <>
+                                    <div className="flex flex-col sm:flex-row gap-3 mt-8">
+                                        <button onClick={() => { window.location.href = "/" }} className={BTN + " sm:flex-1"}>
+                                            {t.start.openCommandCenter}
+                                        </button>
+                                    </div>
+                                    {/* The owner gets the same download screen an
+                                        invited rep gets (D-230). Only shown once the
+                                        workspace is actually usable — for an unpaid
+                                        org the checkout CTA above has to stay the
+                                        single primary action, and /apps carries this
+                                        for them after they pay. */}
+                                    <div className="mt-8 pt-7 border-t border-[var(--color-border)]">
+                                        <GetTheApp title={t.getApp.wizardTitle} sub={t.getApp.wizardSub} />
+                                    </div>
+                                </>
                             )}
                             <p className="text-[11px] text-[var(--color-muted)] mt-5">
                                 {t.start.doneFooter1}{" "}
-                                <a className="underline" href="https://apps.apple.com/app/id6763953639" target="_blank" rel="noreferrer">{t.start.iphone}</a> · <a className="underline" href="https://talkpilot.co" target="_blank" rel="noreferrer">{t.start.mac}</a>
+                                <a className="underline" href="https://apps.apple.com/app/id6763953639" target="_blank" rel="noreferrer">{t.start.iphone}</a> · <a className="underline" href="https://github.com/danielsalexis-max/talkpilot-releases/releases/latest" target="_blank" rel="noreferrer">{t.start.mac}</a>
                             </p>
                         </div>
                     )}

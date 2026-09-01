@@ -42,6 +42,12 @@ const ICONS = {
         </>
     ),
     playbook: <path strokeLinecap="round" strokeLinejoin="round" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15zM4 18.5A2.5 2.5 0 0 1 6.5 16H20" />,
+    apps: (
+        <>
+            <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
+            <path strokeLinecap="round" d="M10.8 5.6h2.4" />
+        </>
+    ),
     settings: (
         <>
             <circle cx="12" cy="12" r="3" />
@@ -205,6 +211,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         ...(role === "manager" ? [] : [
             { href: "/settings" as Route, label: t.nav.settings, icon: ICONS.settings, match: (p: string) => p.startsWith("/settings") || p.startsWith("/admin") },
         ]),
+        // Every role, including the owner (D-230). The download screen used to
+        // exist only inside accept-invite, so the person paying had no way to
+        // install the thing they were paying for.
+        { href: "/apps" as Route, label: t.nav.getApp, icon: ICONS.apps, match: (p: string) => p.startsWith("/apps") },
     ]
 
     const NavLink = ({ n }: { n: NavItem }) => {

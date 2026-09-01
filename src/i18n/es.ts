@@ -96,6 +96,7 @@ export const es: Dict = {
     },
 
     nav: {
+        getApp: "Descargar la app",
         home: "Inicio",
         calls: "Llamadas",
         team: "Equipo",
@@ -313,6 +314,13 @@ export const es: Dict = {
         onTheTeam: "✓ ¡Ya estás en el equipo!",
         getTheApp: "Ahora descarga la app de TalkPilot",
         getTheAppSub: "TalkPilot funciona en tu Mac, iPhone o Android durante tus conversaciones — ahí es donde ocurre la magia.",
+        androidSub: "Descarga la app de Android (.apk)",
+        sameCredentials: "Inicia sesión en la app con el mismo email y contraseña que acabas de usar.",
+        managerLink: "¿Manager o admin? Abre el Command Center",
+    },
+
+    // Superficie compartida de descarga (D-230).
+    getApp: {
         downloadMac: "Descargar TalkPilot para Mac",
         getAppStore: "Descargar TalkPilot en el App Store",
         macSub: "Descarga la app de escritorio (.dmg)",
@@ -320,14 +328,16 @@ export const es: Dict = {
         androidPlaySub: "Google Play",
         androidApkLink: "O descarga el APK directamente",
         playStore: "Play Store",
-        androidSub: "Descarga la app de Android (.apk)",
         comingSoon: "Próximamente",
         thisDevice: "(este dispositivo)",
         soon: "Pronto",
         download: "Descargar",
         appStore: "App Store",
-        sameCredentials: "Inicia sesión en la app con el mismo email y contraseña que acabas de usar.",
-        managerLink: "¿Manager o admin? Abre el Command Center",
+        wizardTitle: "Ahora descarga la app para ti",
+        wizardSub: "El Command Center es donde defines el playbook y lees los scorecards. La app es donde ocurre el coaching — instálala en el dispositivo desde el que haces llamadas.",
+        pageTitle: "Descarga la app de TalkPilot",
+        pageSub: "TalkPilot funciona en tu Mac, iPhone o Android durante tus conversaciones. Instálala en cada dispositivo desde el que hagas llamadas — tu espacio de trabajo y tu playbook te siguen.",
+        pageCredentials: "Inicia sesión en la app con el mismo email y contraseña que usas aquí.",
     },
 
     home: {
