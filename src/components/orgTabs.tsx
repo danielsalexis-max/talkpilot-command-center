@@ -738,8 +738,18 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
         setDocs(prev => prev.map(x => x.id === d.id ? { ...x, ...scope } : x))
     }
 
+    /// A silent delete used to be the single most confusing thing in here: the
+    /// row vanished from the list, then came back on the next load. Two ways
+    /// that happened, and both are checked now. A referenced row raised a
+    /// foreign-key error that this function threw away, and a row the caller's
+    /// role can't reach is filtered out by RLS, which PostgREST reports as a
+    /// success with nothing deleted. `.select()` is what tells those apart:
+    /// no returned row means nothing actually went.
     async function deleteDoc(id: string) {
-        await supabase.from("org_knowledge").delete().eq("id", id)
+        setMsg(null)
+        const { data, error } = await supabase.from("org_knowledge").delete().eq("id", id).select("id")
+        if (error) { setMsg(humanError(error.message, t.tabs.doingDelete, t)); setIsErr(true); return }
+        if (!data?.length) { setMsg(t.tabs.deleteBlocked); setIsErr(true); return }
         setDocs(prev => prev.filter(d => d.id !== id))
     }
 
@@ -1152,8 +1162,18 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
         setObjs(prev => prev.map(x => x.id === o.id ? { ...x, active: !x.active } : x))
     }
 
+    /// A silent delete used to be the single most confusing thing in here: the
+    /// row vanished from the list, then came back on the next load. Two ways
+    /// that happened, and both are checked now. A referenced row raised a
+    /// foreign-key error that this function threw away, and a row the caller's
+    /// role can't reach is filtered out by RLS, which PostgREST reports as a
+    /// success with nothing deleted. `.select()` is what tells those apart:
+    /// no returned row means nothing actually went.
     async function deleteObj(id: string) {
-        await supabase.from("org_objections").delete().eq("id", id)
+        setMsg(null)
+        const { data, error } = await supabase.from("org_objections").delete().eq("id", id).select("id")
+        if (error) { setMsg(humanError(error.message, t.tabs.doingDelete, t)); setIsErr(true); return }
+        if (!data?.length) { setMsg(t.tabs.deleteBlocked); setIsErr(true); return }
         setObjs(prev => prev.filter(o => o.id !== id))
     }
 
@@ -1532,8 +1552,18 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
         await load()
     }
 
+    /// A silent delete used to be the single most confusing thing in here: the
+    /// row vanished from the list, then came back on the next load. Two ways
+    /// that happened, and both are checked now. A referenced row raised a
+    /// foreign-key error that this function threw away, and a row the caller's
+    /// role can't reach is filtered out by RLS, which PostgREST reports as a
+    /// success with nothing deleted. `.select()` is what tells those apart:
+    /// no returned row means nothing actually went.
     async function deletePlaybook(id: string) {
-        await supabase.from("org_playbooks").delete().eq("id", id)
+        setMsg(null)
+        const { data, error } = await supabase.from("org_playbooks").delete().eq("id", id).select("id")
+        if (error) { setMsg(humanError(error.message, t.tabs.doingDelete, t)); setIsErr(true); return }
+        if (!data?.length) { setMsg(t.tabs.deleteBlocked); setIsErr(true); return }
         setPlaybooks(prev => prev.filter(p => p.id !== id))
     }
 
@@ -1999,9 +2029,12 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     async function removeMember(userId: string) {
         const target = members.find(m => m.user_id === userId)
         if (target?.role === "owner") { setMsg(t.tabs.members.creatorLocked); setIsErr(true); return }
-        const { error } = await supabase.from("org_members")
-            .delete().eq("org_id", orgId).eq("user_id", userId)
-        if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true); return }
+        const { data, error } = await supabase.from("org_members")
+            .delete().eq("org_id", orgId).eq("user_id", userId).select("user_id")
+        if (error) { setMsg(humanError(error.message, t.tabs.doingDelete, t)); setIsErr(true); return }
+        // An RLS-filtered delete is reported as a success with nothing removed,
+        // so the error check alone would let the row vanish and return.
+        if (!data?.length) { setMsg(t.tabs.deleteBlocked); setIsErr(true); return }
         setMembers(prev => prev.filter(m => m.user_id !== userId))
         await auditWrite("member.removed", { user_id: userId, email: target?.email })
         setIsErr(false); setMsg(t.tabs.members.removedMsg)

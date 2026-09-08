@@ -673,6 +673,8 @@ export const es: Dict = {
         doingSaveSettings: "guardar tu configuración",
         doingSavePlaybook: "guardar el playbook",
         doingSaveThat: "guardar eso",
+        doingDelete: "borrar eso",
+        deleteBlocked: "No se borró nada. Puede que tu rol no lo permita. Recarga la página para ver lo que hay de verdad.",
         chooseFile: "Elegir archivo",
         analyzing: "Analizando con IA…",
 

@@ -692,6 +692,8 @@ export const en = {
         doingSaveSettings: "save your settings",
         doingSavePlaybook: "save the playbook",
         doingSaveThat: "save that",
+        doingDelete: "delete that",
+        deleteBlocked: "Nothing was deleted. Your role may not allow it. Reload the page to see what is really there.",
         chooseFile: "Choose file",
         analyzing: "Analyzing with AI…",
 
