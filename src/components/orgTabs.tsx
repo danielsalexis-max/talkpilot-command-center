@@ -11,7 +11,7 @@ import { PlaybookAssignment, type AssignTarget } from "@/components/playbookAssi
 import { TeamsSection } from "@/components/teamsSection"
 import { StarterKitPicker } from "@/components/starterKitPicker"
 import { VERTICALS, type Vertical } from "@/lib/starterKit"
-import { extractTextFromFile, UnsupportedFileError, EmptyDocumentError, EXTRACT_ACCEPT } from "@/lib/extractText"
+import { extractTextFromFile, isExtractError, MAX_FILE_BYTES, MAX_TEXT_CHARS, EXTRACT_ACCEPT } from "@/lib/extractText"
 import { EmailLink } from "@/components/EmailLink"
 import { useLocale, useT } from "@/i18n/LocaleProvider"
 import { clientLocale, type Dict } from "@/i18n"
@@ -25,12 +25,12 @@ export interface OrgInfo {
     trial_ends_at?: string | null
     stripe_subscription_id?: string | null
     voice_profile: { tone?: string; values?: string; self_reference?: string; banned_phrases?: string[]; required_phrases?: string[] }
-    settings?: { rep_visibility?: { playbook?: boolean; knowledge?: boolean } } & Record<string, unknown>
+    settings?: { rep_visibility?: { playbook?: boolean; knowledge?: boolean; objections?: boolean } } & Record<string, unknown>
 }
 interface KbRow    { id: string; title: string; kind: string; status: string; summary: string | null; created_at: string; team_id: string | null; user_id: string | null }
 interface ObjRow   { id: string; objection: string; response_guidance: string | null; approved_responses: { text?: string }[] | null; severity: string; active: boolean; variants: string[] | null; source: string | null; team_id: string | null; user_id: string | null }
 interface PbStage  { key?: string; name: string; description: string; required?: string[]; required_items: string[]; guardrail_rules: Array<{type: string; keyword: string; action: string}> }
-interface PbRow    { id: string; name: string; methodology: string | null; status: string; version: number; stages: PbStage[]; created_at: string }
+interface PbRow    { id: string; name: string; methodology: string | null; call_type: string | null; status: string; version: number; stages: PbStage[]; created_at: string }
 interface MemberRow { user_id: string; email: string | null; role: string; status: string; joined_at: string }
 interface InviteRow { id: string; email: string; role: string; accepted_at: string | null; expires_at: string; revoked_at: string | null }
 interface TeamRow  { id: string; name: string }
@@ -343,6 +343,15 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
     // opt-out exists but is deliberately quiet: small text, no big toggle UI.
     const [repPlaybook, setRepPlaybook]   = useState(org.settings?.rep_visibility?.playbook !== false)
     const [repKnowledge, setRepKnowledge] = useState(org.settings?.rep_visibility?.knowledge !== false)
+    // The library already reaches every rep's coach as cached context (D-301);
+    // this decides whether the rep may also read it in their own app (D-307).
+    const [repObjections, setRepObjections] = useState(org.settings?.rep_visibility?.objections !== false)
+    // May a rep run a call with no playbook at all (D-307)? 'enforced' is the
+    // default and is exactly today's behaviour — a workspace that bought
+    // TalkPilot *for* process adherence must not have reps opting out of it
+    // because we shipped a picker. Opting into 'rep_choice' is a deliberate act.
+    const [playbookPolicy, setPlaybookPolicy] =
+        useState((org.settings?.playbook_policy as string | undefined) ?? "enforced")
     // How this workspace tells the other side TalkPilot is listening (D-192).
     // Default OFF: TalkPilot has no bot in the call and does not record audio,
     // so there is nothing that announces itself — disclosure is a policy the
@@ -357,7 +366,8 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
         setSaving(true); setMsg(null)
         const settings = {
             ...(org.settings ?? {}),
-            rep_visibility: { playbook: repPlaybook, knowledge: repKnowledge },
+            rep_visibility: { playbook: repPlaybook, knowledge: repKnowledge, objections: repObjections },
+            playbook_policy: playbookPolicy,
             recording_notice: recordingNotice,
         }
         const { error } = await supabase.from("organizations").update({ name, visibility, settings }).eq("id", org.id)
@@ -400,7 +410,25 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
                                 className="accent-[var(--color-accent)] w-3.5 h-3.5" />
                             {t.tabs.settings.knowledgeVisible}
                         </label>
+                        <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+                            <input type="checkbox" checked={repObjections} onChange={e => setRepObjections(e.target.checked)}
+                                className="accent-[var(--color-accent)] w-3.5 h-3.5" />
+                            {t.tabs.settings.objectionsVisible}
+                        </label>
                     </div>
+                </div>
+                {/* Playbook policy (D-307). A rep can hold several playbooks and
+                    picks one per call; this says whether "None" is one of the
+                    choices. Enforced is the default and preserves today. */}
+                <div className="pt-3 border-t border-[var(--color-border)] space-y-1.5">
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.settings.playbookPolicy}</label>
+                    <select className={INPUT} value={playbookPolicy} onChange={e => setPlaybookPolicy(e.target.value)}>
+                        <option value="enforced">{t.tabs.settings.policyEnforced}</option>
+                        <option value="rep_choice">{t.tabs.settings.policyRepChoice}</option>
+                    </select>
+                    <p className="text-xs text-[var(--color-text-secondary)] pt-1">
+                        {t.tabs.settings.playbookPolicyHelp}
+                    </p>
                 </div>
                 {/* Recording notice (D-192). TalkPilot puts no bot in the call
                     and does not record audio, so nothing announces itself —
@@ -658,9 +686,7 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
             setStagedFile(file.name)
         } catch (err) {
             setIsErr(true)
-            setMsg(err instanceof UnsupportedFileError ? t.tabs.unsupportedFile(err.ext)
-                 : err instanceof EmptyDocumentError   ? t.tabs.emptyDocument
-                 : t.tabs.knowledge.errorPrefix(errStr(err)))
+            setMsg(extractErrorMessage(err, t, t.tabs.knowledge.errorPrefix))
         } finally {
             setParsing(false)
         }
@@ -1057,11 +1083,7 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
             text = await extractTextFromFile(file)
         } catch (err) {
             setExtracting(false); setExtractErr(true)
-            setExtractMsg(err instanceof UnsupportedFileError
-                ? t.tabs.unsupportedFile(err.ext)
-                : err instanceof EmptyDocumentError
-                    ? t.tabs.emptyDocument
-                    : t.tabs.objections.errorPrefix(errStr(err)))
+            setExtractMsg(extractErrorMessage(err, t, t.tabs.objections.errorPrefix))
             return
         }
         setSourceDoc(file.name)
@@ -1354,6 +1376,10 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
     const [editingId, setEditingId]     = useState<string | null>(null)
     const [pbName, setPbName]           = useState("")
     const [methodology, setMethodology] = useState("custom")
+    // What kind of call this playbook is for (D-307). Free text, not a list:
+    // the verticals we sell to do not share "discovery / demo" vocabulary, and
+    // this is what groups the rep's per-call picker.
+    const [callType, setCallType] = useState("")
     const [stages, setStages]           = useState<StageForm[]>([{ name: "", description: "", requiredItems: "", guardrails: [] }])
     const [saving, setSaving]           = useState(false)
     const [msg, setMsg]                 = useState<string | null>(null)
@@ -1374,7 +1400,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
     const load = useCallback(async () => {
         const [{ data }, { data: teamRows }, { data: memberRows }, { data: orgRow }] = await Promise.all([
             supabase.from("org_playbooks")
-                .select("id, name, methodology, status, version, stages, created_at")
+                .select("id, name, methodology, call_type, status, version, stages, created_at")
                 .eq("org_id", orgId).order("created_at", { ascending: false }),
             supabase.from("org_teams").select("id, name").eq("org_id", orgId).order("name"),
             supabase.rpc("get_org_members_with_email", { p_org: orgId }),
@@ -1404,11 +1430,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
             text = await extractTextFromFile(file)
         } catch (err) {
             setExtracting(false); setExtractErr(true)
-            setExtractMsg(err instanceof UnsupportedFileError
-                ? t.tabs.unsupportedFile(err.ext)
-                : err instanceof EmptyDocumentError
-                    ? t.tabs.emptyDocument
-                    : t.tabs.playbooks.errorPrefix(errStr(err)))
+            setExtractMsg(extractErrorMessage(err, t, t.tabs.playbooks.errorPrefix))
             return
         }
         try {
@@ -1461,6 +1483,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
         setEditingId(p.id)
         setPbName(p.name)
         setMethodology(p.methodology ?? "custom")
+        setCallType(p.call_type ?? "")
         setStages((p.stages ?? []).map(st => ({
             name: st.name ?? "",
             description: st.description ?? "",
@@ -1501,19 +1524,22 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
         // next call, which is the point of editing it.
         const { error } = editingId
             ? await supabase.from("org_playbooks").update({
-                name: pbName.trim(), methodology, stages: stagesJson,
+                name: pbName.trim(), methodology, call_type: callType.trim() || null,
+                stages: stagesJson,
                 guardrails: guardrailsJson,
                 version: (playbooks.find(p => p.id === editingId)?.version ?? 0) + 1,
             }).eq("id", editingId)
             : await supabase.from("org_playbooks").insert({
-                org_id: orgId, name: pbName.trim(), methodology, stages: stagesJson,
+                org_id: orgId, name: pbName.trim(), methodology,
+                call_type: callType.trim() || null, stages: stagesJson,
                 guardrails: guardrailsJson, status: "draft", version: 1
             })
         setSaving(false)
         if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true) }
         else {
             setMsg(editingId ? t.tabs.playbooks.updated : t.tabs.playbooks.created); setIsErr(false)
-            setPbName(""); setMethodology("custom"); setStages([{ name: "", description: "", requiredItems: "", guardrails: [] }])
+            setPbName(""); setMethodology("custom"); setCallType("")
+            setStages([{ name: "", description: "", requiredItems: "", guardrails: [] }])
             setCreating(false); setEditingId(null); setExtractMsg(null); await load()
         }
     }
@@ -1598,10 +1624,19 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
 
                 {creating && (
                     <div className="mt-5 space-y-5 pt-5 border-t border-[var(--color-border)]">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                             <div className="col-span-2 space-y-1">
                                 <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.playbooks.name}</label>
                                 <input className={INPUT} placeholder={t.tabs.playbooks.namePlaceholder} value={pbName} onChange={e => setPbName(e.target.value)} />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.playbooks.callType}</label>
+                                <input className={INPUT} placeholder={t.tabs.playbooks.callTypePlaceholder} value={callType} onChange={e => setCallType(e.target.value)} list="tp-call-types" />
+                                <datalist id="tp-call-types">
+                                    {Array.from(new Set(playbooks.map(p => p.call_type).filter(Boolean) as string[])).map(ct => (
+                                        <option key={ct} value={ct} />
+                                    ))}
+                                </datalist>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.playbooks.methodology}</label>
@@ -1689,6 +1724,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                                 </div>
                                 <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
                                     {t.tabs.playbooks.metaLine(p.methodology ?? t.tabs.playbooks.methodologyCustom, p.stages?.length ?? 0, p.version)}
+                                    {p.call_type ? ` · ${p.call_type}` : ""}
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -2230,7 +2266,33 @@ export function transcriptIssue(text: string): TranscriptIssue | null {
 /// with instructions instead.
 // PDFs and .docx now parse for real (extractTextFromFile); only the formats
 // with no browser-side parser stay refused, by name, with the fix in the copy.
-const TRANSCRIPT_TEXT_EXTENSIONS = ["txt", "md", "markdown", "srt", "vtt", "csv", "tsv", "text", "log", "json", "pdf", "docx"]
+/// Why an upload was refused, in words the admin can act on (D-308).
+///
+/// Four paths in this file accept files, and each used to render its own
+/// two-branch ternary that collapsed "200 MB", "Keynote", "screen recording"
+/// and "scanned contract" into one generic failure. `extractTextFromFile`
+/// now throws a reason; this is the single place that turns it into copy.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractErrorMessage(err: unknown, t: any, fallback: (s: string) => string): string {
+    if (!isExtractError(err)) return fallback(errStr(err))
+    const e = err as any  // eslint-disable-line @typescript-eslint/no-explicit-any
+    const mb = (n: number) => n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`
+    switch (e.reason) {
+        case "media":  return t.tabs.mediaFile(e.ext)
+        case "format": return t.tabs.unsupportedFile(e.ext)
+        case "empty":  return t.tabs.emptyDocument
+        case "size":
+            // The same error carries both limits: bytes for a too-big file,
+            // characters for a file that parsed into too much text.
+            return e.limit === MAX_TEXT_CHARS
+                ? t.tabs.textTooLong(MAX_TEXT_CHARS.toLocaleString())
+                : t.tabs.fileTooLarge(mb(e.bytes), mb(MAX_FILE_BYTES))
+        case "unreadable": return t.tabs.unreadableFile(e.ext)
+        default: return fallback(errStr(err))
+    }
+}
+
+const TRANSCRIPT_TEXT_EXTENSIONS = ["txt", "md", "markdown", "srt", "vtt", "csv", "tsv", "text", "log", "json", "pdf", "docx", "pptx"]
 
 function TranscriptCard({ index, entry, onChange, onRemove }: {
     index: number
@@ -2252,9 +2314,7 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
             const text = await extractTextFromFile(file)
             onChange("text", text)
         } catch (err) {
-            setFileError(err instanceof UnsupportedFileError
-                ? t.tabs.dna.binaryError(err.ext.toUpperCase())
-                : t.tabs.dna.fileError)
+            setFileError(extractErrorMessage(err, t, () => t.tabs.dna.fileError))
         } finally {
             setLoadingFile(false)
             e.target.value = ""
