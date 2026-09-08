@@ -341,6 +341,9 @@ export const en = {
         iosSub: "Get TalkPilot AI on the App Store",
         androidPlaySub: "Google Play",
         androidApkLink: "Or download the APK directly",
+        windowsSub: "Download the desktop app (.exe)",
+        windowsArmLink: "On Windows ARM? Get the native build",
+        downloadWindows: "Download TalkPilot for Windows",
         playStore: "Play Store",
         comingSoon: "Coming soon",
         thisDevice: "(this device)",
@@ -352,7 +355,7 @@ export const en = {
         wizardTitle: "Now get the app for yourself",
         wizardSub: "The Command Center is where you set the playbook and read the scorecards. The app is where the coaching happens — install it on the device you take calls on.",
         pageTitle: "Get the TalkPilot app",
-        pageSub: "TalkPilot runs on your Mac, iPhone or Android during your conversations. Install it on every device you take calls on — your workspace and playbook follow you.",
+        pageSub: "TalkPilot runs on your Mac, Windows PC, iPhone or Android during your conversations. Install it on every device you take calls on — your workspace and playbook follow you.",
         pageCredentials: "Sign in to the app with the same email and password you use here.",
     },
 

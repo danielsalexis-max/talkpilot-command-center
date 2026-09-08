@@ -24,6 +24,14 @@ const IOS_APP_STORE     = "https://apps.apple.com/app/id6763953639"
 // signing key — an upload-key build will not install over a sideload), and is
 // only offered when Play is not an option.
 const ANDROID_PLAY_STORE = "https://play.google.com/store/apps/details?id=co.talkpilot.android"
+// Windows 1.0.0 shipped 2026-09-08 (D-257). Binaries live in a PUBLIC repo
+// separate from the private source, because GitHub 404s release assets of a
+// private repo for anyone not signed in. These two URLs always resolve to the
+// newest release, so they never need updating here. x64 is the default: it is
+// what almost every PC runs, and Windows-on-ARM emulates it — the arm64 build
+// is offered underneath for people who want it native.
+const WINDOWS_X64   = "https://github.com/danielsalexis-max/talkpilot-releases-windows/releases/latest/download/TalkPilot-Setup-x64.exe"
+const WINDOWS_ARM64 = "https://github.com/danielsalexis-max/talkpilot-releases-windows/releases/latest/download/TalkPilot-Setup-arm64.exe"
 
 export type Platform = "mac" | "ios" | "android" | "windows" | "other"
 
@@ -68,7 +76,8 @@ export function GetTheApp({ eyebrow, title, sub, footnote }: {
         { key: "ios",     label: "iPhone",  sub: t.getApp.iosSub, href: IOS_APP_STORE },
         { key: "android", label: "Android", sub: t.getApp.androidPlaySub, href: ANDROID_PLAY_STORE,
           altHref: androidApk ?? undefined, altLabel: t.getApp.androidApkLink },
-        { key: "windows", label: "Windows", sub: t.getApp.comingSoon, soon: true },
+        { key: "windows", label: "Windows", sub: t.getApp.windowsSub, href: WINDOWS_X64,
+          altHref: WINDOWS_ARM64, altLabel: t.getApp.windowsArmLink },
     ]
     // Detected platform first
     rows.sort((a, b) => (a.key === platform ? -1 : 0) - (b.key === platform ? -1 : 0))
@@ -86,7 +95,9 @@ export function GetTheApp({ eyebrow, title, sub, footnote }: {
             {primary && (
                 <a href={primary.href} target="_blank" rel="noopener noreferrer"
                     className="block w-full py-3 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-xl transition-colors text-center">
-                    {primary.key === "mac" ? t.getApp.downloadMac : t.getApp.getAppStore}
+                    {primary.key === "mac" ? t.getApp.downloadMac
+                     : primary.key === "windows" ? t.getApp.downloadWindows
+                     : t.getApp.getAppStore}
                 </a>
             )}
 
@@ -110,7 +121,7 @@ export function GetTheApp({ eyebrow, title, sub, footnote }: {
                         ) : (
                             <a href={r.href} target="_blank" rel="noopener noreferrer"
                                 className="text-xs font-medium text-[var(--color-accent)] border border-[var(--color-accent)] rounded-lg px-3 py-1.5 hover:bg-teal-50 transition-colors">
-                                {r.key === "mac" ? t.getApp.download
+                                {r.key === "mac" || r.key === "windows" ? t.getApp.download
                                  : r.key === "android" ? t.getApp.playStore
                                  : t.getApp.appStore}
                             </a>

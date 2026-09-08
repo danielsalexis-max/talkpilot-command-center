@@ -327,6 +327,9 @@ export const es: Dict = {
         iosSub: "Descarga TalkPilot AI en el App Store",
         androidPlaySub: "Google Play",
         androidApkLink: "O descarga el APK directamente",
+        windowsSub: "Descarga la app de escritorio (.exe)",
+        windowsArmLink: "¿Windows ARM? Descarga la versión nativa",
+        downloadWindows: "Descargar TalkPilot para Windows",
         playStore: "Play Store",
         comingSoon: "Próximamente",
         thisDevice: "(este dispositivo)",
@@ -336,7 +339,7 @@ export const es: Dict = {
         wizardTitle: "Ahora descarga la app para ti",
         wizardSub: "El Command Center es donde defines el playbook y lees los scorecards. La app es donde ocurre el coaching — instálala en el dispositivo desde el que haces llamadas.",
         pageTitle: "Descarga la app de TalkPilot",
-        pageSub: "TalkPilot funciona en tu Mac, iPhone o Android durante tus conversaciones. Instálala en cada dispositivo desde el que hagas llamadas — tu espacio de trabajo y tu playbook te siguen.",
+        pageSub: "TalkPilot funciona en tu Mac, PC con Windows, iPhone o Android durante tus conversaciones. Instálala en cada dispositivo desde el que hagas llamadas — tu espacio de trabajo y tu playbook te siguen.",
         pageCredentials: "Inicia sesión en la app con el mismo email y contraseña que usas aquí.",
     },
 
