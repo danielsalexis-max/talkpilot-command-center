@@ -5,13 +5,20 @@ import type { Route } from "next"
 import { useState } from "react"
 import { useT } from "@/i18n/LocaleProvider"
 
-/// The three lives of the Home page (D-175). A brand-new org spends its whole
-/// trial with an empty dashboard, which is exactly when the product is being
-/// judged — so Home owns three explicit states instead of rendering dead panels:
+/// The first-run life of the Home page (D-175, reshaped). A brand-new org
+/// spends its whole trial with an empty dashboard, which is exactly when the
+/// product is being judged. The old shape stacked TWO task-looking cards
+/// (checklist + waiting room) whenever an org was set up but call-less — it
+/// read as "here's more homework" twice over. Now Home has ONE first-run
+/// surface, HomeSetupCard, with two halves:
 ///
-///   1. Setup   — required brain pieces missing → the checklist IS the page.
-///   2. Waiting — set up, nobody has made a call yet → say what happens next.
-///   3. Live    — scored calls exist → the real dashboard.
+///   - the checklist  — only steps the owner can do with their own hands;
+///     rep-side outcomes (joining, making the first call) are NOT tasks here.
+///   - a status strip — the value the dashboard already provides at zero:
+///     "no coaching sessions to review", "no guardrail breaches", who's in.
+///
+/// The checklist half retires itself the moment every item is done; the
+/// status half retires itself the moment real scorecards exist.
 
 // ── Loading skeleton (replaces the bare "Loading…" text everywhere) ─────────
 
@@ -51,8 +58,7 @@ export interface SetupState {
 }
 
 export type SetupCheckKey =
-    | "playbook" | "objections" | "voice" | "knowledge"
-    | "invite" | "repJoined" | "firstCall"
+    | "playbook" | "objections" | "voice" | "knowledge" | "invite"
 
 export interface SetupCheck {
     key: SetupCheckKey; done: boolean; required: boolean
@@ -61,6 +67,9 @@ export interface SetupCheck {
 
 /// Label/hint copy lives in the dictionaries (t.homeStates.checks[key]) so
 /// this stays a pure-logic helper usable outside React render.
+/// Every check must be something the owner can complete alone — a checkbox
+/// nobody at the keyboard can tick ("a rep joins", "first call scored") is a
+/// permanent reproach, not a task, so those live in the status strip instead.
 export function setupChecks(r: SetupState): SetupCheck[] {
     return [
         { key: "playbook",   done: r.activePlaybooks >= 1, required: true,  href: "/playbook?tab=playbooks" as Route },
@@ -70,8 +79,6 @@ export function setupChecks(r: SetupState): SetupCheck[] {
         // A sent invite counts: the owner did their part, and the rest is the
         // invitee's move.
         { key: "invite",     done: r.members > 1 || r.pendingInvites > 0, required: true, href: "/team?tab=members" as Route },
-        { key: "repJoined",  done: r.members > 1,          required: false, href: "/team?tab=members" as Route },
-        { key: "firstCall",  done: r.scoredCalls > 0,      required: false, href: "/calls" as Route },
     ]
 }
 
@@ -79,11 +86,15 @@ export function setupRequiredMet(r: SetupState): boolean {
     return setupChecks(r).filter(c => c.required).every(c => c.done)
 }
 
-/// The card stays up after the required items are done (D-217) — the
-/// recommended ones are the point of keeping it — and only the owner's own X
-/// (which appears once the required bar is met) hides it, per browser, via
-/// localStorage keyed by org.
-export function SetupChecklistCard({ state, orgId }: { state: SetupState; orgId: string }) {
+/// One card, two halves. The checklist half auto-retires once EVERY item is
+/// done (no dismissal needed — a finished list has nothing left to say); the
+/// X, which appears once the required bar is met, lets an owner hide it
+/// earlier, per browser, via localStorage keyed by org (D-217's escape hatch
+/// kept, its "stays until dismissed" rule dropped). The status half shows
+/// what the dashboard is already doing at zero — a clear coaching queue and a
+/// clean guardrail record are findings, not absences — and retires once real
+/// scorecards exist and the live dashboard takes over.
+export function HomeSetupCard({ state, orgId, hasCards }: { state: SetupState; orgId: string; hasCards: boolean }) {
     const t = useT()
     const storageKey = `tp-setup-checklist-dismissed-${orgId}`
     const [dismissed, setDismissed] = useState(() => {
@@ -91,94 +102,113 @@ export function SetupChecklistCard({ state, orgId }: { state: SetupState; orgId:
     })
     const checks = setupChecks(state)
     const done = checks.filter(c => c.done).length
+    const allDone = done === checks.length
     const requiredMet = setupRequiredMet(state)
-    if (dismissed) return null
+    const showChecklist = !allDone && !dismissed
+    const showStatus = !hasCards
+    if (!showChecklist && !showStatus) return null
+
+    const status: { ok: boolean; label: string; sub: string }[] = [
+        { ok: true, label: t.homeStates.statusCoachingClear, sub: t.homeStates.statusCoachingClearSub },
+        { ok: true, label: t.homeStates.statusNoBreaches,    sub: t.homeStates.statusNoBreachesSub },
+        { ok: state.members > 1,
+          label: t.homeStates.statusTeam(state.members, state.pendingInvites),
+          sub: t.homeStates.statusTeamSub },
+    ]
+
     return (
-        <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 shadow-sm max-w-2xl">
+        <div className={`bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 shadow-sm ${showChecklist && showStatus ? "max-w-4xl" : "max-w-2xl"}`}>
             <div className="flex items-start justify-between gap-4">
                 <div>
-                    <h2 className="font-display text-lg font-bold text-[var(--color-text)]">{t.homeStates.setupTitle}</h2>
+                    <h2 className="font-display text-lg font-bold text-[var(--color-text)]">
+                        {showChecklist ? t.homeStates.setupTitle : t.homeStates.readyTitle}
+                    </h2>
                     <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                        {t.homeStates.setupSub}
+                        {showChecklist ? t.homeStates.setupSub : t.homeStates.readySub}
                     </p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-mono text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-full px-2.5 py-1">{done}/{checks.length}</span>
-                    {requiredMet && (
-                        <button
-                            onClick={() => { try { localStorage.setItem(storageKey, "1") } catch {} ; setDismissed(true) }}
-                            aria-label={t.homeStates.dismissChecklist}
-                            title={t.homeStates.dismissChecklist}
-                            className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)] transition-colors"
-                        >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    )}
-                </div>
-            </div>
-            <div className="mt-5 space-y-3">
-                {checks.map(c => (
-                    <div key={c.key} className="flex items-start gap-3">
-                        <span className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                            c.done ? "bg-emerald-500 text-white"
-                                   : c.required ? "bg-amber-100 text-amber-600 border border-amber-300"
-                                                : "bg-[var(--color-line-soft)] text-[var(--color-muted)] border border-[var(--color-border)]"
-                        }`}>{c.done ? "✓" : ""}</span>
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                                <span className={`text-sm ${c.done ? "text-[var(--color-muted)] line-through" : "text-[var(--color-text)] font-medium"}`}>{t.homeStates.checks[c.key].label}</span>
-                                {!c.done && (c.required
-                                    ? <span className="text-[10px] uppercase tracking-wide text-amber-600 font-semibold">{t.homeStates.required}</span>
-                                    : <span className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold">{t.homeStates.recommended}</span>)}
-                            </div>
-                            {!c.done && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.homeStates.checks[c.key].hint}</p>}
-                        </div>
-                        {!c.done && (
-                            <Link href={c.href} className="flex-shrink-0 text-xs font-semibold text-[var(--color-accent-deep)] hover:underline mt-0.5">
-                                {t.homeStates.setUp}
-                            </Link>
+                {showChecklist && (
+                    <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-full px-2.5 py-1">{done}/{checks.length}</span>
+                        {requiredMet && (
+                            <button
+                                onClick={() => { try { localStorage.setItem(storageKey, "1") } catch {} ; setDismissed(true) }}
+                                aria-label={t.homeStates.dismissChecklist}
+                                title={t.homeStates.dismissChecklist}
+                                className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)] transition-colors"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
                         )}
                     </div>
-                ))}
+                )}
             </div>
-        </div>
-    )
-}
 
-// ── State 2: waiting room ───────────────────────────────────────────────────
-
-export function WaitingRoomCard({ activeMembers, pendingInvites }: { activeMembers: number; pendingInvites: number }) {
-    const t = useT()
-    return (
-        <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 shadow-sm max-w-2xl">
-            <h2 className="font-display text-lg font-bold text-[var(--color-text)]">{t.homeStates.waitingTitle}</h2>
-            <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                {t.homeStates.waitingPeople(activeMembers)}
-                {pendingInvites > 0 && <>, <Link href={"/team?tab=members" as Route} className="text-[var(--color-accent-deep)] font-medium hover:underline">{t.homeStates.waitingInvites(pendingInvites)}</Link></>}.{" "}
-                {t.homeStates.waitingNothingBroken}
-            </p>
-            <div className="space-y-4 mt-5">
-                {t.homeStates.waitingSteps.map((s, i) => (
-                    <div key={i} className="flex gap-3">
-                        <span className="w-6 h-6 rounded-full bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-mono text-[11px] flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                        <div>
-                            <p className="text-sm font-semibold text-[var(--color-text)]">{s.title}</p>
-                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{s.sub}</p>
-                        </div>
+            <div className={`mt-5 grid gap-8 ${showChecklist && showStatus ? "md:grid-cols-2" : "grid-cols-1"}`}>
+                {showChecklist && (
+                    <div className="space-y-3">
+                        {checks.map(c => (
+                            <div key={c.key} className="flex items-start gap-3">
+                                <span className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                    c.done ? "bg-emerald-500 text-white"
+                                           : c.required ? "bg-amber-100 text-amber-600 border border-amber-300"
+                                                        : "bg-[var(--color-line-soft)] text-[var(--color-muted)] border border-[var(--color-border)]"
+                                }`}>{c.done ? "✓" : ""}</span>
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className={`text-sm ${c.done ? "text-[var(--color-muted)] line-through" : "text-[var(--color-text)] font-medium"}`}>{t.homeStates.checks[c.key].label}</span>
+                                        {!c.done && (c.required
+                                            ? <span className="text-[10px] uppercase tracking-wide text-amber-600 font-semibold">{t.homeStates.required}</span>
+                                            : <span className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold">{t.homeStates.recommended}</span>)}
+                                    </div>
+                                    {!c.done && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.homeStates.checks[c.key].hint}</p>}
+                                </div>
+                                {!c.done && (
+                                    <Link href={c.href} className="flex-shrink-0 text-xs font-semibold text-[var(--color-accent-deep)] hover:underline mt-0.5">
+                                        {t.homeStates.setUp}
+                                    </Link>
+                                )}
+                            </div>
+                        ))}
                     </div>
-                ))}
-            </div>
-            <div className="flex gap-3 mt-6">
-                <Link href={"/team?tab=members" as Route}
-                    className="px-4 py-2 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors">
-                    {t.homeStates.inviteMoreReps}
-                </Link>
-                <Link href={"/playbook" as Route}
-                    className="px-4 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors">
-                    {t.homeStates.reviewPlaybook}
-                </Link>
+                )}
+
+                {showStatus && (
+                    <div className={showChecklist ? "md:border-l md:border-[var(--color-line-soft)] md:pl-8" : ""}>
+                        {showChecklist && (
+                            <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)] font-semibold mb-3">{t.homeStates.statusToday}</p>
+                        )}
+                        <div className="space-y-3.5">
+                            {status.map((s, i) => (
+                                <div key={i} className="flex items-start gap-3">
+                                    <span className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                        s.ok ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                                             : "bg-[var(--color-line-soft)] text-[var(--color-muted)] border border-[var(--color-border)]"
+                                    }`}>{s.ok ? "✓" : "·"}</span>
+                                    <div>
+                                        <p className="text-sm font-medium text-[var(--color-text)]">{s.label}</p>
+                                        <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{s.sub}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-xs text-[var(--color-muted)] mt-4">{t.homeStates.statusScorecardsSub}</p>
+                        {!showChecklist && (
+                            <div className="flex gap-3 mt-5">
+                                <Link href={"/team?tab=members" as Route}
+                                    className="px-4 py-2 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors">
+                                    {t.homeStates.inviteMoreReps}
+                                </Link>
+                                <Link href={"/playbook" as Route}
+                                    className="px-4 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors">
+                                    {t.homeStates.reviewPlaybook}
+                                </Link>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     )

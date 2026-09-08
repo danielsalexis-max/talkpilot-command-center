@@ -7,7 +7,7 @@ import type { Route } from "next"
 import { supabase, type Scorecard } from "@/lib/supabase"
 import { ScoreRing } from "@/components/ScoreRing"
 import { InsightsSections } from "@/components/InsightsSections"
-import { PageSkeleton, SetupChecklistCard, WaitingRoomCard, type SetupState } from "@/components/homeStates"
+import { PageSkeleton, HomeSetupCard, type SetupState } from "@/components/homeStates"
 import { useLocale } from "@/i18n/LocaleProvider"
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
@@ -44,7 +44,6 @@ export default function HomePage() {
     const [cards, setCards]       = useState<Scorecard[]>([])
     const [members, setMembers]   = useState<MemberInfo[]>([])
     const [setup, setSetup]       = useState<SetupState | null>(null)
-    const [pendingInvites, setPendingInvites] = useState(0)
     const [loading, setLoading]   = useState(true)
     const [error, setError]       = useState<string | null>(null)
 
@@ -115,7 +114,6 @@ export default function HomePage() {
                 pendingInvites: invCount ?? 0,
                 scoredCalls: (scorecards ?? []).length,
             })
-            setPendingInvites(invCount ?? 0)
         } catch (e) {
             setError((e as Error).message)
         } finally {
@@ -251,24 +249,15 @@ export default function HomePage() {
                 </Link>
             </div>
 
-            {/* ── Unfinished setup: a card ABOVE the dashboard, not instead of it
-                 (D-192, superseding D-175 on this point).
-                 The checklist used to replace Home entirely, which produced the
-                 e2e's exact complaint: every other tab rendered normally while
-                 Home alone was "empty and broken", and the two required items
-                 are already satisfied by finishing /start — so the wizard
-                 handed you a second checklist for work you had just done.
-                 Now it is a banner, and whatever data exists still shows.
-                 It no longer vanishes when the required items are done (D-217):
-                 the recommended items stay visible until the owner dismisses it
-                 themselves — the X only appears once the required bar is met. ── */}
+            {/* ── First-run: ONE card above the dashboard, not instead of it
+                 (D-192 kept). The old shape rendered the checklist AND the
+                 waiting-room card for a set-up-but-call-less org — two stacked
+                 things-to-do surfaces. HomeSetupCard merges them: checklist
+                 half (owner-controllable steps only, auto-retires when all
+                 done) beside a status half showing zero-state value ("no
+                 coaching sessions to review") until the first scorecard lands. ── */}
             {setup && org && (
-                <SetupChecklistCard state={setup} orgId={org.id} />
-            )}
-
-            {/* ── Nobody has made a call yet ── */}
-            {cards.length === 0 && (
-                <WaitingRoomCard activeMembers={members.length} pendingInvites={pendingInvites} />
+                <HomeSetupCard state={setup} orgId={org.id} hasCards={cards.length > 0} />
             )}
 
             {/* ── State 3: the live dashboard ── */}
