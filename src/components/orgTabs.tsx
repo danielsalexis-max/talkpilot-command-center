@@ -31,7 +31,7 @@ interface KbRow    { id: string; title: string; kind: string; status: string; su
 interface ObjRow   { id: string; objection: string; response_guidance: string | null; approved_responses: { text?: string }[] | null; severity: string; active: boolean; variants: string[] | null; source: string | null; team_id: string | null; user_id: string | null }
 interface PbStage  { key?: string; name: string; description: string; required?: string[]; required_items: string[]; guardrail_rules: Array<{type: string; keyword: string; action: string}> }
 interface PbRow    { id: string; name: string; methodology: string | null; call_type: string | null; status: string; version: number; stages: PbStage[]; created_at: string }
-interface MemberRow { user_id: string; email: string | null; role: string; status: string; joined_at: string }
+interface MemberRow { user_id: string; email: string | null; role: string; status: string; joined_at: string; playbook_policy?: string | null }
 interface InviteRow { id: string; email: string; role: string; accepted_at: string | null; expires_at: string; revoked_at: string | null }
 interface TeamRow  { id: string; name: string }
 interface PracticeAssignmentRow {
@@ -1953,6 +1953,27 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     const [msg, setMsg]                 = useState<string | null>(null)
     const [isErr, setIsErr]             = useState(false)
 
+    // What "inherit" actually means for this workspace, so the option can say it
+    // instead of making the admin go read the Settings tab.
+    const orgPolicyLabel = (org.settings?.playbook_policy as string | undefined) === "rep_choice"
+        ? t.tabs.members.policyRepChoice
+        : t.tabs.members.policyEnforced
+
+    async function changePlaybookPolicy(userId: string, policy: string | null) {
+        // Optimistic: the select has already moved, and a failed write puts the
+        // truth back via load() rather than leaving the row lying.
+        setMembers(prev => prev.map(m => m.user_id === userId ? { ...m, playbook_policy: policy } : m))
+        const { error } = await supabase.rpc("set_member_playbook_policy", {
+            p_org: orgId, p_user: userId, p_policy: policy,
+        })
+        if (error) {
+            setMsg(humanError(error.message, t.tabs.doingSaveSettings, t)); setIsErr(true)
+            await load()
+        } else {
+            setMsg(t.common.saved); setIsErr(false)
+        }
+    }
+
     const load = useCallback(async () => {
         const [memberRes, inviteRes, pbRes, objRes, kbRes] = await Promise.all([
             supabase.rpc("get_org_members_with_email", { p_org: orgId }).then(r => {
@@ -2159,6 +2180,22 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                                     <option value="member">{t.data.roles.member}</option>
                                     <option value="manager">{t.data.roles.manager}</option>
                                     <option value="admin">{t.data.roles.admin}</option>
+                                </select>
+                                {/* Whether THIS person may run a call without a
+                                    playbook (D-310). A BDR team exists to run the
+                                    process; a senior AE or a founder in the same
+                                    workspace is having a different conversation.
+                                    One workspace-wide switch forced the owner to
+                                    choose which of those two to get wrong. */}
+                                <select
+                                    value={m.playbook_policy ?? ""}
+                                    title={t.tabs.members.playbookPolicyHelp}
+                                    onChange={e => changePlaybookPolicy(m.user_id, e.target.value || null)}
+                                    className="w-40 text-xs bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-2 py-1 text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent)]"
+                                >
+                                    <option value="">{t.tabs.members.policyInherit(orgPolicyLabel)}</option>
+                                    <option value="enforced">{t.tabs.members.policyEnforced}</option>
+                                    <option value="rep_choice">{t.tabs.members.policyRepChoice}</option>
                                 </select>
                                 {m.role === "owner" ? (
                                     <span className="text-xs text-[var(--color-muted)] px-2" title={t.tabs.members.creatorLocked}>
