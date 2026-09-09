@@ -810,14 +810,24 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
         <div className="space-y-6">
             {/* Upload zone — primary action */}
             {!stagedFile && (
-                <UploadZone
-                    fileRef={fileRef}
-                    onChange={handleFile}
-                    loading={parsing}
-                    accept={`${EXTRACT_ACCEPT},.json`}
-                    title={t.tabs.knowledge.uploadTitle}
-                    subtitle={t.tabs.knowledge.uploadSub}
-                />
+                <div className="space-y-4">
+                    <UploadZone
+                        fileRef={fileRef}
+                        onChange={handleFile}
+                        loading={parsing}
+                        accept={`${EXTRACT_ACCEPT},.json`}
+                        title={t.tabs.knowledge.uploadTitle}
+                        subtitle={t.tabs.knowledge.uploadSub}
+                    />
+                    {/* The refusal had nowhere to render. Both existing <Msg>
+                        sites live inside blocks that only exist AFTER a
+                        successful parse (the confirm card) or inside the
+                        manual section, which is collapsed by default — so a
+                        scanned PDF was correctly refused with reason "empty"
+                        and the admin saw nothing at all. Same for the success
+                        line, which upload() unmounted on its way out. */}
+                    <Msg msg={msg} error={isErr} />
+                </div>
             )}
 
             {/* Step 2: confirm what was read, name it, and say what it is. */}
@@ -879,7 +889,6 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                     <button className={BTN_PRIMARY} onClick={upload} disabled={uploading || !title.trim() || !content.trim()}>
                         {uploading ? t.tabs.knowledge.uploading : t.tabs.knowledge.saveDocument}
                     </button>
-                    <Msg msg={msg} error={isErr} />
                 </div>
             </div>
             </ManualSection>
@@ -1276,38 +1285,41 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                         {t.tabs.objections.addManuallySub1}<span className="font-medium text-[var(--color-text-secondary)]">{t.tabs.objections.addManuallySubBold}</span>{t.tabs.objections.addManuallySub2}
                     </p>
                 </div>
+                {/* The objection and the ways it actually gets said are one
+                    thought. "Suggest variants" reads objText and writes
+                    variants, and it used to sit two rows down in the right-hand
+                    column next to Severity, where nothing said what it was
+                    suggesting or what it read from. */}
                 <div className="space-y-1">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.objections.theObjection}</label>
+                    <div className="flex items-center justify-between gap-3">
+                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.objections.theObjection}</label>
+                        <button type="button" className={BTN_GHOST} onClick={suggestVariants}
+                            disabled={suggestingVariants || !objText.trim()}>
+                            {suggestingVariants ? t.tabs.objections.generatingVariants : t.tabs.objections.aiSuggest}
+                        </button>
+                    </div>
                     <input className={INPUT} placeholder={t.tabs.objections.objectionPlaceholder}
                         value={objText} onChange={e => setObjText(e.target.value)} />
                     <p className="text-xs text-[var(--color-muted)]">{t.tabs.objections.noQuotesNeeded}</p>
+                </div>
+                <div className="space-y-1">
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.objections.variants} <span className="text-[var(--color-muted)] font-normal">{t.tabs.objections.optional}</span></label>
+                    <textarea className={TEXTAREA} rows={3}
+                        placeholder={t.tabs.objections.variantsPlaceholder}
+                        value={variants} onChange={e => setVariants(e.target.value)} />
+                    <p className="text-xs text-[var(--color-muted)]">{t.tabs.objections.variantsHint}</p>
                 </div>
                 <div className="space-y-1">
                     <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.objections.guidance}</label>
                     <textarea className={TEXTAREA} rows={3} placeholder={t.tabs.objections.guidancePlaceholder}
                         value={guidance} onChange={e => setGuidance(e.target.value)} />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.objections.severity}</label>
-                        <select className={INPUT} value={severity} onChange={e => setSeverity(e.target.value)}>
-                            <option value="normal">{t.tabs.objections.sevNormal}</option>
-                            <option value="critical">{t.tabs.objections.sevCritical}</option>
-                        </select>
-                    </div>
-                    <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.objections.variants} <span className="text-[var(--color-muted)] font-normal">{t.tabs.objections.optional}</span></label>
-                            <button type="button" className={BTN_GHOST} onClick={suggestVariants}
-                                disabled={suggestingVariants || !objText.trim()}>
-                                {suggestingVariants ? t.tabs.objections.generatingVariants : t.tabs.objections.aiSuggest}
-                            </button>
-                        </div>
-                        <textarea className={TEXTAREA} rows={3}
-                            placeholder={t.tabs.objections.variantsPlaceholder}
-                            value={variants} onChange={e => setVariants(e.target.value)} />
-                        <p className="text-xs text-[var(--color-muted)]">{t.tabs.objections.variantsHint}</p>
-                    </div>
+                <div className="space-y-1 sm:max-w-xs">
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.objections.severity}</label>
+                    <select className={INPUT} value={severity} onChange={e => setSeverity(e.target.value)}>
+                        <option value="normal">{t.tabs.objections.sevNormal}</option>
+                        <option value="critical">{t.tabs.objections.sevCritical}</option>
+                    </select>
                 </div>
                 <div className="flex items-center gap-3">
                     <button className={BTN_PRIMARY} onClick={addObjection} disabled={saving || !objText.trim()}>
