@@ -79,6 +79,9 @@ export default function HomePage() {
                 supabase.from("organizations").select("id, name, visibility, seats_purchased, plan, voice_profile").eq("id", orgId).single(),
                 supabase.from("session_scorecards").select("*")
                     .eq("org_id", orgId).eq("status", "scored")
+                    // Excluded calls stay visible but out of every average
+                    // (D-324) — a two-second test run must not pull a rep down.
+                    .is("excluded_at", null)
                     .gte("started_at", new Date(Date.now() - 30 * 86400e3).toISOString())
                     .order("started_at", { ascending: false }).limit(200),
                 supabase.rpc("get_org_members_with_email", { p_org: orgId }),

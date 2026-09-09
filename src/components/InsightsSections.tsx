@@ -49,6 +49,9 @@ export function InsightsSections() {
                 .select("id")
                 .eq("org_id", orgId)
                 .eq("status", "scored")
+                    // Excluded calls stay visible but out of every average
+                    // (D-324) — a two-second test run must not pull a rep down.
+                    .is("excluded_at", null)
                 .gte("started_at", thirtyDaysAgo)
             const cardIds = (cards ?? []).map(c => c.id)
 

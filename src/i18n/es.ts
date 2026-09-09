@@ -426,6 +426,11 @@ export const es: Dict = {
     },
 
     calls: {
+        excluded: "No cuenta",
+        excludedTooShort: "Muy corta",
+        excludedTooShortWhy: "Menos de 45 segundos o 4 turnos — no hubo conversación que calificar, así que quedó fuera de los promedios.",
+        excludeAction: "No contar esta",
+        includeAgain: "Volver a contarla",
         title: "Llamadas",
         sub: "Cada llamada evaluada de la organización, últimos 90 días — cada una abre un scorecard completo.",
         searchPlaceholder: "Buscar llamadas o reps…",
@@ -606,6 +611,8 @@ export const es: Dict = {
     },
 
     scorecard: {
+        excludedHeading: "Esta llamada no cuenta en los promedios del equipo",
+        excludedByManager: "Alguien de tu equipo la dejó fuera. Sigue aquí, con sus puntajes, y se puede volver a contar cuando quieras.",
         crumbOverview: "Inicio",
         crumbTeam: "Equipo",
         crumbScorecard: "Scorecard",
@@ -733,6 +740,7 @@ export const es: Dict = {
         },
 
         knowledge: {
+            intakeHeading: "Lo que entendimos",
             uploadTitle: "Sube un documento",
             uploadSub: "Arrastra tus listas de precios, casos de éxito, documentos de producto o battlecards. PDF, Word, PowerPoint, texto o subtítulos — leemos el archivo y te dejamos revisarlo antes de guardar. Video no: sube sus subtítulos.",
             reviewSave: "Revisar y guardar",
@@ -934,6 +942,9 @@ export const es: Dict = {
         },
 
         members: {
+            platformsNone: "Todavía no abre la app",
+            platformUsed: (p: string) => `${p} — ya hizo llamadas aquí`,
+            platformInstalledOnly: (p: string) => `${p} — instalada, sin llamadas todavía`,
             inviteTitle: "Invitar miembro",
             setupUnfinished: "La configuración no está terminada — los reps que se unan ahora recibirán coaching genérico.",
             finishOnHome: "Termínala en Inicio →",

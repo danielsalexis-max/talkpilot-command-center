@@ -442,6 +442,13 @@ export const en = {
     },
 
     calls: {
+        // A call kept out of the team averages (D-324). Never "deleted" —
+        // the row and its score stay visible.
+        excluded: "Not counted",
+        excludedTooShort: "Too short",
+        excludedTooShortWhy: "Under 45 seconds or 4 turns — there was no conversation to grade, so it was left out of the averages.",
+        excludeAction: "Don't count this",
+        includeAgain: "Count it again",
         title: "Calls",
         sub: "Every scored call across the org, last 90 days — each one opens a full scorecard.",
         searchPlaceholder: "Search calls or reps…",
@@ -622,6 +629,8 @@ export const en = {
     },
 
     scorecard: {
+        excludedHeading: "This call isn't counted in the team's averages",
+        excludedByManager: "Someone on your team left it out. It stays here, with its scores, and can be counted again at any time.",
         crumbOverview: "Overview",
         crumbTeam: "Team",
         crumbScorecard: "Scorecard",
@@ -754,6 +763,7 @@ export const en = {
         },
 
         knowledge: {
+            intakeHeading: "What we understood",
             uploadTitle: "Upload a document",
             uploadSub: "Drop your pricing sheets, case studies, product docs, or battle cards. PDF, Word, PowerPoint, text or captions — we read the file and let you review it before saving. No video: upload its captions instead.",
             reviewSave: "Review & save",
@@ -955,6 +965,11 @@ export const en = {
         },
 
         members: {
+            // Where a member installed and used TalkPilot (D-325). Never
+            // "downloaded" — there is no per-user download record.
+            platformsNone: "Hasn't opened the app yet",
+            platformUsed: (p: string) => `${p} — has run calls here`,
+            platformInstalledOnly: (p: string) => `${p} — installed, no calls yet`,
             inviteTitle: "Invite member",
             setupUnfinished: "Setup isn't finished — reps who join now get generic coaching.",
             finishOnHome: "Finish on Home →",

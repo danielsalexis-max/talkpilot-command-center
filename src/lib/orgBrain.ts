@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase"
+import { clientLocale } from "@/i18n"
 
 /// Calls into the org "brain" — the ingest-knowledge edge function that turns
 /// what an admin writes in the Command Center into something the live coach can
@@ -16,7 +17,10 @@ async function callIngest(body: Record<string, unknown>): Promise<Response | nul
     return fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/ingest-knowledge`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${session.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        // The intake receipt (D-323) is written back TO the admin, so it goes
+        // out in their language. The function only sees an org, and an org has
+        // no language — this is the only place that knows.
+        body: JSON.stringify({ locale: clientLocale(), ...body }),
     })
 }
 

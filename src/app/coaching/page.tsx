@@ -30,6 +30,9 @@ export default function CoachingPage() {
             const [{ data: scorecards }, { data: mems }] = await Promise.all([
                 supabase.from("session_scorecards").select("*")
                     .eq("org_id", ctx.org_id).eq("status", "scored")
+                    // Excluded calls stay visible but out of every average
+                    // (D-324) — a two-second test run must not pull a rep down.
+                    .is("excluded_at", null)
                     .gte("started_at", new Date(Date.now() - 30 * 86400e3).toISOString())
                     .order("started_at", { ascending: false }).limit(200),
                 supabase.rpc("get_org_members_with_email", { p_org: ctx.org_id }),

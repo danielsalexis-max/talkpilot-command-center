@@ -47,6 +47,9 @@ export default function RepPage() {
                 .eq("org_id", ctx.org_id)
                 .eq("user_id", userId)
                 .eq("status", "scored")
+                    // Excluded calls stay visible but out of every average
+                    // (D-324) — a two-second test run must not pull a rep down.
+                    .is("excluded_at", null)
                 .order("started_at", { ascending: false })
                 .limit(30)
 

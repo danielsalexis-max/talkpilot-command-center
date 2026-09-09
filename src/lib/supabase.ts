@@ -70,8 +70,14 @@ export interface Scorecard {
     growth_areas: string[]
     guardrail_breaches: GuardrailBreach[]
     model_version: string | null
-    status: "pending" | "scored" | "failed"
+    status: "pending" | "scored" | "failed" | "too_short"
     created_at: string
+    scored_at: string | null
+    // Out of every average, still visible (D-324). `too_short` is the sentinel
+    // the automatic floor writes; anything else is a manager's own words.
+    excluded_at: string | null
+    excluded_by: string | null
+    exclusion_reason: string | null
     session_title: string | null
     // joined
     user_email?: string

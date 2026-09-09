@@ -22,6 +22,22 @@ export default function CallsPage() {
     const [loading, setLoading] = useState(true)
     const [query, setQuery]     = useState("")
     const [filter, setFilter]   = useState<Filter>("all")
+    const [role, setRole]       = useState<string | null>(null)
+    const [busy, setBusy]       = useState<string | null>(null)
+
+    // Only an owner or manager may exclude. A rep excluding their own calls is
+    // the delete problem wearing a different hat — the worst calls are exactly
+    // the ones somebody would want gone, and exactly the ones coaching is for.
+    const canExclude = role === "owner" || role === "admin" || role === "manager"
+
+    async function toggleExcluded(card: Scorecard, excluded: boolean) {
+        setBusy(card.id)
+        const { error } = await supabase.rpc("set_scorecard_excluded", {
+            p_scorecard: card.id, p_excluded: excluded, p_reason: null,
+        })
+        setBusy(null)
+        if (!error) await load()
+    }
 
     useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -32,12 +48,16 @@ export default function CallsPage() {
             const { data: ctx } = await supabase.rpc("get_org_context")
             if (!ctx?.org_id) { setLoading(false); return }
             const [{ data: scorecards }, { data: mems }] = await Promise.all([
+                // `too_short` rows are here on purpose (D-324). A rep whose real
+                // call was auto-excluded needs to be able to see that it was,
+                // and say so — an exclusion nobody can find is a deletion.
                 supabase.from("session_scorecards").select("*")
-                    .eq("org_id", ctx.org_id).eq("status", "scored")
+                    .eq("org_id", ctx.org_id).in("status", ["scored", "too_short"])
                     .gte("started_at", new Date(Date.now() - 90 * 86400e3).toISOString())
                     .order("started_at", { ascending: false }).limit(300),
                 supabase.rpc("get_org_members_with_email", { p_org: ctx.org_id }),
             ])
+            setRole((ctx.member_role as string | null) ?? null)
             setCards((scorecards ?? []) as Scorecard[])
             setMembers((mems ?? []) as MemberInfo[])
         } finally {
@@ -114,7 +134,7 @@ export default function CallsPage() {
                         )}
                         {filtered.map(c => (
                             <tr key={c.id} onClick={() => router.push(`/scorecard/${c.id}`)}
-                                className="cursor-pointer hover:bg-[var(--color-hover)] transition-colors">
+                                className={`cursor-pointer hover:bg-[var(--color-hover)] transition-colors ${c.excluded_at ? "opacity-55" : ""}`}>
                                 <td className="px-4 py-3">
                                     <span className="font-medium text-[var(--color-text)] block truncate max-w-[320px]">
                                         {c.session_title || (c.started_at ? new Date(c.started_at).toLocaleString(intl, { dateStyle: "medium", timeStyle: "short" }) : t.common.scoredCall)}
@@ -139,10 +159,25 @@ export default function CallsPage() {
                                 <td className="px-3 py-3"><ScoreRing score={c.overall_score} size="sm" /></td>
                                 <td className="px-3 py-3 hidden sm:table-cell"><ScoreRing score={c.adherence_score} size="sm" /></td>
                                 <td className="px-3 py-3">
-                                    {(c.guardrail_breaches ?? []).length > 0 &&
-                                        <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700 whitespace-nowrap">
-                                            {t.calls.nBreaches(c.guardrail_breaches.length)}
-                                        </span>}
+                                    <div className="flex items-center justify-end gap-2">
+                                        {(c.guardrail_breaches ?? []).length > 0 &&
+                                            <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-700 whitespace-nowrap">
+                                                {t.calls.nBreaches(c.guardrail_breaches.length)}
+                                            </span>}
+                                        {c.excluded_at && (
+                                            <span title={c.exclusion_reason === "too_short" ? t.calls.excludedTooShortWhy : undefined}
+                                                className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-hover)] text-[var(--color-muted)] whitespace-nowrap">
+                                                {c.exclusion_reason === "too_short" ? t.calls.excludedTooShort : t.calls.excluded}
+                                            </span>
+                                        )}
+                                        {canExclude && (
+                                            <button
+                                                onClick={e => { e.stopPropagation(); toggleExcluded(c, !c.excluded_at) }}
+                                                disabled={busy === c.id}
+                                                className="text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-accent-deep)] underline decoration-dotted underline-offset-2 whitespace-nowrap disabled:opacity-40"
+                                            >{c.excluded_at ? t.calls.includeAgain : t.calls.excludeAction}</button>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ))}

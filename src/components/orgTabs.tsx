@@ -27,7 +27,7 @@ export interface OrgInfo {
     voice_profile: { tone?: string; values?: string; self_reference?: string; banned_phrases?: string[]; required_phrases?: string[] }
     settings?: { rep_visibility?: { playbook?: boolean; knowledge?: boolean; objections?: boolean } } & Record<string, unknown>
 }
-interface KbRow    { id: string; title: string; kind: string; status: string; summary: string | null; created_at: string; team_id: string | null; user_id: string | null }
+interface KbRow    { id: string; title: string; kind: string; status: string; summary: string | null; intake_receipt: string | null; created_at: string; team_id: string | null; user_id: string | null }
 interface ObjRow   { id: string; objection: string; response_guidance: string | null; approved_responses: { text?: string }[] | null; severity: string; active: boolean; variants: string[] | null; source: string | null; team_id: string | null; user_id: string | null }
 interface PbStage  { key?: string; name: string; description: string; required?: string[]; required_items: string[]; guardrail_rules: Array<{type: string; keyword: string; action: string}> }
 interface PbRow    { id: string; name: string; methodology: string | null; call_type: string | null; status: string; version: number; stages: PbStage[]; created_at: string }
@@ -645,7 +645,7 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
     const load = useCallback(async () => {
         const [{ data }, { data: chunkRows }, { data: teamRows }, { data: memberRows }] = await Promise.all([
             supabase.from("org_knowledge")
-                .select("id, title, kind, status, summary, created_at, team_id, user_id")
+                .select("id, title, kind, status, summary, intake_receipt, created_at, team_id, user_id")
                 .eq("org_id", orgId).order("created_at", { ascending: false }),
             // Chunk counts decide which docs actually need repair. A doc can
             // read "ready" with zero chunks (a half-failed ingest), and that
@@ -909,6 +909,20 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm text-[var(--color-text)] font-medium">{d.title}</p>
                                 {d.summary && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 truncate">{d.summary}</p>}
+                                {/* The intake receipt (D-323): what we understood,
+                                    written to the person who uploaded it. Not
+                                    truncated — a receipt nobody can read is the
+                                    silence it exists to replace. */}
+                                {d.status === "ready" && d.intake_receipt && (
+                                    <div className="mt-2 pl-2.5 border-l-2 border-[var(--color-accent)]/40">
+                                        <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)] mb-0.5">
+                                            {t.tabs.knowledge.intakeHeading}
+                                        </p>
+                                        <p className="text-xs text-[var(--color-text-secondary)] whitespace-pre-line">
+                                            {d.intake_receipt}
+                                        </p>
+                                    </div>
+                                )}
                                 <p className="text-xs text-[var(--color-muted)] mt-0.5">
                                     {(chunkCounts[d.id] ?? 0) > 0
                                         ? t.tabs.knowledge.indexedN(chunkCounts[d.id])
@@ -1952,12 +1966,61 @@ export function PracticeTab({ orgId }: { orgId: string }) {
     )
 }
 
+interface PlatformTag {
+    user_id: string
+    platform: string
+    installed: boolean
+    used: boolean
+    last_used_at: string | null
+}
+
+const PLATFORM_LABELS: Record<string, string> = {
+    ios: "iOS", macos: "Mac", windows: "Windows", android: "Android",
+}
+
+/**
+ * Where a member installed and used TalkPilot (D-325).
+ *
+ * `installed` without `used` is the most useful of the three states, not the
+ * least: it is the rep who set it up in the kickoff call and never came back.
+ * So it renders differently rather than being folded in or hidden — outlined
+ * and dimmed against a solid tag for a platform with real calls on it.
+ *
+ * Never says "downloaded". There is no per-user download record and the tags
+ * do not pretend otherwise.
+ */
+function PlatformTags({ tags }: { tags: PlatformTag[] }) {
+    const { t } = useLocale()
+    if (tags.length === 0) {
+        return <p className="text-xs text-[var(--color-muted)] italic">{t.tabs.members.platformsNone}</p>
+    }
+    return (
+        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {tags.map(tag => {
+                const label = PLATFORM_LABELS[tag.platform] ?? tag.platform
+                return (
+                    <span
+                        key={tag.platform}
+                        title={tag.used ? t.tabs.members.platformUsed(label) : t.tabs.members.platformInstalledOnly(label)}
+                        className={`text-[11px] px-1.5 py-0.5 rounded border ${
+                            tag.used
+                                ? "bg-[var(--color-accent)]/10 border-[var(--color-accent)]/30 text-[var(--color-accent-deep)]"
+                                : "border-[var(--color-border)] text-[var(--color-muted)]"
+                        }`}
+                    >{label}</span>
+                )
+            })}
+        </div>
+    )
+}
+
 export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     const { t, intl } = useLocale()
     const [members, setMembers]         = useState<MemberRow[]>([])
     const [query, setQuery]             = useState("")
     const [invites, setInvites]         = useState<InviteRow[]>([])
     const [readiness, setReadiness]     = useState<Readiness | null>(null)
+    const [platforms, setPlatforms]     = useState<Map<string, PlatformTag[]>>(new Map())
     const [loading, setLoading]         = useState(true)
     const [inviteEmail, setInviteEmail] = useState("")
     const [inviteRole, setInviteRole]   = useState("member")
@@ -1987,7 +2050,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     }
 
     const load = useCallback(async () => {
-        const [memberRes, inviteRes, pbRes, objRes, kbRes] = await Promise.all([
+        const [memberRes, inviteRes, pbRes, objRes, kbRes, platformRes] = await Promise.all([
             supabase.rpc("get_org_members_with_email", { p_org: orgId }).then(r => {
                 if (r.error) {
                     return supabase.from("org_members")
@@ -2003,8 +2066,17 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
             supabase.from("org_playbooks").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "active"),
             supabase.from("org_objections").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("active", true),
             supabase.from("org_knowledge").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+            // Where each member installed and used TalkPilot (D-325). Not
+            // download data — we have none per user; `installed` is a push
+            // token, `used` is a real conversation.
+            supabase.rpc("org_member_platforms", { p_org: orgId }),
         ])
         setMembers((memberRes.data ?? []) as MemberRow[])
+        const byUser = new Map<string, PlatformTag[]>()
+        for (const row of (platformRes.data ?? []) as PlatformTag[]) {
+            byUser.set(row.user_id, [...(byUser.get(row.user_id) ?? []), row])
+        }
+        setPlatforms(byUser)
         setInvites((inviteRes.data ?? []) as InviteRow[])
         setReadiness({
             activePlaybooks: pbRes.count ?? 0,
@@ -2173,6 +2245,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                             <div>
                                 <p className="text-sm text-[var(--color-text)] font-medium">{m.email ?? m.user_id.slice(0, 8) + "…"}</p>
                                 <p className="text-xs text-[var(--color-muted)]">{t.tabs.members.joined(new Date(m.joined_at).toLocaleDateString(intl))}</p>
+                                <PlatformTags tags={platforms.get(m.user_id) ?? []} />
                             </div>
                             <div className="flex items-center gap-2">
                                 <StatusBadge label={t.data.roles[m.role] ?? m.role} color={roleColor(m.role)} />

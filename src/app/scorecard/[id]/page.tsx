@@ -23,6 +23,24 @@ export default function ScorecardPage() {
     const [activeTab, setActiveTab]   = useState<"overview" | "objections" | "claims" | "transcript" | "coach">("overview")
     const [transcript, setTranscript] = useState<string | null>(null)
     const [transcriptState, setTranscriptState] = useState<"idle" | "loading" | "loaded">("idle")
+    const [role, setRole]             = useState<string | null>(null)
+    const [excluding, setExcluding]   = useState(false)
+
+    // Matches `set_scorecard_excluded` exactly — a broader gate here would just
+    // surface the server's raw not_authorized. A rep cannot exclude their own
+    // calls: the worst call is the one somebody most wants gone, and the one
+    // coaching exists for.
+    const canExclude = role === "owner" || role === "admin" || role === "manager"
+
+    async function toggleExcluded(excluded: boolean) {
+        if (!card) return
+        setExcluding(true)
+        const { error } = await supabase.rpc("set_scorecard_excluded", {
+            p_scorecard: card.id, p_excluded: excluded, p_reason: null,
+        })
+        setExcluding(false)
+        if (!error) await load()
+    }
 
     useEffect(() => { if (id) load() }, [id])
 
@@ -36,6 +54,8 @@ export default function ScorecardPage() {
                 .eq("id", id)
                 .single()
             setCard(sc as Scorecard)
+            const { data: ctx } = await supabase.rpc("get_org_context")
+            setRole((ctx?.member_role as string | null) ?? null)
 
             const [objRes, claimRes] = await Promise.all([
                 supabase.from("scorecard_objections").select("*").eq("scorecard_id", id).order("transcript_ts"),
@@ -120,7 +140,26 @@ export default function ScorecardPage() {
                         {card.model_version ? ` · ${card.model_version}` : ""}
                     </p>
                 </div>
+                {canExclude && (
+                    <button
+                        onClick={() => toggleExcluded(!card.excluded_at)}
+                        disabled={excluding}
+                        className="px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border border-[var(--color-border)] rounded-lg transition-colors disabled:opacity-40 whitespace-nowrap flex-shrink-0"
+                    >{card.excluded_at ? t.calls.includeAgain : t.calls.excludeAction}</button>
+                )}
             </div>
+
+            {/* Out of the averages, and saying so before the tiles are read. */}
+            {card.excluded_at && (
+                <div className="bg-[var(--color-hover)] border border-[var(--color-border)] rounded-xl p-4">
+                    <h3 className="text-sm font-medium text-[var(--color-text)]">{t.scorecard.excludedHeading}</h3>
+                    <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                        {card.exclusion_reason === "too_short"
+                            ? t.calls.excludedTooShortWhy
+                            : t.scorecard.excludedByManager}
+                    </p>
+                </div>
+            )}
 
             {/* Score tiles */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">

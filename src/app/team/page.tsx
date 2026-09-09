@@ -129,6 +129,9 @@ function PerformanceTab({ onSeeMembers }: { onSeeMembers: () => void }) {
                 .select("user_id, overall_score, adherence_score, objection_score, accuracy_score, growth_areas")
                 .eq("org_id", ctx.org_id)
                 .eq("status", "scored")
+                    // Excluded calls stay visible but out of every average
+                    // (D-324) — a two-second test run must not pull a rep down.
+                    .is("excluded_at", null)
                 .gte("started_at", thirtyDaysAgo)
 
             // Aggregate the most frequently flagged growth areas across the team.
