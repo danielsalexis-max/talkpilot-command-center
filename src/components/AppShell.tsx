@@ -83,6 +83,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const [needsTeam, setNeedsTeam]   = useState(false)
     const isPublic = pathname === "/login" || pathname.startsWith("/accept-invite")
         || pathname.startsWith("/start") || pathname.startsWith("/reset-password")
+        || pathname.startsWith("/connected")
 
     // A brand-new account has nowhere to be yet: it used to land on the full
     // dashboard — nav, Calls, Settings, all empty — with a small "no workspace"
