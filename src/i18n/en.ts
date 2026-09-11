@@ -294,6 +294,16 @@ export const en = {
         talkToUs: "Talk to us",
     },
 
+    // /connected — where OAuth callbacks (Slack, HubSpot, Salesforce…) land the
+    // browser after connect. Provider names are interpolated, never translated.
+    connected: {
+        successTitle: (provider: string) => `${provider} connected`,
+        successBody: "All set. You can close this window and return to TalkPilot.",
+        failTitle: (provider: string) => `Couldn't connect ${provider}`,
+        failBody: "Try again from Settings in TalkPilot.",
+        backToApp: "Back to TalkPilot",
+    },
+
     acceptInvite: {
         checking: "Checking invite…",
         accepting: "Accepting invite…",

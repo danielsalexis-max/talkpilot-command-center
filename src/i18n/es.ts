@@ -284,6 +284,16 @@ export const es: Dict = {
         talkToUs: "Escríbenos",
     },
 
+    // /connected — donde los callbacks de OAuth (Slack, HubSpot, Salesforce…)
+    // dejan el navegador al conectar. Los nombres de producto no se traducen.
+    connected: {
+        successTitle: (provider: string) => `${provider} conectado`,
+        successBody: "Listo. Puedes cerrar esta ventana y volver a TalkPilot.",
+        failTitle: (provider: string) => `No se pudo conectar ${provider}`,
+        failBody: "Inténtalo de nuevo desde Ajustes en TalkPilot.",
+        backToApp: "Volver a TalkPilot",
+    },
+
     acceptInvite: {
         checking: "Verificando invitación…",
         accepting: "Aceptando invitación…",
