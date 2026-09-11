@@ -327,6 +327,13 @@ function reassembleChunks(chunks: { chunk_index: number; content: string }[]): s
 
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
 
+// Product names, never translated. An unknown provider shows its raw key
+// rather than hiding — honest beats pretty here.
+const PROVIDER_NAMES: Record<string, string> = {
+    hubspot: "HubSpot", salesforce: "Salesforce", slack: "Slack",
+    google: "Google", microsoft: "Microsoft",
+}
+
 const TONE_PRESETS = [
     "Consultative", "Empathetic", "Direct", "Data-driven", "Challenger",
     "Friendly", "Authoritative", "Confident", "Assertive", "Collaborative",
@@ -358,6 +365,22 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
     // workspace chooses, and the honest default is not to claim one.
     const [recordingNotice, setRecordingNotice] =
         useState((org.settings?.recording_notice as string | undefined) ?? "off")
+    // Auto-log to the CRM (spec §8). Default OFF: writing into someone's CRM
+    // without a tap is the deliberate act. Clients only fire it when the
+    // pre-call brief matched the contact by identity — and never for stages.
+    const [autoLogCalls, setAutoLogCalls] = useState(
+        (org.settings?.integrations as { auto_log_calls?: boolean } | undefined)?.auto_log_calls === true
+    )
+    // Per-provider connection counts via get_org_integrations_summary — the
+    // token table has no client SELECT policy, so counts are all we can show.
+    const [integrations, setIntegrations] =
+        useState<{ provider: string; connected_users: number }[] | null>(null)
+    useEffect(() => {
+        supabase.rpc("get_org_integrations_summary").then(({ data }) => {
+            if (Array.isArray(data)) setIntegrations(data)
+            else setIntegrations([])
+        })
+    }, [])
     const [saving, setSaving]         = useState(false)
     const [msg, setMsg]               = useState<string | null>(null)
     const [isErr, setIsErr]           = useState(false)
@@ -369,6 +392,10 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
             rep_visibility: { playbook: repPlaybook, knowledge: repKnowledge, objections: repObjections },
             playbook_policy: playbookPolicy,
             recording_notice: recordingNotice,
+            integrations: {
+                ...((org.settings?.integrations as Record<string, unknown> | undefined) ?? {}),
+                auto_log_calls: autoLogCalls,
+            },
         }
         const { error } = await supabase.from("organizations").update({ name, visibility, settings }).eq("id", org.id)
         setSaving(false)
@@ -446,6 +473,36 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
                     </p>
                     <p className="text-xs text-[var(--color-muted)]">
                         {t.tabs.settings.recordingLegal}
+                    </p>
+                </div>
+                {/* CRM & integrations (spec §8). Connections are per-rep and
+                    live in the app; this card shows counts and holds the one
+                    org policy bit: auto-log. Stage changes have no toggle —
+                    they always need a human, by design. */}
+                <div className="pt-3 border-t border-[var(--color-border)] space-y-1.5">
+                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.settings.integrationsTitle}</label>
+                    <p className="text-xs text-[var(--color-text-secondary)]">
+                        {t.tabs.settings.integrationsIntro}
+                    </p>
+                    {integrations !== null && (
+                        integrations.length === 0
+                            ? <p className="text-xs text-[var(--color-muted)]">{t.tabs.settings.integrationsNone}</p>
+                            : <div className="space-y-1 pt-1">
+                                {integrations.map(i => (
+                                    <p key={i.provider} className="text-xs text-[var(--color-text)]">
+                                        <span className="font-medium">{PROVIDER_NAMES[i.provider] ?? i.provider}</span>
+                                        {" — "}{t.tabs.settings.integrationsConnected(i.connected_users)}
+                                    </p>
+                                ))}
+                            </div>
+                    )}
+                    <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] pt-2">
+                        <input type="checkbox" checked={autoLogCalls} onChange={e => setAutoLogCalls(e.target.checked)}
+                            className="accent-[var(--color-accent)] w-3.5 h-3.5" />
+                        {t.tabs.settings.autoLogCalls}
+                    </label>
+                    <p className="text-xs text-[var(--color-text-secondary)]">
+                        {t.tabs.settings.autoLogHelp}
                     </p>
                 </div>
 

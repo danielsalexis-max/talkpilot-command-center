@@ -727,6 +727,12 @@ export const es: Dict = {
             recordingEmail: "Enviar un email a los participantes antes de la llamada",
             recordingHelp: "TalkPilot no mete un bot a la llamada ni guarda audio, así que nada se anuncia solo. Elige cómo —o si— tu espacio de trabajo lo comunica. Los reps siempre pueden copiar una línea de aviso desde la app, sin importar este ajuste.",
             recordingLegal: "Esto es una política del espacio de trabajo, no asesoría legal. Las reglas de consentimiento cambian por país y estado, y cumplir con la norma local sigue siendo responsabilidad del espacio de trabajo.",
+            integrationsTitle: "CRM e integraciones",
+            integrationsIntro: "Cada rep conecta su propia cuenta desde la app: Ajustes → Integraciones. Aquí ves quién está conectado y defines la política del espacio de trabajo.",
+            integrationsNone: "Nadie en este espacio de trabajo ha conectado una integración todavía.",
+            integrationsConnected: (n: number) => n === 1 ? "1 persona conectada" : `${n} personas conectadas`,
+            autoLogCalls: "Registrar llamadas en el CRM automáticamente",
+            autoLogHelp: "Cuando una llamada termina y TalkPilot identificó al contacto con certeza antes de la llamada, el resumen se registra en ese contacto por sí solo. Si la coincidencia no es segura, no se escribe nada — el rep lo registra a mano. Las etapas de los deals nunca se cambian automáticamente.",
             saveSettings: "Guardar configuración",
         },
 

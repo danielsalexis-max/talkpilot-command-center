@@ -750,6 +750,12 @@ export const en = {
             recordingEmail: "Email participants before the call",
             recordingHelp: "TalkPilot puts no bot in the call and stores no audio, so nothing announces itself. Choose how — or whether — your workspace discloses it. Reps can always copy a disclosure line from the app regardless of this setting.",
             recordingLegal: "This is a workspace policy, not legal advice. Consent rules vary by country and state, and meeting the local requirement stays the workspace's responsibility.",
+            integrationsTitle: "CRM & integrations",
+            integrationsIntro: "Each rep connects their own account from the app: Settings → Integrations. Here you see who is connected and set the workspace policy.",
+            integrationsNone: "Nobody in this workspace has connected an integration yet.",
+            integrationsConnected: (n: number) => n === 1 ? "1 person connected" : `${n} people connected`,
+            autoLogCalls: "Log calls to the CRM automatically",
+            autoLogHelp: "When a call ends and TalkPilot matched the contact with certainty before the call, the summary is logged to that contact on its own. If the match is not certain, nothing is written — the rep logs it by hand. Deal stages are never changed automatically.",
             saveSettings: "Save settings",
         },
 
