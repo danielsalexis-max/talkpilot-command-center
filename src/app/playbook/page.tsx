@@ -10,16 +10,20 @@ import { useT } from "@/i18n/LocaleProvider"
 
 type Tab = "playbooks" | "objections" | "knowledge" | "voice" | "dna"
 // `featured` marks Team DNA. It generates a whole playbook from your best rep —
-// the highest-leverage thing on this page — but it sits last in a row of five
-// identical tabs, so its position reads as "least important". It stays last on
-// purpose (the first tab is also the default landing, and DNA is a setup action
-// rather than a daily one); the accent carries the signal instead.
+// the highest-leverage thing on this page — so it leads the row and wears a
+// dotted outline instead of sitting among four identical siblings. The outline
+// is doing what a leading dot used to: marking it as the odd one out. A box
+// survives at a glance where a 6px dot did not.
+//
+// Leading the row does NOT make it the landing tab: `tab` falls back to the
+// literal "playbooks" below, not to TAB_KEYS[0]. That split is deliberate —
+// DNA is a setup action you do once, so it earns the eye but not the default.
 const TAB_KEYS: { key: Tab; featured?: boolean }[] = [
+    { key: "dna", featured: true },
     { key: "playbooks"  },
     { key: "objections" },
     { key: "knowledge"  },
     { key: "voice"      },
-    { key: "dna", featured: true },
 ]
 
 function PlaybookPageInner() {
@@ -58,25 +62,31 @@ function PlaybookPageInner() {
             <div className="border-b border-[var(--color-border)] flex gap-1 overflow-x-auto">
                 {TABS.map(tabDef => {
                     const active = tab === tabDef.key
-                    return (
+
+                    // The featured tab opts out of the shared underline entirely:
+                    // an underline plus a box reads as two competing indicators.
+                    // It sits centred in the row so the dotted box floats clear of
+                    // the container's bottom rule rather than colliding with it.
+                    if (tabDef.featured) return (
                         <button key={tabDef.key} onClick={() => setTab(tabDef.key)}
-                            className={`px-4 py-2 text-sm border-b-2 transition-colors -mb-px whitespace-nowrap inline-flex items-center gap-1.5 ${
+                            className={`px-4 py-1.5 my-1 self-center text-sm rounded-lg border border-dotted transition-colors whitespace-nowrap ${
                                 active
-                                    ? "border-[var(--color-accent)] text-[var(--color-accent-deep)] font-semibold"
-                                    : tabDef.featured
-                                        // Full-strength text and medium weight: one step up from
-                                        // the muted siblings, one step below the active tab.
-                                        ? "border-transparent text-[var(--color-text)] font-medium hover:text-[var(--color-accent-deep)]"
-                                        : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                                    ? "border-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-semibold"
+                                    : "border-[var(--color-accent)] text-[var(--color-text)] font-medium hover:bg-[var(--color-accent-subtle)] hover:text-[var(--color-accent-deep)]"
                             }`}
                         >
-                            {tabDef.featured && (
-                                <span aria-hidden
-                                    className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                                        active ? "bg-[var(--color-accent-deep)]" : "bg-[var(--color-accent)]"
-                                    }`}
-                                />
-                            )}
+                            {tabDef.label}
+                        </button>
+                    )
+
+                    return (
+                        <button key={tabDef.key} onClick={() => setTab(tabDef.key)}
+                            className={`px-4 py-2 text-sm border-b-2 transition-colors -mb-px whitespace-nowrap ${
+                                active
+                                    ? "border-[var(--color-accent)] text-[var(--color-accent-deep)] font-semibold"
+                                    : "border-transparent text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"
+                            }`}
+                        >
                             {tabDef.label}
                         </button>
                     )

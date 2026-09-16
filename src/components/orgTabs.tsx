@@ -2439,6 +2439,21 @@ export function transcriptIssue(text: string): TranscriptIssue | null {
     return null
 }
 
+export function countWords(text: string): number {
+    return text.trim().split(/\s+/).filter(Boolean).length
+}
+
+/// What the analysis needs is MATERIAL, not headcount. The old gate demanded
+/// three transcripts, which punished the person who brings one great hour-long
+/// call and waved through three thin ones — the opposite of the intent. So the
+/// bar is words across every valid transcript, and one long call clears it
+/// alone. Roughly a 10-15 minute conversation.
+///
+/// It also gives the shortfall two honest fixes instead of one: a longer
+/// transcript and another transcript both add words, so we can offer both
+/// rather than insisting on a second file the user may not have.
+export const MIN_DNA_WORDS = 1500
+
 /// Extensions we can read as text in the browser. `.doc`/`.docx`/`.pdf` are
 /// containers, not text — `file.text()` on them yields binary noise that would
 /// then fail validation with a confusing message, so they are refused by name
@@ -2473,11 +2488,53 @@ function extractErrorMessage(err: unknown, t: any, fallback: (s: string) => stri
 
 const TRANSCRIPT_TEXT_EXTENSIONS = ["txt", "md", "markdown", "srt", "vtt", "csv", "tsv", "text", "log", "json", "pdf", "docx", "pptx"]
 
-function TranscriptCard({ index, entry, onChange, onRemove }: {
+/// A finished transcript, reduced to a line you can scan. The point is not to
+/// save space — it is that a filled-in card next to an empty one reads as two
+/// equal asks, and people answer the wrong one. Collapsing what is done leaves
+/// exactly one thing to do on screen.
+function TranscriptChip({ index, entry, onOpen, onRemove }: {
+    index: number
+    entry: TranscriptEntry
+    onOpen: () => void
+    onRemove?: () => void
+}) {
+    const { t, intl } = useLocale()
+    const done = !transcriptIssue(entry.text) && !!entry.expertSpeaker
+
+    return (
+        <span className={`inline-flex items-center gap-2 rounded-full border pl-3 pr-2 py-1.5 text-xs transition-colors ${
+            done
+                ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]"
+                : "border-dashed border-[var(--color-border)] bg-[var(--color-surface)]"
+        }`}>
+            <button onClick={onOpen} className="inline-flex items-center gap-2 min-w-0" title={t.common.edit}>
+                {done && (
+                    <svg aria-hidden className="w-3.5 h-3.5 text-[var(--color-accent-deep)] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                )}
+                <span className="font-semibold text-[var(--color-text)] whitespace-nowrap">{t.tabs.dna.transcriptN(index + 1)}</span>
+                {entry.expertSpeaker && (
+                    <span className="text-[var(--color-text-secondary)] truncate max-w-[10rem]">{entry.expertSpeaker}</span>
+                )}
+                <span className="text-[var(--color-muted)] whitespace-nowrap">
+                    {t.tabs.dna.nWords(countWords(entry.text).toLocaleString(intl))}
+                </span>
+            </button>
+            {onRemove && (
+                <button onClick={onRemove} aria-label={t.common.remove}
+                    className="text-[var(--color-muted)] hover:text-red-500 transition-colors leading-none px-1">×</button>
+            )}
+        </span>
+    )
+}
+
+function TranscriptCard({ index, entry, onChange, onRemove, onCollapse }: {
     index: number
     entry: TranscriptEntry
     onChange: (field: "text" | "expertSpeaker" | "repLabel", val: string) => void
     onRemove?: () => void
+    onCollapse?: () => void
 }) {
     const { t, intl } = useLocale()
     const fileRef = useRef<HTMLInputElement>(null)
@@ -2509,9 +2566,16 @@ function TranscriptCard({ index, entry, onChange, onRemove }: {
         <div className={CARD + " space-y-3"}>
             <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.transcriptN(index + 1)}</p>
-                {onRemove && (
-                    <button onClick={onRemove} className="text-xs text-[var(--color-muted)] hover:text-red-500 transition-colors">{t.common.remove}</button>
-                )}
+                <div className="flex items-center gap-3">
+                    {/* Only present when this card was reopened from a chip —
+                        the way back to the collapsed view. */}
+                    {onCollapse && (
+                        <button onClick={onCollapse} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors">{t.common.done}</button>
+                    )}
+                    {onRemove && (
+                        <button onClick={onRemove} className="text-xs text-[var(--color-muted)] hover:text-red-500 transition-colors">{t.common.remove}</button>
+                    )}
+                </div>
             </div>
 
             {/* Upload zone — shown when empty */}
@@ -2647,6 +2711,11 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
     const [step, setStep]               = useState<DNAStep>("collect")
     const [expertName, setExpertName]   = useState("")
     const [transcripts, setTranscripts] = useState<TranscriptEntry[]>([freshEntry()])
+    // Which entry is expanded. Normally nothing: the open card is DERIVED as the
+    // first unfinished entry, so finishing one hands the card to the next without
+    // anyone setting state. This only holds an id when you click a finished chip
+    // to go back and edit it — an override, not the primary mechanism.
+    const [openId, setOpenId]           = useState<string | null>(null)
     const [dnaResult, setDnaResult]     = useState<DNAResult | null>(null)
     const [error, setError]             = useState("")
     const [reviewTab, setReviewTab]     = useState<DNAReviewTab>("tone")
@@ -2716,9 +2785,13 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
 
     function addTranscript() {
         setTranscripts(prev => [...prev, freshEntry()])
+        // No setOpenId: a fresh entry is unfinished, so the derived rule opens it
+        // on its own unless an older unfinished one is still waiting — and that
+        // one deserves the card first.
     }
     function removeTranscript(id: string) {
         setTranscripts(prev => prev.filter(t => t.id !== id))
+        setOpenId(prev => prev === id ? null : prev)
     }
     function updateTranscript(id: string, field: "text" | "expertSpeaker" | "repLabel", value: string) {
         setTranscripts(prev => {
@@ -2729,11 +2802,16 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
             })
             // Open the next slot as soon as this one is genuinely done, so the
             // requirement teaches itself: you finish one, the next appears, and
-            // the counter moves. Previously the only way to reach three was to
+            // the meter moves. Previously the only way to reach the bar was to
             // notice a muted dashed button below the fold and press it twice —
             // people got to "1 of 3" and stopped, with no idea what was wrong.
+            //
+            // A slot only opens while we are still SHORT on material. Bring one
+            // long call and nothing appears: you are already done, and an empty
+            // card would imply otherwise.
             const complete = next.filter(t => !transcriptIssue(t.text) && t.expertSpeaker)
-            if (complete.length < MIN && complete.length === next.length) {
+            const words = complete.reduce((n, t) => n + countWords(t.text), 0)
+            if (complete.length === next.length && words < MIN_DNA_WORDS) {
                 return [...next, freshEntry()]
             }
             return next
@@ -2752,8 +2830,9 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
     async function analyze() {
         setError("")
         const valid = transcripts.filter(t => !transcriptIssue(t.text) && t.expertSpeaker)
-        if (valid.length < MIN) {
-            setError(t.tabs.dna.need3)
+        const words = valid.reduce((n, t) => n + countWords(t.text), 0)
+        if (!valid.length || words < MIN_DNA_WORDS) {
+            setError(t.tabs.dna.needMoreMaterial)
             return
         }
         setStep("analyzing")
@@ -2879,9 +2958,19 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
     }
 
     // "Complete" means it passes the same check the analyze button enforces —
-    // a card can't count toward 3 of 3 and then be rejected on submit.
-    const completedCount = transcripts.filter(t => !transcriptIssue(t.text) && t.expertSpeaker).length
-    const MIN = 3
+    // a card can't fill the meter and then be rejected on submit.
+    const completed     = transcripts.filter(t => !transcriptIssue(t.text) && t.expertSpeaker)
+    const completedCount = completed.length
+    const completedWords = completed.reduce((n, t) => n + countWords(t.text), 0)
+    const readyToAnalyze = completedCount > 0 && completedWords >= MIN_DNA_WORDS
+
+    // The open card is the first unfinished entry — unless a chip was clicked,
+    // which parks it on that entry until you collapse it again. Everything that
+    // is not the open card renders as a chip above.
+    const openEntry = (openId && transcripts.find(t => t.id === openId))
+        || transcripts.find(t => transcriptIssue(t.text) || !t.expertSpeaker)
+        || null
+    const chips = transcripts.filter(t => t.id !== openEntry?.id)
 
     if (loadingStored) {
         return <div className="text-[var(--color-text-secondary)] text-sm">{t.tabs.dna.loadingStored}</div>
@@ -3185,29 +3274,49 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 <div className="flex items-center gap-3">
                     <div className="flex-1 h-2 bg-[var(--color-line-soft)] rounded-full overflow-hidden">
                         <div className="h-full bg-[var(--color-accent)] transition-all rounded-full"
-                            style={{ width: `${Math.min((completedCount / MIN) * 100, 100)}%` }} />
+                            style={{ width: `${Math.min((completedWords / MIN_DNA_WORDS) * 100, 100)}%` }} />
                     </div>
                     <span className="text-xs text-[var(--color-text-secondary)] whitespace-nowrap">
-                        {t.tabs.dna.progress(completedCount, MIN)}
+                        {readyToAnalyze
+                            ? t.tabs.dna.progressReady(completedWords.toLocaleString(intl))
+                            : t.tabs.dna.progressWords(completedWords.toLocaleString(intl), MIN_DNA_WORDS.toLocaleString(intl))}
                     </span>
                 </div>
             </div>
 
-            {transcripts.map((tr, i) => (
-                <TranscriptCard key={tr.id} index={i} entry={tr}
-                    onChange={(field, val) => updateTranscript(tr.id, field, val)}
-                    onRemove={transcripts.length > 1 ? () => removeTranscript(tr.id) : undefined}
+            {/* Finished transcripts collapse to chips so the card you are filling
+                is the only one competing for attention. Click one to reopen it. */}
+            {chips.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                    {chips.map(tr => (
+                        <TranscriptChip key={tr.id} index={transcripts.indexOf(tr)} entry={tr}
+                            onOpen={() => setOpenId(tr.id)}
+                            onRemove={transcripts.length > 1 ? () => removeTranscript(tr.id) : undefined}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {openEntry && (
+                <TranscriptCard key={openEntry.id} index={transcripts.indexOf(openEntry)} entry={openEntry}
+                    onChange={(field, val) => updateTranscript(openEntry.id, field, val)}
+                    onRemove={transcripts.length > 1 ? () => removeTranscript(openEntry.id) : undefined}
+                    onCollapse={openId === openEntry.id ? () => setOpenId(null) : undefined}
                 />
-            ))}
+            )}
+
+            {!readyToAnalyze && completedCount > 0 && (
+                <p className="text-sm text-[var(--color-text-secondary)]">{t.tabs.dna.needMoreMaterial}</p>
+            )}
 
             <div className="flex gap-3">
                 <button onClick={addTranscript}
                     className="flex-1 border-2 border-dashed border-[var(--color-border)] rounded-xl py-3 text-sm text-[var(--color-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors">
                     {t.tabs.dna.addTranscript}
                 </button>
-                <button onClick={analyze} disabled={completedCount < MIN}
-                    className={BTN_PRIMARY + " flex-shrink-0" + (completedCount < MIN ? " opacity-50 cursor-not-allowed" : "")}>
-                    {completedCount < MIN ? t.tabs.dna.needMore(MIN - completedCount) : t.tabs.dna.analyzeN(completedCount)}
+                <button onClick={analyze} disabled={!readyToAnalyze}
+                    className={BTN_PRIMARY + " flex-shrink-0" + (!readyToAnalyze ? " opacity-50 cursor-not-allowed" : "")}>
+                    {t.tabs.dna.analyzeN(completedCount)}
                 </button>
             </div>
 
