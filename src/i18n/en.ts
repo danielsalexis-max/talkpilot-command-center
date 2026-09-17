@@ -1012,6 +1012,7 @@ export const en = {
             setupUnfinished: "Setup isn't finished — reps who join now get generic coaching.",
             finishOnHome: "Finish on Home →",
             invitePlaceholder: "colleague@company.com",
+            inviteNoTeam: "No team",
             sendingInvite: "Sending…",
             sendInvite: "Send invite",
             inviteQueued: "Invitation saved — it will be emailed as soon as billing is active.",

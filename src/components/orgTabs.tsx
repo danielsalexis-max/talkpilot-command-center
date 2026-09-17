@@ -2251,6 +2251,12 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     const [loading, setLoading]         = useState(true)
     const [inviteEmail, setInviteEmail] = useState("")
     const [inviteRole, setInviteRole]   = useState("member")
+    // A team pick on the invite itself, because an invite without one lands as
+    // team_id NULL and manages_user() answers false for that member forever —
+    // the manager's dashboard just shows nobody (D-423). Optional on purpose:
+    // a two-person org has no teams and must not be forced to invent one.
+    const [inviteTeam, setInviteTeam]   = useState("")
+    const [teams, setTeams]             = useState<{ id: string; name: string }[]>([])
     const [inviting, setInviting]       = useState(false)
     const [msg, setMsg]                 = useState<string | null>(null)
     const [isErr, setIsErr]             = useState(false)
@@ -2277,7 +2283,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     }
 
     const load = useCallback(async () => {
-        const [memberRes, inviteRes, pbRes, objRes, kbRes, platformRes] = await Promise.all([
+        const [memberRes, inviteRes, pbRes, objRes, kbRes, platformRes, teamRes] = await Promise.all([
             supabase.rpc("get_org_members_with_email", { p_org: orgId }).then(r => {
                 if (r.error) {
                     return supabase.from("org_members")
@@ -2297,6 +2303,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
             // download data — we have none per user; `installed` is a push
             // token, `used` is a real conversation.
             supabase.rpc("org_member_platforms", { p_org: orgId }),
+            supabase.from("org_teams").select("id, name").eq("org_id", orgId).order("name"),
         ])
         setMembers((memberRes.data ?? []) as MemberRow[])
         const byUser = new Map<string, PlatformTag[]>()
@@ -2305,6 +2312,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
         }
         setPlatforms(byUser)
         setInvites((inviteRes.data ?? []) as InviteRow[])
+        setTeams((teamRes.data ?? []) as { id: string; name: string }[])
         setReadiness({
             activePlaybooks: pbRes.count ?? 0,
             objections:      objRes.count ?? 0,
@@ -2334,6 +2342,10 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
             // account yet, so the admin's locale is the best signal we have.
             body: JSON.stringify({
                 org_id: orgId, email: inviteEmail.trim(), role: inviteRole,
+                // NULL here is what made every manager dashboard empty: the
+                // member arrived team-less and nothing after the invite ever
+                // assigned one (D-423).
+                team_id: inviteTeam || null,
                 language: clientLocale(),
             }),
         })
@@ -2438,6 +2450,16 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                         <option value="manager">{t.data.roles.manager}</option>
                         <option value="admin">{t.data.roles.admin}</option>
                     </select>
+                    {teams.length > 0 && (
+                        <select
+                            value={inviteTeam}
+                            onChange={e => setInviteTeam(e.target.value)}
+                            className="w-36 flex-shrink-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <option value="">{t.tabs.members.inviteNoTeam}</option>
+                            {teams.map(tm => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
+                        </select>
+                    )}
                     <button className={BTN_PRIMARY + " flex-shrink-0"} onClick={sendInvite} disabled={inviting || !inviteEmail.trim()}>
                         {inviting ? t.tabs.members.sendingInvite : t.tabs.members.sendInvite}
                     </button>

@@ -986,6 +986,7 @@ export const es: Dict = {
             setupUnfinished: "La configuración no está terminada — los reps que se unan ahora recibirán coaching genérico.",
             finishOnHome: "Termínala en Inicio →",
             invitePlaceholder: "colega@empresa.com",
+            inviteNoTeam: "Sin equipo",
             sendingInvite: "Enviando…",
             sendInvite: "Enviar invitación",
             inviteQueued: "Invitación guardada — se enviará por correo en cuanto la facturación esté activa.",
