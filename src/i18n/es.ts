@@ -799,6 +799,34 @@ export const es: Dict = {
             editTitle: "Editar documento",
             editSaved: "Documento actualizado.",
             editBodyNote: "Cambiar el texto vuelve a indexar el documento. Editar solo el título o el tipo no toca la indexación.",
+
+            // Corregir la biblioteca diciendo qué cambió, en vez de buscar cuál
+            // documento dice lo viejo (D-414).
+            amendTitle: "¿Cambió algo? Solo dilo",
+            amendSub: "Escribe qué es cierto hoy. Buscamos cada lugar que diga lo contrario y te mostramos el cambio antes de guardar nada.",
+            amendPlaceholder: "Ejemplo: la integración con el CRM y los pendientes ya funcionan — ya no salen en octubre.",
+            amendFind: "Buscar qué cambiar",
+            amendSearching: "Leyendo tus documentos…",
+            amendTooShort: "Escribe una frase completa — con pocas palabras no alcanza para encontrar el pasaje correcto.",
+            amendFound: (docs: number, edits: number) =>
+                `${edits} cambio${edits !== 1 ? "s" : ""} en ${docs} documento${docs !== 1 ? "s" : ""}. Revisa cada uno antes de guardar.`,
+            amendNoMatch: "Ningún documento tuyo dice lo contrario. Puedes agregarlo como documento nuevo arriba.",
+            amendNoDocs: "Tu base de conocimiento está vacía — agrega un documento primero.",
+            amendNow: "Hoy dice",
+            amendInstead: "Cambiar a",
+            amendDeleted: "(se elimina)",
+            amendTimes: (n: number) => `${n} lugar${n !== 1 ? "es" : ""} en este documento`,
+            amendAppend: "Se agrega al final",
+            amendSkipped: (n: number) =>
+                `Se descartó ${n === 1 ? "1 cambio propuesto" : `${n} cambios propuestos`} — el texto citado no aparece en el documento. No se perdió nada; intenta decirlo de otra forma.`,
+            amendApply: "Guardar este documento",
+            amendApplyAll: "Guardar todo",
+            amendApplying: "Guardando…",
+            amendApplied: (n: number) =>
+                `${n} documento${n !== 1 ? "s" : ""} actualizado${n !== 1 ? "s" : ""} y reindexado${n !== 1 ? "s" : ""}. Las llamadas en vivo usan el texto nuevo desde ahora.`,
+            amendFailed: (e: string) => `No se pudo guardar: ${e}`,
+            amendDiscard: "Descartar",
+            amendReviewTitle: "Revisa los cambios",
         },
 
         objections: {

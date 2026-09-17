@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState, useCallback, useRef } from "react"
-import { embedObjections, reindexObjections, ingestKnowledgeInline, ingestKnowledgeInlineVerbose, reindexKnowledgeVerbose, approvedResponsesFrom, guidanceOf, normalizeSeverity } from "@/lib/orgBrain"
+import { embedObjections, reindexObjections, ingestKnowledgeInline, ingestKnowledgeInlineVerbose, reindexKnowledgeVerbose, replaceKnowledgeText, amendKnowledge, applyProposal, type AmendProposal, approvedResponsesFrom, guidanceOf, normalizeSeverity } from "@/lib/orgBrain"
 import { supabase } from "@/lib/supabase"
 import { SearchBox } from "@/components/SearchBox"
 import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
@@ -698,6 +698,15 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
     const [msg, setMsg]             = useState<string | null>(null)
     const [isErr, setIsErr]         = useState(false)
     const fileRef = useRef<HTMLInputElement>(null)
+    /// "Something changed? Just say it" (D-414): one sentence in, a reviewable
+    /// set of edits out. `amendProposals` being non-null is what puts the
+    /// review sheet on screen — an empty array means we looked and found
+    /// nothing, which is a different answer from not having looked.
+    const [amendText, setAmendText]   = useState("")
+    const [amendBusy, setAmendBusy]   = useState(false)
+    const [amendProposals, setAmendProposals] = useState<AmendProposal[] | null>(null)
+    const [amendSkipped, setAmendSkipped]     = useState<{ title: string; find: string }[]>([])
+    const [amendApplying, setAmendApplying]   = useState(false)
 
     const load = useCallback(async () => {
         const [{ data }, { data: chunkRows }, { data: teamRows }, { data: memberRows }] = await Promise.all([
@@ -802,8 +811,11 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
             const unchanged = original.map(c => c.content).join("\n\n").trim() === body.trim()
 
             if (!unchanged && body.trim()) {
-                await supabase.from("org_knowledge_chunks").delete().eq("knowledge_id", editing.id)
-                const r = await reindexKnowledgeVerbose(orgId, editing.id)
+                // The edited text has to travel WITH the request (D-414). This
+                // used to delete the chunks and ask for a plain re-index, which
+                // rebuilt the document from the original file in storage — the
+                // edit was discarded every time and the UI still said "saved".
+                const r = await replaceKnowledgeText(orgId, editing.id, body.trim())
                 if (r.error) { setMsg(t.tabs.knowledge.errorPrefix(r.error)); setIsErr(true); return }
             }
             setMsg(t.tabs.knowledge.editSaved); setIsErr(false)
@@ -853,6 +865,66 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
             setIsErr(!!r.error)
             await load()
         } finally { setReindexing(null) }
+    }
+
+    /// Ask which passages contradict what the admin just typed. Read-only:
+    /// nothing is written until they press save on the review sheet.
+    async function findAmendments() {
+        const instruction = amendText.trim()
+        if (instruction.length < 8) { setMsg(t.tabs.knowledge.amendTooShort); setIsErr(true); return }
+        setAmendBusy(true); setMsg(null); setIsErr(false)
+        try {
+            const r = await amendKnowledge(orgId, instruction)
+            if (r.error) { setMsg(t.tabs.knowledge.errorPrefix(r.error)); setIsErr(true); return }
+            setAmendSkipped(r.skipped.map(x => ({ title: x.title, find: x.find })))
+            if (r.proposals.length === 0) {
+                setMsg(r.note === "no_documents" ? t.tabs.knowledge.amendNoDocs : t.tabs.knowledge.amendNoMatch)
+                setIsErr(false)
+                setAmendProposals(null)
+                return
+            }
+            setAmendProposals(r.proposals)
+        } finally {
+            setAmendBusy(false)
+        }
+    }
+
+    /// Save the approved documents. Each one is a local substitution over the
+    /// text the admin was shown, then a full re-ingest, so chunks, embeddings,
+    /// summary and receipt are all rebuilt by the pipeline that owns them.
+    ///
+    /// A failure part-way stops rather than pressing on: the documents already
+    /// written stay written and are named in the message, because "3 of 5
+    /// saved" is recoverable and "something went wrong" is not.
+    async function applyAmendments(picked: AmendProposal[]) {
+        if (picked.length === 0) return
+        setAmendApplying(true); setMsg(null)
+        let done = 0
+        try {
+            for (const proposal of picked) {
+                const r = await replaceKnowledgeText(orgId, proposal.knowledge_id, applyProposal(proposal))
+                if (r.error) {
+                    setMsg(t.tabs.knowledge.amendFailed(`${proposal.title} — ${r.error}`))
+                    setIsErr(true)
+                    break
+                }
+                done++
+            }
+            if (done > 0 && done === picked.length) {
+                setMsg(t.tabs.knowledge.amendApplied(done)); setIsErr(false)
+                setAmendText(""); setAmendSkipped([])
+            }
+            // Drop the ones that landed; anything left keeps its card so the
+            // admin can retry it without re-running the search.
+            const savedIds = picked.slice(0, done).map(x => x.knowledge_id)
+            setAmendProposals(prev => {
+                const rest = (prev ?? []).filter(x => !savedIds.includes(x.knowledge_id))
+                return rest.length > 0 ? rest : null
+            })
+            await load()
+        } finally {
+            setAmendApplying(false)
+        }
     }
 
     const kindColor = (k: string): "indigo"|"green"|"yellow"|"slate" => {
@@ -951,6 +1023,28 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
             </ManualSection>
             )}
 
+            {/* Correct the library by describing the change (D-414). Offered
+                only once there is something to correct — on an empty library
+                it would be an input that can only fail. */}
+            {docs.length > 0 && !stagedFile && (
+                <div className={CARD + " space-y-3"}>
+                    <div className="space-y-1">
+                        <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.knowledge.amendTitle}</p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">{t.tabs.knowledge.amendSub}</p>
+                    </div>
+                    <textarea className={TEXTAREA} rows={3}
+                        placeholder={t.tabs.knowledge.amendPlaceholder}
+                        value={amendText} onChange={e => setAmendText(e.target.value)} />
+                    <div className="flex items-center gap-3">
+                        <button className={BTN_PRIMARY} onClick={findAmendments}
+                            disabled={amendBusy || amendText.trim().length < 8}>
+                            {amendBusy ? t.tabs.knowledge.amendSearching : t.tabs.knowledge.amendFind}
+                        </button>
+                        <Msg msg={msg} error={isErr} />
+                    </div>
+                </div>
+            )}
+
             <div>
                 <div className="flex items-center justify-between gap-4 mb-3">
                     <SectionHeader title={t.tabs.knowledge.libraryTitle(docs.length)} />
@@ -1019,6 +1113,109 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
                     onSave={saveEdit}
                 />
             )}
+
+            {amendProposals && (
+                <AmendReview
+                    proposals={amendProposals}
+                    skipped={amendSkipped}
+                    busy={amendApplying}
+                    msg={msg}
+                    isErr={isErr}
+                    onCancel={() => { setAmendProposals(null); setAmendSkipped([]); setMsg(null) }}
+                    onApply={applyAmendments}
+                />
+            )}
+        </div>
+    )
+}
+
+/// The review sheet for a described correction (D-414).
+///
+/// Every change is shown as the exact text that is there today next to the
+/// exact text that will replace it — never a summary of the change, and never
+/// a rewritten document. The admin is being asked to approve a specific edit to
+/// the thing their reps get coached from; a paraphrase would make that
+/// impossible to check, which is how a knowledge base quietly fills with things
+/// nobody agreed to.
+function AmendReview({ proposals, skipped, busy, msg, isErr, onCancel, onApply }: {
+    proposals: AmendProposal[]
+    skipped: { title: string; find: string }[]
+    busy: boolean
+    msg: string | null
+    isErr: boolean
+    onCancel: () => void
+    onApply: (picked: AmendProposal[]) => void
+}) {
+    const t = useT()
+    const editCount = proposals.reduce((n, p) => n + p.replacements.length + (p.append.trim() ? 1 : 0), 0)
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8">
+            <div className={CARD + " w-full max-w-3xl space-y-4 my-auto"}>
+                <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.knowledge.amendReviewTitle}</h3>
+                    <button className={BTN_GHOST} onClick={onCancel} disabled={busy}>{t.tabs.knowledge.amendDiscard}</button>
+                </div>
+                <p className="text-xs text-[var(--color-text-secondary)]">
+                    {t.tabs.knowledge.amendFound(proposals.length, editCount)}
+                </p>
+
+                {/* Replacements the function refused because the quoted text
+                    wasn't in the document. Shown, not swallowed — a correction
+                    that vanished without a word is the failure mode here. */}
+                {skipped.length > 0 && (
+                    <p className="text-xs text-[var(--color-text-secondary)] bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2">
+                        {t.tabs.knowledge.amendSkipped(skipped.length)}
+                    </p>
+                )}
+
+                <div className="space-y-3 max-h-[55vh] overflow-y-auto">
+                    {proposals.map(p => (
+                        <div key={p.knowledge_id} className="border border-[var(--color-border)] rounded-lg p-3 space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-medium text-[var(--color-text)]">{p.title}</p>
+                                <button className={BTN_GHOST} disabled={busy} onClick={() => onApply([p])}>
+                                    {busy ? t.tabs.knowledge.amendApplying : t.tabs.knowledge.amendApply}
+                                </button>
+                            </div>
+                            {p.replacements.map((r, i) => (
+                                <div key={i} className="space-y-1.5">
+                                    {r.why && <p className="text-xs text-[var(--color-text-secondary)]">{r.why}</p>}
+                                    <div className="space-y-1">
+                                        <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)]">{t.tabs.knowledge.amendNow}</p>
+                                        <p className="text-xs whitespace-pre-wrap rounded-md px-2.5 py-1.5 bg-red-500/10 text-[var(--color-text)] line-through decoration-red-500/50">
+                                            {r.find}
+                                        </p>
+                                        <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)]">{t.tabs.knowledge.amendInstead}</p>
+                                        <p className="text-xs whitespace-pre-wrap rounded-md px-2.5 py-1.5 bg-green-500/10 text-[var(--color-text)]">
+                                            {r.replace.trim() ? r.replace : t.tabs.knowledge.amendDeleted}
+                                        </p>
+                                    </div>
+                                    {/* The same stale sentence usually appears
+                                        in a paragraph AND in an FAQ answer. Say
+                                        how many places this one edit touches. */}
+                                    {r.occurrences > 1 && (
+                                        <p className="text-[11px] text-[var(--color-muted)]">{t.tabs.knowledge.amendTimes(r.occurrences)}</p>
+                                    )}
+                                </div>
+                            ))}
+                            {p.append.trim() && (
+                                <div className="space-y-1">
+                                    <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)]">{t.tabs.knowledge.amendAppend}</p>
+                                    <p className="text-xs whitespace-pre-wrap rounded-md px-2.5 py-1.5 bg-green-500/10 text-[var(--color-text)]">{p.append}</p>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <button className={BTN_PRIMARY} disabled={busy} onClick={() => onApply(proposals)}>
+                        {busy ? t.tabs.knowledge.amendApplying : t.tabs.knowledge.amendApplyAll}
+                    </button>
+                    <Msg msg={msg} error={isErr} />
+                </div>
+            </div>
         </div>
     )
 }

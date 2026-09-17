@@ -822,6 +822,34 @@ export const en = {
             editTitle: "Edit document",
             editSaved: "Document updated.",
             editBodyNote: "Changing the text re-indexes the document. Editing only the title or type leaves the index alone.",
+
+            // Correct the library by saying what changed, instead of hunting
+            // for the document that says the old thing (D-414).
+            amendTitle: "Something changed? Just say it",
+            amendSub: "Write what is true now. We find every place that says otherwise and show you the change before anything is saved.",
+            amendPlaceholder: "Example: the CRM integration and the action items work now — they are no longer coming in October.",
+            amendFind: "Find what to change",
+            amendSearching: "Reading your documents…",
+            amendTooShort: "Write a full sentence — a few words aren't enough to find the right passage.",
+            amendFound: (docs: number, edits: number) =>
+                `${edits} change${edits !== 1 ? "s" : ""} in ${docs} document${docs !== 1 ? "s" : ""}. Check each one before saving.`,
+            amendNoMatch: "Nothing in your documents says otherwise. You can add it as a new document above.",
+            amendNoDocs: "Your knowledge base is empty — add a document first.",
+            amendNow: "Now says",
+            amendInstead: "Change to",
+            amendDeleted: "(removed)",
+            amendTimes: (n: number) => `${n} place${n !== 1 ? "s" : ""} in this document`,
+            amendAppend: "Added at the end",
+            amendSkipped: (n: number) =>
+                `${n} suggested change${n !== 1 ? "s were" : " was"} dropped — the quoted text wasn't found in the document. Nothing was lost; try saying it a different way.`,
+            amendApply: "Save this document",
+            amendApplyAll: "Save all",
+            amendApplying: "Saving…",
+            amendApplied: (n: number) =>
+                `${n} document${n !== 1 ? "s" : ""} updated and re-indexed. Live calls use the new wording from now on.`,
+            amendFailed: (e: string) => `Could not save: ${e}`,
+            amendDiscard: "Discard",
+            amendReviewTitle: "Check the changes",
         },
 
         objections: {

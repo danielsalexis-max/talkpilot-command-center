@@ -148,3 +148,85 @@ export function ingestKnowledgeInlineVerbose(
 export function reindexKnowledgeVerbose(orgId: string, knowledgeId: string): Promise<IngestOutcome> {
     return ingestOutcome({ org_id: orgId, knowledge_id: knowledgeId })
 }
+
+// ── Correcting the library by describing the change (D-414) ──────────────────
+//
+// The editor above assumes the admin already knows WHICH document is wrong. In
+// a real library one stale fact ("the CRM integration ships in October") is
+// repeated across several documents, and the person who knows it changed is not
+// the person who remembers where it was written. `amend-knowledge` takes that
+// sentence and finds the passages; nothing is written until the admin approves.
+
+export interface AmendReplacement {
+    find: string
+    replace: string
+    why: string
+    occurrences: number
+}
+
+export interface AmendProposal {
+    knowledge_id: string
+    title: string
+    kind: string
+    replacements: AmendReplacement[]
+    append: string
+    /// The document's current full text — applying an approved proposal is a
+    /// local string substitution over this, so the admin saves exactly the
+    /// text they were shown.
+    current_text: string
+}
+
+export interface AmendResult {
+    error: string | null
+    proposals: AmendProposal[]
+    /// Replacements the function refused because the quoted text was not found
+    /// verbatim in the document. Surfaced, never swallowed.
+    skipped: { title: string; find: string; reason: string }[]
+    /// "no_documents" | "no_match" | null
+    note: string | null
+}
+
+export async function amendKnowledge(orgId: string, instruction: string): Promise<AmendResult> {
+    const empty = { proposals: [], skipped: [], note: null }
+    try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session?.access_token) return { error: "Your session expired — sign in again and retry.", ...empty }
+        const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/amend-knowledge`, {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ org_id: orgId, instruction, locale: clientLocale() }),
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) {
+            return { error: typeof json?.error?.message === "string" ? json.error.message : res.statusText, ...empty }
+        }
+        return {
+            error:     null,
+            proposals: Array.isArray(json.proposals) ? json.proposals : [],
+            skipped:   Array.isArray(json.skipped) ? json.skipped : [],
+            note:      typeof json.note === "string" ? json.note : null,
+        }
+    } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e), ...empty }
+    }
+}
+
+/// Apply a proposal to the document's text, locally. Deliberately the same
+/// function the preview renders from, so what the admin approves is what gets
+/// saved — there is no second, server-side interpretation of the edit.
+export function applyProposal(p: AmendProposal): string {
+    let text = p.current_text
+    for (const r of p.replacements) {
+        text = text.split(r.find).join(r.replace)
+    }
+    if (p.append.trim()) text = text.trimEnd() + "\n\n" + p.append.trim()
+    return text
+}
+
+/// Replace a document's stored text and rebuild its chunks, embeddings,
+/// summary and intake receipt — `ingest-knowledge` mode D.
+export function replaceKnowledgeText(
+    orgId: string, knowledgeId: string, content: string,
+): Promise<IngestOutcome> {
+    return ingestOutcome({ org_id: orgId, knowledge_id: knowledgeId, content })
+}
