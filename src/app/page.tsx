@@ -13,7 +13,7 @@ import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts"
 
-interface OrgInfo { id: string; name: string; visibility: string; seats_purchased: number; plan: string; voice_profile?: { tone?: string } | null }
+interface OrgInfo { id: string; name: string; visibility: string; seats_purchased: number; plan: string }
 interface MemberInfo { user_id: string; email: string | null; full_name: string | null; status: string }
 interface TrendPoint { week: string; overall: number | null; adherence: number | null }
 
@@ -76,7 +76,7 @@ export default function HomePage() {
 
             const [{ data: orgInfo }, { data: scorecards }, { data: mems },
                    { count: pbCount }, { count: objCount }, { count: kbCount }, { count: invCount }] = await Promise.all([
-                supabase.from("organizations").select("id, name, visibility, seats_purchased, plan, voice_profile").eq("id", orgId).single(),
+                supabase.from("organizations").select("id, name, visibility, seats_purchased, plan").eq("id", orgId).single(),
                 supabase.from("session_scorecards").select("*")
                     .eq("org_id", orgId).eq("status", "scored")
                     // Excluded calls stay visible but out of every average
@@ -109,7 +109,6 @@ export default function HomePage() {
                 activePlaybooks: pbCount ?? 0,
                 objections: objCount ?? 0,
                 knowledge: kbCount ?? 0,
-                voiceSet: !!(orgInfo?.voice_profile?.tone),
                 // The activation half (2026-08-27): scoredCalls uses the same
                 // 30-day scorecard window the dashboard renders, so "first call
                 // scored" and "the dashboard has data" can never disagree.

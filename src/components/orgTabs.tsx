@@ -24,7 +24,10 @@ export interface OrgInfo {
     status: string; cancel_at: string | null
     trial_ends_at?: string | null
     stripe_subscription_id?: string | null
-    voice_profile: { tone?: string; values?: string; self_reference?: string; banned_phrases?: string[]; required_phrases?: string[] }
+    // `tone` and `values` were removed in D-416; `self_reference` has had no
+    // editor since 2026-08-27 but is still read by the live prompt, so it is
+    // carried, never written from here.
+    voice_profile: { self_reference?: string; banned_phrases?: string[]; required_phrases?: string[] }
     settings?: { rep_visibility?: { playbook?: boolean; knowledge?: boolean; objections?: boolean } } & Record<string, unknown>
 }
 interface KbRow    { id: string; title: string; kind: string; status: string; summary: string | null; intake_receipt: string | null; created_at: string; team_id: string | null; user_id: string | null }
@@ -48,9 +51,11 @@ interface ExtractedObjection {
     objection: string; response_guidance: string; severity: string; variants: string[]
 }
 
-export type AdminTab = "settings" | "knowledge" | "objections" | "playbooks" | "practice" | "members" | "billing" | "dna" | "voice"
+export type AdminTab = "settings" | "knowledge" | "objections" | "playbooks" | "practice" | "members" | "billing" | "dna"
 type DNAStep = "collect" | "analyzing" | "review"
-type DNAReviewTab = "tone" | "phrases" | "objections" | "flow"
+// "tone" left with D-416 — Team DNA can still read a rep's style, but there
+// is nowhere for it to land and nothing that reads it.
+type DNAReviewTab = "flow" | "objections" | "phrases"
 
 interface TranscriptEntry {
     id: string
@@ -334,12 +339,6 @@ const PROVIDER_NAMES: Record<string, string> = {
     google: "Google", microsoft: "Microsoft",
 }
 
-const TONE_PRESETS = [
-    "Consultative", "Empathetic", "Direct", "Data-driven", "Challenger",
-    "Friendly", "Authoritative", "Confident", "Assertive", "Collaborative",
-    "Professional", "Warm", "Analytical", "Strategic", "Persuasive",
-    "Educational", "Casual", "Concise", "Transparent", "Energetic",
-]
 
 export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }) {
     const t = useT()
@@ -526,35 +525,29 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
 
 // ─── Voice Tab (company voice & culture — lives under Playbook) ───────────────
 
-export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }) {
+/// The company's phrases — what the coach must never say, and what it should
+/// keep reinforcing (D-416).
+///
+/// This used to be the "Company voice" tab, alongside a tone-of-voice chip
+/// picker and a free-text company-values box. Those two are gone: tone was
+/// guesswork dressed as configuration and values never changed a single
+/// suggestion, so both were asking an admin to tune something they could not
+/// observe. The phrases stayed because they do something specific and
+/// checkable, and they now live here — next to the objections they belong
+/// with, since both are "the company's words, in the rep's ear".
+///
+/// **Deliberately not styled as alerts.** Red text on a red field reads as an
+/// error the admin has to fix. These are a list the admin wrote on purpose, so
+/// they read as rows of text with a colour bar marking which list they are in.
+function PhrasesSection({ org, onSaved }: { org: OrgInfo; onSaved: () => void }) {
     const t = useT()
-    const existingTone = org.voice_profile?.tone ?? ""
-    const matchedChips = TONE_PRESETS.filter(p => existingTone.toLowerCase().includes(p.toLowerCase()))
-    const customRemainder = TONE_PRESETS.reduce(
-        (acc, p) => acc.replace(new RegExp(p + ",?\\s*", "gi"), ""),
-        existingTone
-    ).trim().replace(/^,+|,+$/g, "").trim()
-
-    const [toneChips, setToneChips]       = useState<string[]>(matchedChips)
-    const [toneCustom, setToneCustom]     = useState(customRemainder)
-    const [values, setValues]             = useState(org.voice_profile?.values ?? "")
-    // Self-reference lost its UI on 2026-08-27 (owner e2e: one config field
-    // nobody understood). The value still rides get_org_context as "Refer to
-    // the company as:" in the live prompt, so an org that set one keeps it —
-    // it just isn't editable here anymore; unset orgs let the coach use the
-    // workspace name naturally.
-    const selfRef = org.voice_profile?.self_reference ?? ""
-    const [banned, setBanned]             = useState<string[]>(org.voice_profile?.banned_phrases ?? [])
-    const [required, setRequired]         = useState<string[]>(org.voice_profile?.required_phrases ?? [])
-    const [bannedInput, setBannedInput]   = useState("")
+    const [banned, setBanned]               = useState<string[]>(org.voice_profile?.banned_phrases ?? [])
+    const [required, setRequired]           = useState<string[]>(org.voice_profile?.required_phrases ?? [])
+    const [bannedInput, setBannedInput]     = useState("")
     const [requiredInput, setRequiredInput] = useState("")
-    const [saving, setSaving]             = useState(false)
-    const [msg, setMsg]                   = useState<string | null>(null)
-    const [isErr, setIsErr]               = useState(false)
-
-    function toggleChip(chip: string) {
-        setToneChips(prev => prev.includes(chip) ? prev.filter(c => c !== chip) : [...prev, chip])
-    }
+    const [saving, setSaving]               = useState(false)
+    const [msg, setMsg]                     = useState<string | null>(null)
+    const [isErr, setIsErr]                 = useState(false)
 
     function addPhrase(list: string[], setList: (v: string[]) => void, input: string, setInput: (v: string) => void) {
         const val = input.trim()
@@ -564,106 +557,81 @@ export function VoiceTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }
 
     async function save() {
         setSaving(true); setMsg(null)
-        const toneParts = [...toneChips, ...(toneCustom.trim() ? [toneCustom.trim()] : [])]
+        // Merge, never replace. `self_reference` has had no editor since
+        // 2026-08-27 but still rides the live prompt, and an org that set one
+        // would lose it to a whole-object write from this form.
+        const { data: current } = await supabase.from("organizations")
+            .select("voice_profile").eq("id", org.id).maybeSingle()
+        const existing = (current?.voice_profile ?? {}) as Record<string, unknown>
         const { error } = await supabase.from("organizations").update({
-            voice_profile: { tone: toneParts.join(", "), values, self_reference: selfRef, banned_phrases: banned, required_phrases: required },
+            voice_profile: { ...existing, banned_phrases: banned, required_phrases: required },
         }).eq("id", org.id)
         setSaving(false)
         if (error) { setMsg(humanError(error.message, t.tabs.doingSaveSettings, t)); setIsErr(true) }
         else { setMsg(t.common.saved); setIsErr(false); onSaved() }
     }
 
+    const list = (
+        items: string[],
+        setItems: (v: string[]) => void,
+        input: string,
+        setInput: (v: string) => void,
+        accent: string,
+        label: string,
+        empty: string,
+        placeholder: string,
+    ) => (
+        <div className="space-y-2">
+            <p className="text-xs font-medium text-[var(--color-text-secondary)]">
+                {label}{items.length > 0 && <span className="text-[var(--color-muted)] font-normal"> · {items.length}</span>}
+            </p>
+            {items.length === 0 && <p className="text-xs text-[var(--color-muted)]">{empty}</p>}
+            <div className="space-y-1">
+                {items.map((phrase, i) => (
+                    <div key={i}
+                        className="group flex items-start gap-2.5 rounded-md bg-[var(--color-bg)] border border-[var(--color-border)] pl-0 pr-2 py-1.5 overflow-hidden">
+                        <span className={`w-[3px] self-stretch rounded-full flex-shrink-0 ${accent}`} aria-hidden="true" />
+                        <span className="text-[13px] text-[var(--color-text)] flex-1 min-w-0 break-words leading-snug">{phrase}</span>
+                        <button type="button"
+                            onClick={() => setItems(items.filter((_, j) => j !== i))}
+                            aria-label={t.common.delete}
+                            className="text-[var(--color-muted)] hover:text-[var(--color-text)] flex-shrink-0 leading-none text-sm px-1">×</button>
+                    </div>
+                ))}
+            </div>
+            <div className="flex gap-2">
+                <input
+                    className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+                    placeholder={placeholder}
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addPhrase(items, setItems, input, setInput) } }}
+                />
+                <button type="button" className={BTN_GHOST} onClick={() => addPhrase(items, setItems, input, setInput)}>{t.common.add}</button>
+            </div>
+        </div>
+    )
+
     return (
-        <div className="space-y-6 max-w-2xl">
-            <div className={CARD + " space-y-5"}>
-                <div>
-                    <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.voice.title}</h3>
-                    <p className="text-xs text-[var(--color-text-secondary)] mt-1">{t.tabs.voice.sub}</p>
-                </div>
+        <div className={CARD + " space-y-5"}>
+            <div>
+                <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.objections.phrasesTitle}</h3>
+                {/* Says what these actually do: they ride the live-coach prompt
+                    on every client. They do NOT reach scoring — that is the
+                    playbook guardrails' job — so the copy must not promise it. */}
+                <p className="text-xs text-[var(--color-text-secondary)] mt-1">{t.tabs.objections.phrasesSub}</p>
+            </div>
 
-                {/* Tone of voice */}
-                <div className="space-y-2">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.voice.tone}</label>
-                    <div className="flex flex-wrap gap-2">
-                        {TONE_PRESETS.map(chip => (
-                            <button key={chip} type="button" onClick={() => toggleChip(chip)}
-                                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
-                                    toneChips.includes(chip)
-                                        ? "bg-[var(--btn-bg)] border-[var(--btn-bg)] text-[var(--btn-ink)]"
-                                        : "bg-[var(--color-bg)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]"
-                                }`}
-                            >{chip}</button>
-                        ))}
-                    </div>
-                    <input className={INPUT} placeholder={t.tabs.voice.customTone}
-                        value={toneCustom} onChange={e => setToneCustom(e.target.value)} />
-                </div>
-
-                <div className="space-y-1">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.voice.values}</label>
-                    <textarea className={TEXTAREA} rows={2} placeholder={t.tabs.voice.valuesPlaceholder}
-                        value={values} onChange={e => setValues(e.target.value)} />
-                </div>
-                {/* Phrases. Say what these actually do (owner e2e 2026-08-27):
-                    they ride the live-coach prompt on every client. They do NOT
-                    reach scoring — that is the playbook guardrails' job — so the
-                    copy must not promise it. */}
-                <p className="text-xs text-[var(--color-muted)]">{t.tabs.voice.phrasesUsage}</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Banned */}
-                    <div className="space-y-2">
-                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.voice.banned}</label>
-                        <div className="space-y-1.5 min-h-[2rem]">
-                            {banned.map((p, i) => (
-                                <div key={i} className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-lg px-3 py-1.5">
-                                    <span className="text-xs text-red-700 flex-1 truncate">{p}</span>
-                                    <button type="button" onClick={() => setBanned(banned.filter((_, j) => j !== i))}
-                                        className="text-red-400 hover:text-red-600 flex-shrink-0 leading-none">×</button>
-                                </div>
-                            ))}
-                            {banned.length === 0 && <p className="text-xs text-[var(--color-muted)]">{t.tabs.voice.noBanned}</p>}
-                        </div>
-                        <div className="flex gap-2">
-                            <input
-                                className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-                                placeholder={t.tabs.voice.bannedPlaceholder}
-                                value={bannedInput}
-                                onChange={e => setBannedInput(e.target.value)}
-                                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addPhrase(banned, setBanned, bannedInput, setBannedInput) } }}
-                            />
-                            <button type="button" className={BTN_GHOST} onClick={() => addPhrase(banned, setBanned, bannedInput, setBannedInput)}>{t.common.add}</button>
-                        </div>
-                    </div>
-                    {/* Required */}
-                    <div className="space-y-2">
-                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.voice.required}</label>
-                        <div className="space-y-1.5 min-h-[2rem]">
-                            {required.map((p, i) => (
-                                <div key={i} className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-1.5">
-                                    <span className="text-xs text-emerald-700 flex-1 truncate">{p}</span>
-                                    <button type="button" onClick={() => setRequired(required.filter((_, j) => j !== i))}
-                                        className="text-emerald-400 hover:text-emerald-600 flex-shrink-0 leading-none">×</button>
-                                </div>
-                            ))}
-                            {required.length === 0 && <p className="text-xs text-[var(--color-muted)]">{t.tabs.voice.noRequired}</p>}
-                        </div>
-                        <div className="flex gap-2">
-                            <input
-                                className="flex-1 min-w-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-                                placeholder={t.tabs.voice.requiredPlaceholder}
-                                value={requiredInput}
-                                onChange={e => setRequiredInput(e.target.value)}
-                                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addPhrase(required, setRequired, requiredInput, setRequiredInput) } }}
-                            />
-                            <button type="button" className={BTN_GHOST} onClick={() => addPhrase(required, setRequired, requiredInput, setRequiredInput)}>{t.common.add}</button>
-                        </div>
-                    </div>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {list(banned, setBanned, bannedInput, setBannedInput, "bg-red-400",
+                    t.tabs.objections.phrasesNever, t.tabs.objections.phrasesNoneNever, t.tabs.objections.phrasesNeverPlaceholder)}
+                {list(required, setRequired, requiredInput, setRequiredInput, "bg-emerald-400",
+                    t.tabs.objections.phrasesAlways, t.tabs.objections.phrasesNoneAlways, t.tabs.objections.phrasesAlwaysPlaceholder)}
             </div>
 
             <div className="flex items-center gap-3">
                 <button className={BTN_PRIMARY} onClick={save} disabled={saving}>
-                    {saving ? t.common.saving : t.tabs.voice.saveProfile}
+                    {saving ? t.common.saving : t.tabs.objections.phrasesSave}
                 </button>
                 <Msg msg={msg} error={isErr} />
             </div>
@@ -1273,7 +1241,7 @@ function KnowledgeEditor({ doc, body, busy, onCancel, onSave }: {
 
 // ─── Objections Tab ───────────────────────────────────────────────────────────
 
-export function ObjectionsTab({ orgId }: { orgId: string }) {
+export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: OrgInfo; onSaved: () => void }) {
     const t = useT()
     const [objs, setObjs]                     = useState<ObjRow[]>([])
     const [query, setQuery]                   = useState("")
@@ -1642,6 +1610,11 @@ export function ObjectionsTab({ orgId }: { orgId: string }) {
                     {!loading && objs.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">{t.tabs.objections.noObjections}</p>}
                 </div>
             </div>
+
+            {/* The company's phrases moved here from the retired Company voice
+                tab (D-416) — same layer of the live prompt as an objection's
+                approved answer, so they belong on the same page. */}
+            <PhrasesSection org={org} onSaved={onSaved} />
         </div>
     )
 }
@@ -2342,7 +2315,6 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
 
     // ── Onboarding gate: an org must have its coaching foundation in place before
     //    reps can be invited, otherwise they'd sign in to an unconfigured product.
-    const voiceSet = !!org.voice_profile?.tone?.trim()
     // The full setup checklist lives on Home now (D-175); this tab keeps only
     // a slim nudge so inviting early is informed, not blocked.
     const requiredMet = (readiness?.activePlaybooks ?? 0) >= 1 && (readiness?.objections ?? 0) >= 3
@@ -2915,8 +2887,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
     const [openId, setOpenId]           = useState<string | null>(null)
     const [dnaResult, setDnaResult]     = useState<DNAResult | null>(null)
     const [error, setError]             = useState("")
-    const [reviewTab, setReviewTab]     = useState<DNAReviewTab>("tone")
-    const [applyingTone, setApplyingTone]           = useState(false)
+    const [reviewTab, setReviewTab]     = useState<DNAReviewTab>("flow")
     const [applyingPhrases, setApplyingPhrases]     = useState(false)
     const [applyingObjections, setApplyingObjections] = useState(false)
     const [applyingFlow, setApplyingFlow]           = useState(false)
@@ -3072,19 +3043,6 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         }
     }
 
-    async function applyTone() {
-        if (!dnaResult) return
-        setApplyingTone(true)
-        try {
-            const newDescriptors = dnaResult.tone.descriptors.join(", ")
-            const existing = org.voice_profile?.tone ?? ""
-            const merged = existing ? `${existing}, ${newDescriptors}` : newDescriptors
-            await supabase.from("organizations").update({ voice_profile: { ...org.voice_profile, tone: merged } }).eq("id", orgId)
-            await persistApplied("tone")
-            onApplied()
-        } finally { setApplyingTone(false) }
-    }
-
     async function applyPhrases() {
         if (!dnaResult || selPower.size + selAvoid.size === 0) return
         setApplyingPhrases(true)
@@ -3190,7 +3148,6 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         // vocabulary. Leading with phrases right after tone front-loaded the
         // two shallowest sections and buried the playbook.
         const reviewTabs: { key: DNAReviewTab; label: string }[] = [
-            { key: "tone",       label: t.tabs.dna.reviewTabs.tone       },
             { key: "flow",       label: t.tabs.dna.reviewTabs.flow       },
             { key: "objections", label: t.tabs.dna.reviewTabs.objections },
             { key: "phrases",    label: t.tabs.dna.reviewTabs.phrases    },
@@ -3230,31 +3187,6 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                         </button>
                     ))}
                 </div>
-
-                {reviewTab === "tone" && (
-                    <div className={CARD + " space-y-4"}>
-                        <div>
-                            <p className="text-sm font-semibold text-[var(--color-text)] mb-1">{t.tabs.dna.detectedStyle}</p>
-                            <p className="text-xs text-[var(--color-text-secondary)]">{dnaResult.tone.evidence}</p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            {dnaResult.tone.descriptors.map(d => (
-                                <span key={d} className="px-3 py-1 rounded-full bg-teal-50 text-[var(--color-accent)] text-sm font-medium border border-teal-200">{d}</span>
-                            ))}
-                        </div>
-                        {org.voice_profile?.tone && (
-                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                                <p className="text-xs font-medium text-amber-700 mb-1">{t.tabs.dna.currentTone}</p>
-                                <p className="text-xs text-amber-600">{org.voice_profile.tone}</p>
-                                <p className="text-xs text-amber-500 mt-1">{t.tabs.dna.mergeNote}</p>
-                            </div>
-                        )}
-                        <button onClick={applyTone} disabled={applyingTone || appliedSections.has("tone")}
-                            className={BTN_PRIMARY + (appliedSections.has("tone") ? " opacity-60" : "")}>
-                            {appliedSections.has("tone") ? t.tabs.dna.applied : applyingTone ? t.tabs.dna.applying : t.tabs.dna.applyTone}
-                        </button>
-                    </div>
-                )}
 
                 {reviewTab === "phrases" && (
                     <div className="space-y-4">

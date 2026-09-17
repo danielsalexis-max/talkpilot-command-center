@@ -415,7 +415,6 @@ export const en = {
         checks: {
             playbook: { label: "Activate a playbook", hint: "Reps are guided through its stages live and scored against it after." },
             objections: { label: "Add at least 3 objections", hint: "So the AI can hand reps your approved answer while the pushback is still in the air." },
-            voice: { label: "Set your company voice", hint: "Keeps every rep on-brand in live suggestions." },
             knowledge: { label: "Upload a knowledge document", hint: "Grounds answers in your real pricing, battlecards and case studies." },
             invite: { label: "Invite your first rep", hint: "Coaching only starts existing once somebody is on the other end of a call." },
         },
@@ -530,7 +529,7 @@ export const en = {
     playbookPage: {
         title: "Playbook",
         sub: "Your org brain: what reps are coached from live, and scored against after.",
-        tabs: { playbooks: "Playbooks", objections: "Objections", knowledge: "Knowledge", voice: "Company voice", dna: "Team DNA" },
+        tabs: { playbooks: "Playbooks", objections: "Objections", knowledge: "Knowledge", dna: "Team DNA" },
     },
 
     security: {
@@ -760,24 +759,6 @@ export const en = {
             saveSettings: "Save settings",
         },
 
-        voice: {
-            title: "Company Voice & Culture",
-            sub: "Injected into every rep's AI coaching prompts to enforce your brand identity.",
-            tone: "Tone of voice",
-            customTone: "Add custom tone descriptor…",
-            values: "Company values",
-            valuesPlaceholder: "e.g. We believe sales is about solving problems, not closing deals.",
-            selfRef: "Self-reference (how reps should name the company)",
-            selfRefPlaceholder: '"TalkPilot" — not "we" or "the company"',
-            phrasesUsage: "These feed the live coach on every call: suggestions avoid the banned phrases and lean on the required language. Scoring breaches is the playbook guardrails' job — set those under Playbook.",
-            banned: "Banned phrases",
-            noBanned: "No banned phrases yet.",
-            bannedPlaceholder: "e.g. cheap, sorry to bother",
-            required: "Required language",
-            noRequired: "No required phrases yet.",
-            requiredPlaceholder: "e.g. ROI, success team",
-            saveProfile: "Save voice profile",
-        },
 
         knowledge: {
             intakeHeading: "What we understood",
@@ -853,6 +834,18 @@ export const en = {
         },
 
         objections: {
+            // The company's phrases moved here when the Company voice tab was
+            // retired (D-416): same layer of the live prompt as an objection's
+            // approved answer, so they belong on the same page.
+            phrasesTitle: "Your phrases",
+            phrasesSub: "These reach the coach on every live call: it steers away from the first list and leans on the second. They are not scored — breaking a rule is the playbook guardrails' job.",
+            phrasesNever: "Never say",
+            phrasesNoneNever: "Nothing here yet.",
+            phrasesNeverPlaceholder: "e.g. cheap, sorry to bother you",
+            phrasesAlways: "Keep saying",
+            phrasesNoneAlways: "Nothing here yet.",
+            phrasesAlwaysPlaceholder: "e.g. ROI, success team",
+            phrasesSave: "Save phrases",
             unindexedWarn: (n: number) => `${n} objection${n === 1 ? " isn't" : "s aren't"} indexed yet.`,
             unindexedBody: "Live coaching can only match objections that have been indexed — these won't fire on calls until you re-index.",
             indexing: "Indexing…",
@@ -1093,7 +1086,7 @@ export const en = {
             sources: "Sources",
             sourcesSub: "The transcripts this analysis was built from.",
             sourceExpert: (name: string) => `Expert: ${name}`,
-            reviewTabs: { tone: "Tone", phrases: "Phrases", objections: "Objections", flow: "Conv. Flow" },
+            reviewTabs: { phrases: "Phrases", objections: "Objections", flow: "Conv. Flow" },
             detectedStyle: "Detected communication style",
             currentTone: "Current tone setting",
             mergeNote: "Applying will merge — existing tones are preserved.",

@@ -399,7 +399,6 @@ export const es: Dict = {
         checks: {
             playbook: { label: "Activa un playbook", hint: "Los reps son guiados por sus etapas en vivo y evaluados contra él después." },
             objections: { label: "Agrega al menos 3 objeciones", hint: "Para que la IA entregue a los reps tu respuesta aprobada mientras la objeción sigue en el aire." },
-            voice: { label: "Define la voz de tu empresa", hint: "Mantiene a cada rep alineado con tu marca en las sugerencias en vivo." },
             knowledge: { label: "Sube un documento de conocimiento", hint: "Fundamenta las respuestas en tus precios, battlecards y casos de éxito reales." },
             invite: { label: "Invita a tu primer rep", hint: "El coaching solo empieza a existir cuando alguien está del otro lado de una llamada." },
         },
@@ -512,7 +511,7 @@ export const es: Dict = {
     playbookPage: {
         title: "Playbook",
         sub: "El cerebro de tu organización: de aquí reciben coaching los reps en vivo, y contra esto se evalúan después.",
-        tabs: { playbooks: "Playbooks", objections: "Objeciones", knowledge: "Conocimiento", voice: "Voz de la empresa", dna: "Team DNA" },
+        tabs: { playbooks: "Playbooks", objections: "Objeciones", knowledge: "Conocimiento", dna: "Team DNA" },
     },
 
     security: {
@@ -737,25 +736,6 @@ export const es: Dict = {
             saveSettings: "Guardar configuración",
         },
 
-        voice: {
-            title: "Voz y cultura de la empresa",
-            sub: "Se inyecta en los prompts de coaching de IA de cada rep para reforzar la identidad de tu marca.",
-            tone: "Tono de voz",
-            customTone: "Agrega un descriptor de tono propio…",
-            values: "Valores de la empresa",
-            valuesPlaceholder: "p. ej. Creemos que vender es resolver problemas, no cerrar tratos.",
-            selfRef: "Autorreferencia (cómo deben nombrar la empresa los reps)",
-            selfRefPlaceholder: '"TalkPilot" — no "nosotros" ni "la empresa"',
-            phrasesUsage: "Esto alimenta al coach en vivo en cada llamada: las sugerencias evitan las frases prohibidas y refuerzan el lenguaje requerido. Puntuar infracciones es trabajo de los guardrails del playbook — configúralos en Playbook.",
-            banned: "Frases prohibidas",
-            noBanned: "Aún no hay frases prohibidas.",
-            bannedPlaceholder: "p. ej. barato, perdón por molestar",
-            required: "Lenguaje requerido",
-            noRequired: "Aún no hay frases requeridas.",
-            requiredPlaceholder: "p. ej. ROI, equipo de éxito",
-            saveProfile: "Guardar perfil de voz",
-        },
-
         knowledge: {
             intakeHeading: "Lo que entendimos",
             uploadTitle: "Sube un documento",
@@ -830,6 +810,18 @@ export const es: Dict = {
         },
 
         objections: {
+            // Las frases de la empresa llegaron aquí cuando se retiró la
+            // pestaña de Voz de la empresa (D-416): viven en la misma capa del
+            // prompt en vivo que la respuesta aprobada de una objeción.
+            phrasesTitle: "Tus frases",
+            phrasesSub: "Esto llega al coach en cada llamada en vivo: se aleja de la primera lista y se apoya en la segunda. No se califican — romper una regla es trabajo de los guardrails del playbook.",
+            phrasesNever: "Nunca digas",
+            phrasesNoneNever: "Aquí todavía no hay nada.",
+            phrasesNeverPlaceholder: "p. ej. barato, perdón por molestar",
+            phrasesAlways: "Repite siempre",
+            phrasesNoneAlways: "Aquí todavía no hay nada.",
+            phrasesAlwaysPlaceholder: "p. ej. ROI, equipo de éxito",
+            phrasesSave: "Guardar frases",
             unindexedWarn: (n: number) => `${n === 1 ? "1 objeción aún no está indexada" : `${n} objeciones aún no están indexadas`}.`,
             unindexedBody: "El coaching en vivo solo puede detectar objeciones que ya fueron indexadas — estas no se activarán en llamadas hasta que reindexes.",
             indexing: "Indexando…",
@@ -1068,7 +1060,7 @@ export const es: Dict = {
             sources: "Fuentes",
             sourcesSub: "Las transcripciones a partir de las cuales se hizo este análisis.",
             sourceExpert: (name: string) => `Experto: ${name}`,
-            reviewTabs: { tone: "Tono", phrases: "Frases", objections: "Objeciones", flow: "Flujo de conv." },
+            reviewTabs: { phrases: "Frases", objections: "Objeciones", flow: "Flujo de conv." },
             detectedStyle: "Estilo de comunicación detectado",
             currentTone: "Tono configurado actualmente",
             mergeNote: "Al aplicar se combinan — los tonos existentes se conservan.",

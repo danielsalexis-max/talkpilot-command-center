@@ -46,7 +46,6 @@ export interface SetupState {
     activePlaybooks: number
     objections: number
     knowledge: number
-    voiceSet: boolean
     /// Activation, as distinct from configuration. The content half of this
     /// checklist self-satisfies the moment the /start wizard applies a starter
     /// kit, so an owner who finished the wizard saw a checklist that was
@@ -58,7 +57,7 @@ export interface SetupState {
 }
 
 export type SetupCheckKey =
-    | "playbook" | "objections" | "voice" | "knowledge" | "invite"
+    | "playbook" | "objections" | "knowledge" | "invite"
 
 export interface SetupCheck {
     key: SetupCheckKey; done: boolean; required: boolean
@@ -74,7 +73,6 @@ export function setupChecks(r: SetupState): SetupCheck[] {
     return [
         { key: "playbook",   done: r.activePlaybooks >= 1, required: true,  href: "/playbook?tab=playbooks" as Route },
         { key: "objections", done: r.objections >= 3,      required: true,  href: "/playbook?tab=objections" as Route },
-        { key: "voice",      done: r.voiceSet,             required: false, href: "/playbook?tab=voice" as Route },
         { key: "knowledge",  done: r.knowledge >= 1,       required: false, href: "/playbook?tab=knowledge" as Route },
         // A sent invite counts: the owner did their part, and the rest is the
         // invitee's move.

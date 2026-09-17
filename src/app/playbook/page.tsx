@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useOrg, OrgBanners } from "@/lib/useOrg"
 import { PageSkeleton } from "@/components/homeStates"
-import { PlaybooksTab, ObjectionsTab, KnowledgeTab, VoiceTab, TeamDNATab } from "@/components/orgTabs"
+import { PlaybooksTab, ObjectionsTab, KnowledgeTab, TeamDNATab } from "@/components/orgTabs"
 import { useT } from "@/i18n/LocaleProvider"
 
-type Tab = "playbooks" | "objections" | "knowledge" | "voice" | "dna"
+type Tab = "playbooks" | "objections" | "knowledge" | "dna"
 // `featured` marks Team DNA. It generates a whole playbook from your best rep —
 // the highest-leverage thing on this page — so it leads the row and wears a
 // dotted outline instead of sitting among four identical siblings. The outline
@@ -23,7 +23,6 @@ const TAB_KEYS: { key: Tab; featured?: boolean }[] = [
     { key: "playbooks"  },
     { key: "objections" },
     { key: "knowledge"  },
-    { key: "voice"      },
 ]
 
 function PlaybookPageInner() {
@@ -94,9 +93,8 @@ function PlaybookPageInner() {
             </div>
 
             {tab === "playbooks"  && <PlaybooksTab orgId={orgId} />}
-            {tab === "objections" && <ObjectionsTab orgId={orgId} />}
+            {tab === "objections" && <ObjectionsTab orgId={orgId} org={org} onSaved={reload} />}
             {tab === "knowledge"  && <KnowledgeTab orgId={orgId} />}
-            {tab === "voice"      && <VoiceTab org={org} onSaved={reload} />}
             {tab === "dna"        && <TeamDNATab orgId={orgId} org={org} onApplied={reload} />}
         </div>
     )
