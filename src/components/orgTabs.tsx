@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { useEffect, useState, useCallback, useRef } from "react"
 import { embedObjections, reindexObjections, ingestKnowledgeInline, ingestKnowledgeInlineVerbose, reindexKnowledgeVerbose, replaceKnowledgeText, amendKnowledge, applyProposal, type AmendProposal, approvedResponsesFrom, guidanceOf, normalizeSeverity } from "@/lib/orgBrain"
-import { supabase } from "@/lib/supabase"
+import { supabase, askClaude, type ChatTurn } from "@/lib/supabase"
+import { AskPanel } from "@/components/AskPanel"
 import { SearchBox } from "@/components/SearchBox"
 import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
 import { rollUpGuardrails } from "@/lib/guardrails"
@@ -52,7 +53,7 @@ interface ExtractedObjection {
 }
 
 export type AdminTab = "settings" | "knowledge" | "objections" | "playbooks" | "practice" | "members" | "billing" | "dna"
-type DNAStep = "list" | "collect" | "analyzing" | "review"
+type DNAStep = "list" | "compare" | "collect" | "analyzing" | "review"
 // "tone" left with D-416 — Team DNA can still read a rep's style, but there
 // is nowhere for it to land and nothing that reads it.
 type DNAReviewTab = "flow" | "objections" | "phrases"
@@ -3014,6 +3015,70 @@ function EvidenceBlock({ evidence, sources }: { evidence?: DNAEvidenceRef[]; sou
 
 /// Word counter that eases toward the total while the model reads — the wait
 /// is 30–60 s, and a number that moves reads as work, not as a hang.
+/// Everything a question about a profile can be answered from: the extracted
+/// profile plus the transcripts it came from, every line numbered the same way
+/// the extractor numbered them, so an answer can cite "T1·L12" and the manager
+/// can find it. `prefix` keeps two profiles apart in a comparison ("A-T1·L12").
+/// Transcripts are trimmed to a character budget; when that happens the
+/// context says so, so the model doesn't claim the missing part doesn't exist.
+function dnaAskContext(label: string, result: DNAResult, sources: StoredTranscript[], prefix: string, budget: number): string {
+    const out: string[] = [`=== PROFILE ${prefix ? prefix + " " : ""}— ${label} ===`, `Summary: ${result.summary ?? ""}`]
+    if (result.tone?.descriptors?.length) out.push(`Tone: ${result.tone.descriptors.join(", ")}`)
+    const stages = result.conversation_flow?.stages ?? []
+    if (stages.length) {
+        out.push(`Call flow (${result.conversation_flow.methodology_guess ?? "custom"}):`)
+        stages.forEach((st, i) => out.push(`  ${i + 1}. ${st.name}: ${st.description}${st.required_items?.length ? ` [covers: ${st.required_items.join("; ")}]` : ""}`))
+    }
+    for (const o of result.objections ?? []) out.push(`Objection: ${o.objection} → ${o.expert_response_summary}${o.example_quote ? ` (said: "${o.example_quote}")` : ""}`)
+    for (const ph of result.power_phrases ?? []) out.push(`Power phrase: "${ph.phrase}" (${ph.context})`)
+    for (const av of result.phrases_to_avoid ?? []) out.push(`Avoids: ${av.pattern} → instead: ${av.better_alternative}`)
+    const per = Math.floor(budget / Math.max(1, sources.length))
+    sources.forEach((src, i) => {
+        const tag = `${prefix ? prefix + "-" : ""}T${i + 1}`
+        let body = src.text.split("\n").map((l, n) => `${tag}·L${n + 1}: ${l}`).join("\n")
+        let note = ""
+        if (body.length > per) { body = body.slice(0, per); note = "\n[transcript cut here for length — the rest was not provided]" }
+        out.push(`--- ${tag}${src.rep_label ? ` (${src.rep_label})` : ""}, expert speaker "${src.expert_speaker}" ---\n${body}${note}`)
+    })
+    return out.join("\n")
+}
+
+const DNA_ASK_RULES =
+    "Answer only from the material below. When you point to something said in a call, cite it like (T1·L12) — " +
+    "use the exact tags in the material. If the material doesn't show it, say so plainly; never invent. " +
+    "Be short and concrete, in plain words a busy sales manager reads in 20 seconds."
+
+function askDNA(label: string, result: DNAResult, sources: StoredTranscript[], question: string, history: ChatTurn[]) {
+    const system =
+        `You are a sharp sales-coaching analyst. A manager is asking about the Team DNA profile of ${label}: ` +
+        `what this person does on real calls, extracted from their transcripts. ${DNA_ASK_RULES}\n\n` +
+        dnaAskContext(label, result, sources, "", 360_000)
+    return askClaude(system, question, history)
+}
+
+function askDNACompare(a: DNAProfileRow, aLabel: string, b: DNAProfileRow, bLabel: string, question: string, history: ChatTurn[]) {
+    const system =
+        `You are a sharp sales-coaching analyst. A manager is comparing two Team DNA profiles: A = ${aLabel} and B = ${bLabel}. ` +
+        `Name the people, not the letters, in your answer. Say which differences are clear in the material and which are thin. ${DNA_ASK_RULES}\n\n` +
+        dnaAskContext(aLabel, a.result, a.transcripts ?? [], "A", 180_000) + "\n\n" +
+        dnaAskContext(bLabel, b.result, b.transcripts ?? [], "B", 180_000)
+    return askClaude(system, question, history)
+}
+
+
+/// One labelled row of the side-by-side comparison.
+function CompareRow({ label, a, b }: { label: string; a: React.ReactNode; b: React.ReactNode }) {
+    return (
+        <div className="space-y-2">
+            <p className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold">{label}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-3 min-w-0">{a}</div>
+                <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-3 min-w-0">{b}</div>
+            </div>
+        </div>
+    )
+}
+
 function AnalyzingWords({ total }: { total: number }) {
     const { t, intl } = useLocale()
     const [n, setN] = useState(0)
@@ -3066,6 +3131,9 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
     // Which row the open review belongs to — persistApplied and a re-analysis
     // must land on that row, not on whatever the name field currently says.
     const [currentExpertKey, setCurrentExpertKey] = useState("")
+    // The two profiles being compared (D-460), by expert_name.
+    const [compareA, setCompareA] = useState<string | null>(null)
+    const [compareB, setCompareB] = useState<string | null>(null)
     // Staggered reveal after analysis: the real counts, never invented ones.
     const [revealLines, setRevealLines]     = useState<string[]>([])
     const [analyzingWords, setAnalyzingWords] = useState(0)
@@ -3441,7 +3509,86 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         )
     }
 
-    if (step === "list") {
+    // A profile can vanish under a comparison (re-analyzed under another
+    // name); then the list renders instead, rather than a half-empty grid.
+    const comparePa = profiles.find(p => p.expert_name === compareA)
+    const comparePb = profiles.find(p => p.expert_name === compareB)
+    if (step === "compare" && comparePa && comparePb) {
+        const pa = comparePa, pb = comparePb
+        const la = pa.expert_name || t.tabs.dna.unnamedExpert
+        const lb = pb.expert_name || t.tabs.dna.unnamedExpert
+        const toneKey = (d: string) => d.trim().toLowerCase()
+        const toneB = new Set((pb.result.tone?.descriptors ?? []).map(toneKey))
+        const toneA = new Set((pa.result.tone?.descriptors ?? []).map(toneKey))
+        const tone = (p: DNAProfileRow, other: Set<string>) => (
+            <div className="flex flex-wrap gap-1.5">
+                {(p.result.tone?.descriptors ?? []).map(d => (
+                    <span key={d} className={`px-2 py-0.5 rounded-full text-[11px] border ${other.has(toneKey(d))
+                        ? "bg-teal-50 text-[var(--color-accent)] border-teal-300 font-semibold"
+                        : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)]"}`}>
+                        {d}{other.has(toneKey(d)) && <> · {t.tabs.dna.compareShared}</>}
+                    </span>
+                ))}
+            </div>
+        )
+        const listOr = (items: React.ReactNode[]) => items.length
+            ? <ul className="space-y-1.5">{items}</ul>
+            : <p className="text-xs text-[var(--color-muted)]">{t.tabs.dna.compareNone}</p>
+        const flow = (p: DNAProfileRow) => listOr((p.result.conversation_flow?.stages ?? []).map((st, i) => (
+            <li key={i} className="text-xs text-[var(--color-text)] flex gap-2">
+                <span className="font-mono text-[10px] text-[var(--color-accent)] mt-0.5">{i + 1}</span>
+                <span><span className="font-medium">{st.name}</span> <span className="text-[var(--color-text-secondary)]">· {st.description}</span></span>
+            </li>
+        )))
+        const objections = (p: DNAProfileRow) => listOr((p.result.objections ?? []).map((o, i) => (
+            <li key={i} className="text-xs">
+                <p className="text-[var(--color-text)] font-medium">{o.objection}</p>
+                <p className="text-[var(--color-text-secondary)]">{o.expert_response_summary}</p>
+            </li>
+        )))
+        const phrases = (p: DNAProfileRow) => listOr((p.result.power_phrases ?? []).map((ph, i) => (
+            <li key={i} className="text-xs text-[var(--color-text)]">"{ph.phrase}"</li>
+        )))
+        const material = (p: DNAProfileRow) => (
+            <p className="text-xs text-[var(--color-text-secondary)]">
+                {t.tabs.dna.profileMeta((p.transcripts ?? []).length, (p.transcripts ?? []).reduce((n, s) => n + countWords(s.text), 0).toLocaleString(intl))}
+            </p>
+        )
+        const person = (label: string) => (
+            <div className="flex items-center gap-2 min-w-0">
+                <div className="w-9 h-9 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-xs font-semibold text-[var(--color-accent)] flex-shrink-0">{dnaInitials(label)}</div>
+                <p className="text-sm font-semibold text-[var(--color-text)] truncate">{label}</p>
+            </div>
+        )
+        return (
+            <div className="space-y-4">
+                <div className={CARD + " space-y-4"}>
+                    <div className="flex items-start justify-between gap-4">
+                        <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.compareTitle}</p>
+                        <button onClick={() => setStep("list")}
+                            className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] whitespace-nowrap flex-shrink-0">
+                            {t.tabs.dna.allProfiles}
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{person(la)}{person(lb)}</div>
+                    <CompareRow label={t.tabs.dna.compareMaterial} a={material(pa)} b={material(pb)} />
+                    <CompareRow label={t.tabs.dna.compareTone} a={tone(pa, toneB)} b={tone(pb, toneA)} />
+                    <CompareRow label={t.tabs.dna.compareFlow} a={flow(pa)} b={flow(pb)} />
+                    <CompareRow label={t.tabs.dna.compareObjections} a={objections(pa)} b={objections(pb)} />
+                    <CompareRow label={t.tabs.dna.comparePhrases} a={phrases(pa)} b={phrases(pb)} />
+                </div>
+                <AskPanel
+                    key={`${pa.expert_name}|${pb.expert_name}`}
+                    heading={t.tabs.dna.compareAskHeading}
+                    placeholder={t.tabs.dna.askPlaceholder}
+                    suggestions={t.tabs.dna.compareSuggestions(la, lb)}
+                    onAsk={(q, h) => askDNACompare(pa, la, pb, lb, q, h)}
+                />
+            </div>
+        )
+    }
+
+    if (step === "list" || step === "compare") {
         return (
             <div className="space-y-4">
                 <div className={CARD + " flex items-start justify-between gap-4"}>
@@ -3451,6 +3598,33 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                     </div>
                     <button onClick={startNewProfile} className={BTN_PRIMARY + " flex-shrink-0"}>{t.tabs.dna.newProfile}</button>
                 </div>
+                {profiles.length >= 2 && (() => {
+                    const a = compareA ?? profiles[0].expert_name
+                    const b = compareB ?? profiles[1].expert_name
+                    const nameOf = (k: string) => k || t.tabs.dna.unnamedExpert
+                    return (
+                        <div className={CARD + " space-y-3"}>
+                            <div>
+                                <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.compareTitle}</p>
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.tabs.dna.compareSub}</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <select className={INPUT + " sm:w-auto sm:flex-1"} value={a} onChange={e => setCompareA(e.target.value)}>
+                                    {profiles.map(p => <option key={p.expert_name} value={p.expert_name}>{nameOf(p.expert_name)}</option>)}
+                                </select>
+                                <span className="text-xs text-[var(--color-muted)]">{t.tabs.dna.compareWith}</span>
+                                <select className={INPUT + " sm:w-auto sm:flex-1"} value={b} onChange={e => setCompareB(e.target.value)}>
+                                    {profiles.map(p => <option key={p.expert_name} value={p.expert_name}>{nameOf(p.expert_name)}</option>)}
+                                </select>
+                                <button className={BTN_PRIMARY} disabled={a === b}
+                                    onClick={() => { setCompareA(a); setCompareB(b); setStep("compare") }}>
+                                    {t.tabs.dna.compareGo}
+                                </button>
+                            </div>
+                            {a === b && <p className="text-xs text-amber-700">{t.tabs.dna.compareSame}</p>}
+                        </div>
+                    )
+                })()}
                 <div className="space-y-2">
                     {profiles.map(p => {
                         const words = (p.transcripts ?? []).reduce((n, s) => n + countWords(s.text), 0)
@@ -3552,6 +3726,13 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                         </div>
                     )}
                 </div>
+                <AskPanel
+                    key={currentExpertKey + (analyzedAt ?? "")}
+                    heading={t.tabs.dna.askHeading}
+                    placeholder={t.tabs.dna.askPlaceholder}
+                    suggestions={t.tabs.dna.askSuggestions}
+                    onAsk={(q, h) => askDNA(profileName, dnaResult, analyzedTranscripts, q, h)}
+                />
                 <div className="border-b border-[var(--color-border)] flex gap-1">
                     {reviewTabs.map(rt => (
                         <button key={rt.key} onClick={() => setReviewTab(rt.key)}
