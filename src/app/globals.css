@@ -103,9 +103,30 @@ html[data-skin="dark"] .border-red-200,
 html[data-skin="dark"] .border-red-300     { border-color: #5A2A2A; }
 html[data-skin="dark"] .shadow-sm          { box-shadow: none; }
 
-/* D-461 — Team DNA reading screen: the scan line is decoration while the AI reads */
+/* D-461/D-462 — Team DNA "lab" tokens: follow the skin, light by default.
+   The scan line is decoration while the AI reads. */
+:root {
+  --dna-bg: #FFFFFF; --dna-surface: #F6FAF8; --dna-line: #E2EBE7;
+  --dna-text: #0E182B; --dna-muted: #5A6B7D;
+  --dna-glow: #0C9482; --dna-glow-text: #076B5E;
+  --dna-glow-soft: rgba(12,148,130,.09); --dna-glow-line: rgba(12,148,130,.45);
+  --dna-gold: #9A6200; --dna-gold-soft: rgba(214,158,46,.13);
+  --dna-tone: #5B45C2; --dna-tone-soft: rgba(107,79,216,.10);
+  --dna-cta: #076B5E; --dna-cta-ink: #FFFFFF;
+}
+html[data-skin="dark"] {
+  --dna-bg: #0A1220; --dna-surface: #0E182B; --dna-line: #24344D;
+  --dna-text: #EDF2F1; --dna-muted: #94A2AB;
+  --dna-glow: #37E4C8; --dna-glow-text: #37E4C8;
+  --dna-glow-soft: rgba(55,228,200,.10); --dna-glow-line: rgba(55,228,200,.5);
+  --dna-gold: #E2B15A; --dna-gold-soft: rgba(226,177,90,.14);
+  --dna-tone: #C7B8FF; --dna-tone-soft: rgba(180,160,255,.14);
+  --dna-cta: #37E4C8; --dna-cta-ink: #06221C;
+}
 @keyframes dna-scan-move { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
-.dna-scan { position: absolute; left: 0; right: 0; height: 2px; top: 0; pointer-events: none;
-  background: linear-gradient(90deg, transparent, #37E4C8, transparent); box-shadow: 0 0 12px #37E4C8;
+.dna-scan { position: sticky; display: block; left: 0; right: 0; height: 2px; top: 0; margin-bottom: -2px; pointer-events: none; z-index: 1;
+  background: linear-gradient(90deg, transparent, var(--dna-glow), transparent); box-shadow: 0 0 12px var(--dna-glow);
   animation: dna-scan-move 2.4s linear infinite; }
-@media (prefers-reduced-motion: reduce) { .dna-scan { animation: none; display: none; } }
+@keyframes dna-find-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.dna-find { animation: dna-find-in .35s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .dna-scan { display: none; } .dna-find { animation: none; } }

@@ -7,7 +7,7 @@ import { supabase, askClaude, type ChatTurn } from "@/lib/supabase"
 import { AskPanel } from "@/components/AskPanel"
 import {
     DnaLab, DnaDropZone, DnaCallPicker, DnaPreRead, DnaReading, DnaProfileHead, DnaStatTile, DnaStrand,
-    DnaListCard, DnaEvidenceItem, DnaAsk, DnaApplyDrawer, DnaCompareGrid, DnaCopyThisWeek, dnaStats,
+    DnaSection, DnaObjectionRow, DnaPhraseCard, LAB, DnaAsk, DnaApplyDrawer, DnaCompareGrid, DnaCopyThisWeek, dnaStats,
     type ApplyOption, type PickerCall,
 } from "@/components/dnaViews"
 import { SearchBox } from "@/components/SearchBox"
@@ -2921,7 +2921,7 @@ function TranscriptCard({ index, entry, onChange, onRemove, onCollapse }: {
 
 /// Shape of the `transcripts` jsonb column on org_team_dna. Snake_case on the
 /// wire like every other row shape; the camelCase TranscriptEntry is UI state.
-interface StoredTranscript { text: string; expert_speaker: string; rep_label: string | null }
+interface StoredTranscript { text: string; expert_speaker: string; rep_label: string | null; title?: string | null }
 
 function freshEntry(): TranscriptEntry {
     return { id: crypto.randomUUID(), text: "", expertSpeaker: "", repLabel: "", detectedSpeakers: [] }
@@ -3253,6 +3253,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
             ? stored.map(s => ({
                 id: crypto.randomUUID(), text: s.text, expertSpeaker: s.expert_speaker,
                 repLabel: s.rep_label ?? "", detectedSpeakers: detectSpeakers(s.text),
+                source: s.title ?? undefined,
             }))
             : [freshEntry()])
         setExpertName(row.expert_name ?? "")
@@ -3442,7 +3443,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         setAnalyzingWords(words)
         setRevealLines([])
         setReadingResult(null)
-        setReadingSources(valid.map(x => ({ text: x.text, expert_speaker: x.expertSpeaker, rep_label: x.repLabel.trim() || x.source || null })))
+        setReadingSources(valid.map(x => ({ text: x.text, expert_speaker: x.expertSpeaker, rep_label: x.repLabel.trim() || null, title: x.source || null })))
         setStep("analyzing")
         try {
             const { data: { session } } = await supabase.auth.getSession()
@@ -3461,7 +3462,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
             if (!res.ok) { setError(errStr((json as Record<string, unknown>).error) || t.tabs.dna.analysisFailed); setStep("collect"); return }
             const result = json as DNAResult
             const stored: StoredTranscript[] = valid.map(t =>
-                ({ text: t.text, expert_speaker: t.expertSpeaker, rep_label: t.repLabel.trim() || null }))
+                ({ text: t.text, expert_speaker: t.expertSpeaker, rep_label: t.repLabel.trim() || null, title: t.source || null }))
             const now = new Date().toISOString()
 
             // One row per person: analyzing the same name again replaces
@@ -3759,7 +3760,14 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                             options={applyOptions} busy={applyBusy} doneMsg={applyDone || (flowLanded ? (flowLanded === "draft" ? t.tabs.dna.flowSavedDraft : t.tabs.dna.flowSavedActive) : "")}
                             onApply={runApply} onPickItems={() => setShowDetail(true)} />
                     )}
-                    <p className="text-[var(--color-text)] text-sm leading-relaxed">{dnaResult.summary}</p>
+                    <p className="text-[var(--color-text)] text-[15px] leading-relaxed max-w-3xl">{dnaResult.summary}</p>
+                    <div className="rounded-xl border border-[var(--color-accent)]/40 bg-[var(--color-accent-subtle)]/40 p-3.5 space-y-2">
+                        <p className="font-display text-sm font-bold text-[var(--color-text)]">{t.tabs.dna.askHeading}</p>
+                        <DnaAsk key={currentExpertKey + (analyzedAt ?? "")}
+                            placeholder={t.tabs.dna.askPlaceholderName(profileName)}
+                            suggestions={t.tabs.dna.askSuggestions}
+                            onAsk={(q, h) => askDNA(profileName, dnaResult, analyzedTranscripts, q, h)} />
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                         <DnaStatTile label={t.tabs.dna.statTalksLabel} value={st.talkPct} small="%"
                             note={teamTalk !== null ? t.tabs.dna.teamTalkNote(teamTalk, st.talkPct) : undefined} />
@@ -3768,25 +3776,27 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                         <DnaStatTile label={t.tabs.dna.statObjectionsLabel} value={dnaResult.objections.length}
                             note={t.tabs.dna.objInCalls(analyzedTranscripts.length)} />
                     </div>
-                    <DnaStrand stages={stages} sources={analyzedTranscripts} />
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                        <DnaListCard title={t.tabs.dna.objectionsHandled} count={t.tabs.dna.objInCalls(analyzedTranscripts.length)}>
-                            {dnaResult.objections.length === 0 && <p className="text-xs text-[var(--color-muted)]">{t.tabs.dna.compareNone}</p>}
+                    {stages.length > 0 && (
+                        <DnaSection title={t.tabs.dna.howCallRuns} count={t.tabs.dna.nStages(stages.length)} sub={dnaResult.conversation_flow?.methodology_guess || undefined}>
+                            <DnaStrand stages={stages} sources={analyzedTranscripts} />
+                        </DnaSection>
+                    )}
+                    <DnaSection title={t.tabs.dna.objectionsHandled} count={t.tabs.dna.objInCalls(analyzedTranscripts.length)}>
+                        {dnaResult.objections.length === 0 && <p className="text-sm text-[var(--color-muted)]">{t.tabs.dna.compareNone}</p>}
+                        <div className="grid gap-2.5">
                             {dnaResult.objections.map((o, i) => (
-                                <DnaEvidenceItem key={i} quote={`"${o.objection}"`} body={o.expert_response_summary} evidence={o.evidence} sources={analyzedTranscripts} />
+                                <DnaObjectionRow key={i} said={o.objection} answer={o.expert_response_summary} evidence={o.evidence} sources={analyzedTranscripts} />
                             ))}
-                        </DnaListCard>
-                        <DnaListCard title={t.tabs.dna.phrasesRepeated} count={String(dnaResult.power_phrases.length)}>
-                            {dnaResult.power_phrases.length === 0 && <p className="text-xs text-[var(--color-muted)]">{t.tabs.dna.compareNone}</p>}
+                        </div>
+                    </DnaSection>
+                    <DnaSection title={t.tabs.dna.phrasesRepeated} count={String(dnaResult.power_phrases.length)}>
+                        {dnaResult.power_phrases.length === 0 && <p className="text-sm text-[var(--color-muted)]">{t.tabs.dna.compareNone}</p>}
+                        <div className="grid md:grid-cols-2 gap-2.5">
                             {dnaResult.power_phrases.map((ph, i) => (
-                                <DnaEvidenceItem key={i} quote={`"${ph.phrase}"`} body={ph.context} evidence={ph.evidence} sources={analyzedTranscripts} />
+                                <DnaPhraseCard key={i} phrase={ph.phrase} why={ph.context} evidence={ph.evidence} sources={analyzedTranscripts} />
                             ))}
-                        </DnaListCard>
-                    </div>
-                    <DnaAsk key={currentExpertKey + (analyzedAt ?? "")}
-                        placeholder={t.tabs.dna.askPlaceholderName(profileName)}
-                        suggestions={t.tabs.dna.askSuggestions}
-                        onAsk={(q, h) => askDNA(profileName, dnaResult, analyzedTranscripts, q, h)} />
+                        </div>
+                    </DnaSection>
                 </div>
 
                 {!showDetail && (
@@ -4018,6 +4028,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         words: countWords(x.text),
         ok: !transcriptIssue(x.text) && !!x.expertSpeaker,
     }))
+    const pendingChip = chipsForDrop.find(c => !c.ok) ?? null
     const pickerCalls: PickerCall[] | null = platformCalls === null ? null : platformCalls.map(c => ({
         id: c.id,
         title: `${memberName.get(c.user_id) || t.common.rep} · ${c.session_title || t.tabs.dna.untitledCall}`,
@@ -4047,45 +4058,49 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
             </div>
 
             <DnaLab>
-                <DnaDropZone
-                    chips={chipsForDrop}
-                    accept={TRANSCRIPT_TEXT_EXTENSIONS.map(x => "." + x).join(",")}
-                    busy={dropBusy} error={dropError}
-                    onFiles={addFiles}
-                    onPaste={openPaste}
-                    onOpenChip={id => setOpenId(id)}
-                    onRemoveChip={id => {
-                        removeTranscript(id)
-                        const callId = Array.from(callEntry.entries()).find(([, e]) => e === id)?.[0]
-                        if (callId) {
-                            setUsedCallIds(prev => { const x = new Set(prev); x.delete(callId); return x })
-                            setCallEntry(prev => { const x = new Map(prev); x.delete(callId); return x })
-                        }
-                    }}
-                />
-                <DnaCallPicker calls={pickerCalls} busy={loadingCallId !== null}
-                    note={org.visibility !== "full_transcripts" ? t.tabs.dna.ownCallsOnly : undefined}
-                    error={callError} onToggle={toggleCall} />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+                    <DnaDropZone
+                        chips={chipsForDrop}
+                        accept={TRANSCRIPT_TEXT_EXTENSIONS.map(x => "." + x).join(",")}
+                        busy={dropBusy} error={dropError}
+                        onFiles={addFiles}
+                        onPaste={openPaste}
+                        onOpenChip={id => setOpenId(id)}
+                        onRemoveChip={id => {
+                            removeTranscript(id)
+                            const callId = Array.from(callEntry.entries()).find(([, e]) => e === id)?.[0]
+                            if (callId) {
+                                setUsedCallIds(prev => { const x = new Set(prev); x.delete(callId); return x })
+                                setCallEntry(prev => { const x = new Map(prev); x.delete(callId); return x })
+                            }
+                        }}
+                    />
+                    <DnaCallPicker calls={pickerCalls} busy={loadingCallId !== null}
+                        note={org.visibility !== "full_transcripts" ? t.tabs.dna.ownCallsOnly : undefined}
+                        error={callError} onToggle={toggleCall} />
+                </div>
                 {completed.length > 0 && (
                     <DnaPreRead stats={dnaStats(completed.map(x => ({ text: x.text, expert_speaker: x.expertSpeaker })))} expert={expertLabel || t.tabs.dna.theExpert} />
                 )}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                    <span className="font-mono text-[11.5px]" style={{ color: "#94A2AB" }}>
-                        {readyToAnalyze
-                            ? t.tabs.dna.instantNote
-                            : t.tabs.dna.progressWords(completedWords.toLocaleString(intl), MIN_DNA_WORDS.toLocaleString(intl))}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t" style={{ borderColor: LAB.line }}>
+                    <span className="text-[13px]" style={{ color: pendingChip ? LAB.gold : LAB.muted }}>
+                        {pendingChip
+                            ? t.tabs.dna.needsSpeakerHint(pendingChip.label)
+                            : readyToAnalyze
+                                ? t.tabs.dna.instantNote
+                                : t.tabs.dna.progressWords(completedWords.toLocaleString(intl), MIN_DNA_WORDS.toLocaleString(intl))}
                     </span>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <label className="font-mono text-[11.5px] flex items-center gap-2" style={{ color: "#94A2AB" }}>
+                    <div className="flex flex-wrap items-center gap-3 ml-auto">
+                        <label className="text-[13px] font-semibold flex items-center gap-2" style={{ color: LAB.muted }}>
                             {t.tabs.dna.sellerLabel}
                             <input value={expertName} onChange={e => setExpertName(e.target.value)}
                                 placeholder={t.tabs.dna.playbookNamePlaceholder}
-                                className="bg-transparent border-b font-body text-sm w-40 focus:outline-none"
-                                style={{ borderColor: "#24344D", color: "#37E4C8" }} />
+                                className="bg-transparent border rounded-lg px-2.5 py-2 text-sm w-52 focus:outline-none"
+                                style={{ borderColor: LAB.line, color: LAB.text }} />
                         </label>
                         <button onClick={analyze} disabled={!readyToAnalyze}
-                            className="px-4 py-2.5 rounded-lg text-sm font-bold disabled:opacity-40"
-                            style={{ background: "#37E4C8", color: "#06221C" }}>
+                            className="px-5 py-2.5 rounded-lg text-sm font-bold disabled:opacity-40"
+                            style={{ background: LAB.cta, color: LAB.ctaInk }}>
                             {expertName.trim() ? t.tabs.dna.readDna(expertName.trim()) : t.tabs.dna.readDnaNoName}
                         </button>
                     </div>

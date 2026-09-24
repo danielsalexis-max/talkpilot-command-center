@@ -1,10 +1,11 @@
 "use client"
 
-// Team DNA, as the mockup drew it (D-461): a dark "lab" where the call goes in
-// and the machine is seen reading it, then a light profile you explore before
-// you apply anything. Pure views: TeamDNATab in orgTabs.tsx owns the state,
-// the Supabase calls and the model call; everything here renders what it is
-// given and reports clicks back.
+// Team DNA, as the mockup drew it (D-461, reworked D-462): a "lab" where the
+// call goes in and the machine is seen reading it, then a profile you explore
+// before you apply anything. The lab follows the Command Center skin (light or
+// dark) through the --dna-* tokens in globals.css. Pure views: TeamDNATab in
+// orgTabs.tsx owns the state, the Supabase calls and the model call;
+// everything here renders what it is given and reports clicks back.
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useLocale } from "@/i18n/LocaleProvider"
@@ -13,7 +14,7 @@ import type { ChatTurn } from "@/lib/supabase"
 // ─── Shared shapes (mirrors of the ones in orgTabs.tsx) ─────────────────────
 
 export interface DnaEvidence { transcript: number; lines: number[] }
-export interface DnaSource { text: string; expert_speaker: string; rep_label: string | null }
+export interface DnaSource { text: string; expert_speaker: string; rep_label: string | null; title?: string | null }
 export interface DnaResultView {
     summary: string
     tone: { descriptors: string[]; evidence: string }
@@ -76,25 +77,31 @@ export function initialsOf(name: string): string {
     return parts.slice(0, 2).map(p => p[0]!.toUpperCase()).join("")
 }
 
-// ─── Lab shell (always dark, like the mockup) ────────────────────────────────
+/// A source's short name for tabs and evidence: the call's title without the
+/// rep's name in front (two calls by the same rep otherwise read identically).
+export function sourceTitle(s: DnaSource, i: number, d: { callN: (n: number) => string }): string {
+    const raw = (s.title || "").trim()
+    const rep = (s.rep_label || "").trim()
+    const title = rep && raw.startsWith(rep + " · ") ? raw.slice(rep.length + 3) : raw
+    return title ? `${d.callN(i + 1)} · ${title}` : d.callN(i + 1)
+}
 
-const LAB = {
-    bg: "#0A1220", surface: "#0E182B", line: "#24344D", text: "#EDF2F1", muted: "#94A2AB",
-    glow: "#37E4C8", gold: "#E2B15A",
+// ─── Lab shell (follows the skin through --dna-* tokens) ────────────────────
+
+export const LAB = {
+    bg: "var(--dna-bg)", surface: "var(--dna-surface)", line: "var(--dna-line)",
+    text: "var(--dna-text)", muted: "var(--dna-muted)",
+    glow: "var(--dna-glow)", glowText: "var(--dna-glow-text)", glowSoft: "var(--dna-glow-soft)", glowLine: "var(--dna-glow-line)",
+    gold: "var(--dna-gold)", goldSoft: "var(--dna-gold-soft)",
+    cta: "var(--dna-cta)", ctaInk: "var(--dna-cta-ink)",
 }
 
 export function DnaLab({ children }: { children: React.ReactNode }) {
     return (
-        <div className="rounded-2xl overflow-hidden border" style={{ background: LAB.bg, color: LAB.text, borderColor: LAB.line, colorScheme: "dark" }}>
-            <div className="p-5 sm:p-6 space-y-4">{children}</div>
+        <div className="rounded-2xl overflow-hidden border" style={{ background: LAB.bg, color: LAB.text, borderColor: LAB.line }}>
+            <div className="p-4 sm:p-5 space-y-4">{children}</div>
         </div>
     )
-}
-
-function labBtn(primary: boolean) {
-    return primary
-        ? "px-4 py-2.5 rounded-lg text-sm font-bold transition-opacity disabled:opacity-40"
-        : "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-40"
 }
 
 // ─── 1 · Drop ────────────────────────────────────────────────────────────────
@@ -115,34 +122,41 @@ export function DnaDropZone({ chips, accept, busy, error, onFiles, onPaste, onOp
     const d = t.tabs.dna
     const inputRef = useRef<HTMLInputElement>(null)
     const [over, setOver] = useState(false)
+    const pill = "rounded-full border text-xs font-semibold px-3 py-1.5 transition-colors disabled:opacity-40"
     return (
         <div
             onDragOver={e => { e.preventDefault(); setOver(true) }}
             onDragLeave={() => setOver(false)}
             onDrop={e => { e.preventDefault(); setOver(false); const fs = Array.from(e.dataTransfer.files ?? []); if (fs.length) onFiles(fs) }}
-            className="rounded-2xl border-[1.5px] border-dashed px-5 py-9 text-center grid gap-3 justify-items-center transition-colors"
-            style={{ borderColor: over ? LAB.glow : LAB.line, background: over ? "rgba(55,228,200,.07)" : "linear-gradient(180deg,rgba(55,228,200,.04),transparent)" }}>
+            className="rounded-xl border-[1.5px] border-dashed px-5 py-6 text-center flex flex-col items-center justify-center gap-3 transition-colors h-full min-h-[240px]"
+            style={{ borderColor: over ? LAB.glow : LAB.line, background: over ? LAB.glowSoft : LAB.surface }}>
             <input ref={inputRef} type="file" multiple accept={accept} className="hidden"
                 onChange={e => { const fs = Array.from(e.target.files ?? []); e.target.value = ""; if (fs.length) onFiles(fs) }} />
-            <p className="font-display text-xl sm:text-[22px] font-bold">{d.dropTitle}</p>
-            <p className="text-sm max-w-[46ch]" style={{ color: LAB.muted }}>{busy ? d.reading : d.dropSub}</p>
+            <p className="font-display text-lg font-bold leading-snug">{d.dropTitle}</p>
+            <p className="text-[13px] max-w-[40ch] leading-relaxed" style={{ color: LAB.muted }}>{busy ? d.reading : d.dropSub}</p>
+            {chips.length > 0 && (
+                <div className="flex flex-col gap-1.5 w-full max-w-sm">
+                    {chips.map(c => (
+                        <div key={c.id} className="flex items-center gap-2 rounded-lg border pl-3 pr-1.5 py-1.5 text-left"
+                            style={{ borderColor: c.ok ? LAB.glowLine : LAB.gold, background: c.ok ? LAB.glowSoft : LAB.goldSoft }}>
+                            <button onClick={() => onOpenChip(c.id)} className="flex-1 min-w-0 flex items-baseline gap-2" title={c.label}>
+                                <span className="text-[13px] font-semibold truncate">{c.label}</span>
+                                <span className="font-mono text-[11px] whitespace-nowrap" style={{ color: c.ok ? LAB.glowText : LAB.gold }}>
+                                    {c.ok ? d.nWords(c.words.toLocaleString(intl)) : d.chipNeedsSpeaker}
+                                </span>
+                            </button>
+                            <button onClick={() => onRemoveChip(c.id)} aria-label={t.common.remove}
+                                className="w-6 h-6 rounded grid place-items-center text-sm opacity-60 hover:opacity-100">×</button>
+                        </div>
+                    ))}
+                </div>
+            )}
             <div className="flex flex-wrap gap-2 justify-center">
-                {chips.map(c => (
-                    <span key={c.id} className="inline-flex items-center gap-1.5 rounded-full border font-mono text-[11.5px] pl-2.5 pr-1.5 py-1"
-                        style={{ borderColor: c.ok ? "rgba(55,228,200,.5)" : LAB.line, color: c.ok ? LAB.glow : LAB.muted }}>
-                        <button onClick={() => onOpenChip(c.id)} className="truncate max-w-[16rem]" title={c.label}>
-                            {c.label} · {d.nWords(c.words.toLocaleString(intl))}
-                        </button>
-                        <button onClick={() => onRemoveChip(c.id)} aria-label={t.common.remove} className="px-1 opacity-70 hover:opacity-100">×</button>
-                    </span>
-                ))}
-                <button onClick={() => inputRef.current?.click()} disabled={busy}
-                    className="rounded-full border font-mono text-[11.5px] px-2.5 py-1 hover:opacity-90"
-                    style={{ borderColor: LAB.line, color: LAB.muted }}>
+                <button onClick={() => inputRef.current?.click()} disabled={busy} className={pill}
+                    style={{ borderColor: LAB.glowLine, color: LAB.glowText }}>
                     {chips.length ? d.addAnotherCall : d.chooseFile}
                 </button>
-                <button onClick={onPaste} className="rounded-full border font-mono text-[11.5px] px-2.5 py-1 hover:opacity-90"
-                    style={{ borderColor: LAB.line, color: LAB.muted }}>
+                <button onClick={onPaste} className={pill} style={{ borderColor: LAB.line, color: LAB.muted }}>
                     {d.pasteText}
                 </button>
             </div>
@@ -165,10 +179,10 @@ export function DnaCallPicker({ calls, note, error, busy, onToggle }: {
     const { t } = useLocale()
     const d = t.tabs.dna
     return (
-        <div className="rounded-xl border overflow-hidden" style={{ borderColor: LAB.line, background: LAB.surface }}>
-            <div className="px-4 py-2.5 border-b flex flex-wrap items-baseline justify-between gap-2" style={{ borderColor: LAB.line }}>
-                <span className="font-display font-bold text-[14.5px]">{d.platformCalls}</span>
-                <span className="text-xs" style={{ color: LAB.muted }}>{d.platformCallsSub}</span>
+        <div className="rounded-xl border overflow-hidden flex flex-col lg:h-[320px] min-h-0" style={{ borderColor: LAB.line, background: LAB.surface }}>
+            <div className="px-4 py-3 border-b" style={{ borderColor: LAB.line }}>
+                <p className="font-display font-bold text-[14.5px]">{d.platformCalls}</p>
+                <p className="text-xs mt-0.5" style={{ color: LAB.muted }}>{d.platformCallsSub}</p>
             </div>
             {note && <p className="px-4 py-2 text-xs border-b" style={{ color: LAB.gold, borderColor: LAB.line }}>{note}</p>}
             {calls === null ? (
@@ -176,18 +190,20 @@ export function DnaCallPicker({ calls, note, error, busy, onToggle }: {
             ) : calls.length === 0 ? (
                 <p className="px-4 py-3 text-xs" style={{ color: LAB.muted }}>{d.noPlatformCalls}</p>
             ) : (
-                <div className="max-h-64 overflow-y-auto">
+                <div className="flex-1 min-h-0 max-h-64 lg:max-h-none overflow-y-auto">
                     {calls.map(c => (
-                        <div key={c.id} className="grid grid-cols-[1fr_auto] gap-x-3 items-center px-4 py-2.5 border-b last:border-b-0" style={{ borderColor: LAB.line }}>
-                            <span className="text-[13.5px] font-semibold truncate">{c.title}</span>
+                        <div key={c.id} className="flex items-center gap-3 px-4 py-2 border-b last:border-b-0" style={{ borderColor: LAB.line }}>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-[13px] font-semibold truncate" title={c.title}>{c.title}</p>
+                                <p className="font-mono text-[11px]" style={{ color: LAB.muted }}>{c.meta}</p>
+                            </div>
                             <button onClick={() => onToggle(c.id)} disabled={busy && !c.loading}
-                                className="row-span-2 text-xs font-bold px-3 py-1.5 rounded-lg border disabled:opacity-40"
+                                className="text-xs font-bold px-3 py-1.5 rounded-lg border disabled:opacity-40 flex-shrink-0"
                                 style={c.used
-                                    ? { background: "rgba(55,228,200,.14)", borderColor: "rgba(55,228,200,.5)", color: LAB.glow }
+                                    ? { background: LAB.glowSoft, borderColor: LAB.glowLine, color: LAB.glowText }
                                     : { borderColor: LAB.line, color: LAB.text }}>
-                                {c.loading ? d.usingCall : c.used ? d.callInUse : d.useCall}
+                                {c.loading ? d.usingCall : c.used ? `✓ ${d.callInUse}` : d.useCall}
                             </button>
-                            <span className="font-mono text-[11px]" style={{ color: LAB.muted }}>{c.meta}</span>
                         </div>
                     ))}
                 </div>
@@ -203,26 +219,25 @@ export function DnaPreRead({ stats, expert }: { stats: DnaStats; expert: string 
     const { t, intl } = useLocale()
     const d = t.tabs.dna
     const tile = (label: string, value: React.ReactNode, small?: string) => (
-        <div className="rounded-xl border p-3 min-w-0" style={{ background: LAB.surface, borderColor: LAB.line }}>
-            <p className="font-mono text-[10.5px] uppercase tracking-[.1em]" style={{ color: LAB.muted }}>{label}</p>
-            <p className="font-display text-[22px] font-bold mt-1 tabular-nums truncate">
-                {value}{small && <small className="text-xs font-medium ml-1" style={{ color: LAB.muted }}>{small}</small>}
-            </p>
+        <div className="rounded-xl border px-3.5 py-3 min-w-0" style={{ background: LAB.surface, borderColor: LAB.line }}>
+            <p className="text-xs font-semibold truncate" style={{ color: LAB.muted }}>{label}</p>
+            <p className="font-display text-[22px] font-bold mt-0.5 tabular-nums">{value}</p>
+            {small && <p className="text-xs truncate" style={{ color: LAB.muted }} title={small}>{small}</p>}
         </div>
     )
     return (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
             {tile(d.preVoices, stats.voices.length, stats.voices.join(" · "))}
-            {tile(d.preTalks(expert), <>{stats.talkPct}<small className="text-xs">%</small></>)}
+            {tile(d.preTalks(expert), <>{stats.talkPct}<small className="text-sm">%</small></>)}
             {tile(d.preQuestions, stats.questions, d.perTen(stats.per10.toLocaleString(intl)))}
-            {tile(d.preLength, <>~{stats.minutes}<small className="text-xs"> min</small></>)}
+            {tile(d.preLength, <>~{stats.minutes}<small className="text-sm"> min</small></>)}
         </div>
     )
 }
 
 // ─── 2 · Reading ─────────────────────────────────────────────────────────────
 
-type FindKind = "phrase" | "objection" | "flow" | "tone"
+type FindKind = "phrase" | "objection" | "flow" | "tone" | "counted"
 interface Finding { kind: FindKind; title: string; sub: string; refs: DnaEvidence[] }
 
 function findingsOf(r: DnaResultView): Finding[] {
@@ -235,18 +250,93 @@ function findingsOf(r: DnaResultView): Finding[] {
     return out
 }
 
-const TAG_STYLE: Record<FindKind, { bg: string; fg: string }> = {
-    phrase:    { bg: "rgba(55,228,200,.12)", fg: "#37E4C8" },
-    flow:      { bg: "rgba(55,228,200,.12)", fg: "#37E4C8" },
-    objection: { bg: "rgba(226,177,90,.14)", fg: "#E2B15A" },
-    tone:      { bg: "rgba(180,160,255,.14)", fg: "#C7B8FF" },
+/// Facts counted off the text in the browser, shown while the model reads so
+/// the wait has something true on it: how much they talk, the questions they
+/// ask, their longest turn, the 4-word phrases they repeat, and the client's
+/// questions. Every one cites its lines. No model is involved.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function countedFindings(sources: DnaSource[], d: any): Finding[] {
+    let expertW = 0, otherW = 0, qN = 0, cN = 0, firstQ = ""
+    const qRefs: DnaEvidence[] = [], cRefs: DnaEvidence[] = []
+    let longest = { words: 0, t: 0, from: 0, to: 0 }
+    const grams = new Map<string, { n: number; shown: string; refs: Map<number, number[]> }>()
+    sources.forEach((s, ti) => {
+        let run = { words: 0, from: 0 }
+        const eq: number[] = [], cq: number[] = []
+        s.text.split("\n").forEach((raw, i) => {
+            const n = i + 1
+            const m = raw.trim().match(SPEAKER)
+            if (!m) return
+            const who = m[1].trim()
+            const body = raw.trim().slice(m[0].length)
+            const w = body.split(/\s+/).filter(Boolean).length
+            if (who === s.expert_speaker) {
+                expertW += w
+                if (run.words === 0) run.from = n
+                run.words += w
+                if (run.words > longest.words) longest = { words: run.words, t: ti + 1, from: run.from, to: n }
+                const q = (body.match(/\?/g) ?? []).length
+                if (q) { qN += q; eq.push(n); if (!firstQ) firstQ = body }
+                const orig = body.replace(/[^\p{L}\p{N}\s']/gu, " ").split(/\s+/).filter(Boolean)
+                const toks = orig.map(x => x.toLowerCase())
+                const seen = new Set<string>()
+                for (let k = 0; k + 4 <= toks.length; k++) {
+                    const g = toks.slice(k, k + 4)
+                    if (!g.some(x => x.length >= 5)) continue
+                    const key = g.join(" ")
+                    if (seen.has(key)) continue
+                    seen.add(key)
+                    const e = grams.get(key) ?? { n: 0, shown: orig.slice(k, k + 4).join(" "), refs: new Map<number, number[]>() }
+                    e.n++
+                    e.refs.set(ti + 1, [...(e.refs.get(ti + 1) ?? []), n])
+                    grams.set(key, e)
+                }
+            } else {
+                otherW += w
+                run = { words: 0, from: 0 }
+                if (body.includes("?")) { cN++; cq.push(n) }
+            }
+        })
+        if (eq.length) qRefs.push({ transcript: ti + 1, lines: eq })
+        if (cq.length) cRefs.push({ transcript: ti + 1, lines: cq })
+    })
+    const out: Finding[] = []
+    const all = expertW + otherW
+    if (all > 0) {
+        const pct = Math.round((expertW / all) * 100)
+        out.push({ kind: "counted", title: d.countTalk(pct), sub: d.countTalkSub(100 - pct), refs: [] })
+    }
+    if (qN > 0) out.push({ kind: "counted", title: d.countQuestions(qN), sub: firstQ ? d.countFirstQ(firstQ.length > 110 ? firstQ.slice(0, 107) + "…" : firstQ) : "", refs: qRefs })
+    if (longest.words >= 40) {
+        const lines: number[] = []
+        for (let n = longest.from; n <= longest.to; n++) lines.push(n)
+        out.push({ kind: "counted", title: d.countLongest(longest.words), sub: "", refs: [{ transcript: longest.t, lines }] })
+    }
+    const picked: string[] = []
+    for (const [key, e] of Array.from(grams.entries()).filter(([, e]) => e.n >= 2).sort((a, b) => b[1].n - a[1].n)) {
+        const tk = key.split(" ")
+        if (picked.some(p => p.includes(tk.slice(0, 3).join(" ")) || p.includes(tk.slice(1).join(" ")))) continue
+        picked.push(key)
+        out.push({ kind: "counted", title: `"${e.shown}…"`, sub: d.countRepeats(e.n), refs: Array.from(e.refs.entries()).map(([transcript, lines]) => ({ transcript, lines })) })
+        if (picked.length >= 2) break
+    }
+    if (cN > 0) out.push({ kind: "counted", title: d.countClientQs(cN), sub: "", refs: cRefs })
+    return out
 }
 
-/// The screen the spinner used to be. While the model works, the transcript
-/// is shown with the expert's lines marked and a scan line passing over it;
-/// that part is decoration and claims nothing. When the result lands, its
-/// findings appear one at a time and light up the exact lines they cite —
-/// those are the model's real output, only paced.
+const TAG_STYLE: Record<FindKind, { bg: string; fg: string }> = {
+    phrase:    { bg: "var(--dna-glow-soft)", fg: "var(--dna-glow-text)" },
+    flow:      { bg: "var(--dna-glow-soft)", fg: "var(--dna-glow-text)" },
+    objection: { bg: "var(--dna-gold-soft)", fg: "var(--dna-gold)" },
+    tone:      { bg: "var(--dna-tone-soft)", fg: "var(--dna-tone)" },
+    counted:   { bg: "var(--dna-line)",      fg: "var(--dna-text)" },
+}
+
+/// The screen the spinner used to be. Left: the transcript, expert's lines
+/// marked. Right: first what the browser counted (real, cited, shown while
+/// the model works), then the model's findings one at a time as they land.
+/// The scan line over the transcript is decoration and claims nothing.
+/// Clicking any finding jumps the transcript to its lines.
 export function DnaReading({ name, sources, result, totalWords, onOpenProfile }: {
     name: string
     sources: DnaSource[]
@@ -257,11 +347,15 @@ export function DnaReading({ name, sources, result, totalWords, onOpenProfile }:
     const { t, intl } = useLocale()
     const d = t.tabs.dna
     const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    const findings = useMemo(() => result ? findingsOf(result) : [], [result])
-    const [shown, setShown] = useState(0)
+    const counted = useMemo(() => countedFindings(sources, d), [sources, d])
+    const found = useMemo(() => result ? findingsOf(result) : [], [result])
+    const [shownC, setShownC] = useState(0)
+    const [shownA, setShownA] = useState(0)
     const [words, setWords] = useState(0)
     const [tx, setTx] = useState(0)
+    const [focus, setFocus] = useState<Finding | null>(null)
     const paneRef = useRef<HTMLDivElement>(null)
+    const feedRef = useRef<HTMLDivElement>(null)
 
     // Counter: climbs toward ~90% while waiting (the model has the text, but
     // we don't know how far it is), finishes only when the result is back.
@@ -273,52 +367,91 @@ export function DnaReading({ name, sources, result, totalWords, onOpenProfile }:
         return () => clearInterval(id)
     }, [result, totalWords, reduce])
 
+    // Counted facts: one every ~1.4 s from the start; all at once if the
+    // model answers first.
+    useEffect(() => {
+        if (result) { setShownC(counted.length); return }
+        const id = setInterval(() => setShownC(n => { if (n >= counted.length) { clearInterval(id); return n } return n + 1 }), reduce ? 10 : 1400)
+        return () => clearInterval(id)
+    }, [result, counted.length, reduce])
+
     useEffect(() => {
         if (!result) return
-        setShown(0)
+        setShownA(0)
         let i = 0
         const id = setInterval(() => {
             i++
-            setShown(i)
-            if (i >= findings.length) clearInterval(id)
-        }, reduce ? 10 : 650)
+            setShownA(i)
+            if (i >= found.length) clearInterval(id)
+        }, reduce ? 10 : 700)
         return () => clearInterval(id)
-    }, [result, findings.length, reduce])
+    }, [result, found.length, reduce])
 
-    const latest = shown > 0 ? findings[shown - 1] : null
+    // The newest finding takes the focus: its lines light up and scroll in.
+    const newest = shownA > 0 ? found[shownA - 1] : shownC > 0 ? counted[shownC - 1] : null
+    useEffect(() => { if (newest) setFocus(newest) }, [newest])
     useEffect(() => {
-        const ref = latest?.refs.find(r => sources[r.transcript - 1])
+        const el = feedRef.current
+        if (el) el.scrollTo({ top: el.scrollHeight, behavior: reduce ? "auto" : "smooth" })
+    }, [shownA, shownC, reduce])
+    useEffect(() => {
+        const ref = focus?.refs.find(r => sources[r.transcript - 1] && r.lines.length)
         if (!ref) return
         setTx(ref.transcript - 1)
         const first = Math.min(...ref.lines)
         requestAnimationFrame(() => {
-            paneRef.current?.querySelector(`[data-l="${first}"]`)?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" })
+            const pane = paneRef.current
+            const row = pane?.querySelector(`[data-l="${first}"]`) as HTMLElement | null
+            if (pane && row) pane.scrollTo({ top: row.offsetTop - pane.clientHeight / 3, behavior: reduce ? "auto" : "smooth" })
         })
-    }, [latest, sources, reduce])
+    }, [focus, sources, reduce])
 
-    // Lines lit so far in the transcript on screen; objection lines in gold.
+    // Lines lit in the transcript on screen: every model finding so far, plus
+    // whichever finding has the focus (counted ones only light while focused).
     const lit = new Map<number, FindKind>()
-    for (const f of findings.slice(0, shown)) for (const r of f.refs) if (r.transcript - 1 === tx) for (const n of r.lines) if (!lit.has(n) || f.kind === "objection") lit.set(n, f.kind)
+    const light = (f: Finding) => { for (const r of f.refs) if (r.transcript - 1 === tx) for (const n of r.lines) if (!lit.has(n) || f.kind === "objection") lit.set(n, f.kind) }
+    found.slice(0, shownA).forEach(light)
+    if (focus) light(focus)
 
     const src = sources[tx]
     const lines = (src?.text ?? "").split("\n")
-    const done = !!result && shown >= findings.length
+    const done = !!result && shownA >= found.length
+
+    const card = (f: Finding, i: number) => {
+        const refs = refsLabel(f.refs, sources.length, d)
+        const on = focus === f
+        return (
+            <button key={f.kind + i} type="button" onClick={() => setFocus(f)}
+                className="dna-find w-full text-left rounded-xl border px-3.5 py-3 grid gap-1.5 transition-colors"
+                style={{ background: LAB.surface, borderColor: on ? LAB.glowLine : LAB.line }}>
+                <span className="text-[10.5px] font-bold uppercase tracking-[.08em] px-2 py-0.5 rounded-md justify-self-start"
+                    style={{ background: TAG_STYLE[f.kind].bg, color: TAG_STYLE[f.kind].fg }}>
+                    {d.findTag[f.kind]}
+                </span>
+                <span className="text-[14px] font-semibold leading-snug">{f.title}</span>
+                {f.sub && <span className="text-[13px] leading-relaxed" style={{ color: LAB.muted }}>{f.sub}</span>}
+                {refs && <span className="font-mono text-[11px]" style={{ color: LAB.glowText }}>{refs}</span>}
+            </button>
+        )
+    }
 
     return (
         <DnaLab>
-            <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-4">
-                <div className="space-y-2 min-w-0">
-                    {sources.length > 1 && (
-                        <div className="flex gap-1.5 flex-wrap">
-                            {sources.map((s, i) => (
-                                <button key={i} onClick={() => setTx(i)} className="font-mono text-[11px] px-2 py-0.5 rounded-md border"
-                                    style={{ borderColor: i === tx ? LAB.glow : LAB.line, color: i === tx ? LAB.glow : LAB.muted }}>
-                                    {s.rep_label || d.callN(i + 1)}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                    <div ref={paneRef} className="relative rounded-xl border p-3 max-h-[440px] overflow-y-auto" style={{ background: LAB.surface, borderColor: LAB.line }}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Left: the transcript */}
+                <div className="flex flex-col gap-2 min-w-0 lg:h-[600px]">
+                    <div className="flex items-center gap-1.5 flex-wrap min-h-[28px]">
+                        {sources.length > 1 ? sources.map((s, i) => (
+                            <button key={i} onClick={() => setTx(i)} title={sourceTitle(s, i, d)}
+                                className="text-xs font-semibold px-2.5 py-1 rounded-md border max-w-[16rem] truncate"
+                                style={{ borderColor: i === tx ? LAB.glowLine : LAB.line, color: i === tx ? LAB.glowText : LAB.muted, background: i === tx ? LAB.glowSoft : "transparent" }}>
+                                {sourceTitle(s, i, d)}
+                            </button>
+                        )) : (
+                            <span className="text-xs font-semibold" style={{ color: LAB.muted }}>{sources[0] ? sourceTitle(sources[0], 0, d) : ""}</span>
+                        )}
+                    </div>
+                    <div ref={paneRef} className="relative flex-1 min-h-0 max-h-[380px] lg:max-h-none rounded-xl border p-2 overflow-y-auto" style={{ background: LAB.surface, borderColor: LAB.line }}>
                         {!result && !reduce && <div className="dna-scan" />}
                         {lines.map((raw, i) => {
                             const n = i + 1
@@ -328,56 +461,45 @@ export function DnaReading({ name, sources, result, totalWords, onOpenProfile }:
                             const body = m ? raw.trim().slice(m[0].length) : raw.trim()
                             const exp = who && who === src.expert_speaker
                             const hl = lit.get(n)
+                            const tint = hl === "objection" ? { bg: LAB.goldSoft, bar: LAB.gold } : hl ? { bg: LAB.glowSoft, bar: LAB.glow } : null
                             return (
                                 <div key={n} data-l={n}
-                                    className="grid grid-cols-[26px_72px_1fr] gap-2 px-1.5 py-1 rounded-md text-[13px] leading-snug transition-colors duration-300"
-                                    style={hl ? { background: hl === "objection" ? "rgba(226,177,90,.12)" : "rgba(55,228,200,.10)", boxShadow: `inset 3px 0 0 ${hl === "objection" ? LAB.gold : LAB.glow}` } : undefined}>
-                                    <span className="font-mono text-[11px] pt-0.5" style={{ color: LAB.muted }}>{String(n).padStart(2, "0")}</span>
-                                    <span className="font-semibold text-[12.5px] truncate" style={{ color: exp ? LAB.glow : LAB.muted }}>{who}</span>
+                                    className="grid grid-cols-[28px_64px_1fr] gap-2 px-2 py-1 rounded-md text-[13px] leading-snug transition-colors duration-300"
+                                    style={tint ? { background: tint.bg, boxShadow: `inset 3px 0 0 ${tint.bar}` } : undefined}>
+                                    <span className="font-mono text-[11px] pt-0.5 text-right" style={{ color: LAB.muted }}>{n}</span>
+                                    <span className="font-semibold text-[12.5px] truncate" style={{ color: exp ? LAB.glowText : LAB.muted }}>{who}</span>
                                     <span>{body}</span>
                                 </div>
                             )
                         })}
                     </div>
                 </div>
-                <div className="space-y-2 content-start">
-                    <div className="flex items-baseline justify-between gap-2">
-                        <span className="font-display font-bold text-[15px]">{d.readingName(name)}</span>
-                        <span className="font-mono text-[11.5px] tabular-nums" style={{ color: LAB.muted }}>
+
+                {/* Right: what was counted, then what the AI found */}
+                <div className="flex flex-col gap-2 min-w-0 lg:h-[600px]">
+                    <div className="flex items-baseline justify-between gap-2 min-h-[28px]">
+                        <span className="font-display font-bold text-[15px] truncate">{d.readingName(name)}</span>
+                        <span className="font-mono text-[11.5px] tabular-nums whitespace-nowrap" style={{ color: LAB.muted }}>
                             {words.toLocaleString(intl)} / {totalWords.toLocaleString(intl)} {d.wordsUnit}
                         </span>
                     </div>
-                    {!result && (
-                        <>
-                            <p className="text-xs" style={{ color: LAB.muted }}>{d.readingWait}</p>
-                            {[0, 1, 2].map(i => (
-                                <div key={i} className="rounded-xl border p-3 animate-pulse" style={{ background: LAB.surface, borderColor: LAB.line }}>
-                                    <div className="h-3 rounded w-2/3" style={{ background: LAB.line }} />
-                                    <div className="h-2.5 rounded w-5/6 mt-2" style={{ background: LAB.line }} />
-                                </div>
-                            ))}
-                        </>
-                    )}
-                    {findings.slice(0, shown).map((f, i) => (
-                        <div key={i} className="dna-find rounded-xl border px-3 py-2.5 grid grid-cols-[auto_1fr] gap-2.5 items-start" style={{ background: LAB.surface, borderColor: LAB.line }}>
-                            <span className="font-mono text-[10px] uppercase tracking-[.08em] px-1.5 py-0.5 rounded-md mt-0.5 whitespace-nowrap"
-                                style={{ background: TAG_STYLE[f.kind].bg, color: TAG_STYLE[f.kind].fg }}>
-                                {d.findTag[f.kind]}
-                            </span>
-                            <div className="text-[13.5px] min-w-0">
-                                {f.title}
-                                <small className="block text-xs mt-0.5" style={{ color: LAB.muted }}>
-                                    {f.sub}{refsLabel(f.refs, sources.length, d) && <> · {refsLabel(f.refs, sources.length, d)}</>}
-                                </small>
+                    <div ref={feedRef} className="flex-1 min-h-0 overflow-y-auto grid gap-2 content-start pr-0.5">
+                        {shownC > 0 && <p className="text-xs font-semibold uppercase tracking-[.08em] pt-1" style={{ color: LAB.muted }}>{d.countedHead}</p>}
+                        {counted.slice(0, shownC).map(card)}
+                        {!result && (
+                            <div className="rounded-xl border border-dashed px-3.5 py-3 flex items-center gap-2.5" style={{ borderColor: LAB.line }}>
+                                <span className="w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ background: LAB.glow }} />
+                                <span className="text-[13px]" style={{ color: LAB.muted }}>{d.readingWait}</span>
                             </div>
-                        </div>
-                    ))}
+                        )}
+                        {result && <p className="text-xs font-semibold uppercase tracking-[.08em] pt-2" style={{ color: LAB.glowText }}>{d.aiFoundHead}</p>}
+                        {found.slice(0, shownA).map(card)}
+                    </div>
                     {done && (
-                        <div className="flex justify-end pt-1">
-                            <button onClick={onOpenProfile} className={labBtn(true)} style={{ background: LAB.glow, color: "#06221C" }}>
-                                {d.openProfile(name)}
-                            </button>
-                        </div>
+                        <button onClick={onOpenProfile} className="w-full px-4 py-3 rounded-lg text-sm font-bold"
+                            style={{ background: LAB.cta, color: LAB.ctaInk }}>
+                            {d.openProfile(name)}
+                        </button>
                     )}
                 </div>
             </div>
@@ -385,19 +507,34 @@ export function DnaReading({ name, sources, result, totalWords, onOpenProfile }:
     )
 }
 
+/// Consecutive line numbers collapsed into ranges: [5,6,7,9] → ["5–7","9"].
+function lineRanges(ns: number[]): string[] {
+    const s = Array.from(new Set(ns)).sort((a, b) => a - b)
+    const out: string[] = []
+    for (let i = 0; i < s.length;) {
+        let j = i
+        while (j + 1 < s.length && s[j + 1] === s[j] + 1) j++
+        out.push(i === j ? `${s[i]}` : `${s[i]}–${s[j]}`)
+        i = j + 1
+    }
+    return out.length > 4 ? [...out.slice(0, 4), "…"] : out
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function refsLabel(refs: DnaEvidence[], nSources: number, d: any): string {
-    const lines = refs.flatMap(r => r.lines.map(n => ({ t: r.transcript, n })))
-    if (lines.length === 0) return ""
-    const uniq = Array.from(new Set(lines.map(x => nSources > 1 ? `${x.t}:${x.n}` : `${x.n}`))).slice(0, 5)
-    if (nSources > 1) return d.linesRefMulti(uniq.map(u => { const [a, b] = u.split(":"); return `${d.callShort(a)} L${b}` }).join(", "))
-    return d.linesRef(uniq)
+    const by = new Map<number, number[]>()
+    for (const r of refs) if (Array.isArray(r.lines) && r.lines.length) by.set(r.transcript, [...(by.get(r.transcript) ?? []), ...r.lines])
+    if (by.size === 0) return ""
+    if (nSources <= 1) return d.linesRef(lineRanges(Array.from(by.values()).flat()))
+    return Array.from(by.entries()).sort((a, b) => a[0] - b[0])
+        .map(([tn, ls]) => d.refCall(tn, d.linesRef(lineRanges(ls)).toLowerCase())).join(" · ")
 }
 
 // ─── 3 · Profile ─────────────────────────────────────────────────────────────
 
-/// "Ver en la transcripción ↗" with the mockup's dark mono popover. Absent
-/// citations (analyses from before D-459) render nothing.
+/// "See it in the transcript": the cited lines, in the page's own skin, one
+/// row per line (number · speaker · words), a "⋯" where cited lines skip
+/// ahead. Absent citations (analyses from before D-459) render nothing.
 export function DnaEvidenceLink({ evidence, sources }: { evidence?: DnaEvidence[]; sources: DnaSource[] }) {
     const { t } = useLocale()
     const d = t.tabs.dna
@@ -408,24 +545,31 @@ export function DnaEvidenceLink({ evidence, sources }: { evidence?: DnaEvidence[
         <div>
             <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o) }}
                 className="text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">
-                {open ? d.hideEvidence : d.seeInTranscript}
+                {open ? d.hideEvidence : `${d.seeInTranscript} · ${refsLabel(refs, sources.length, d)}`}
             </button>
             {open && (
-                <div className="mt-1.5 rounded-lg px-3 py-2.5 font-mono text-xs whitespace-pre-wrap space-y-1" style={{ background: LAB.bg, color: LAB.text }}>
+                <div className="mt-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] py-1.5 space-y-2">
                     {refs.map((r, i) => {
                         const src = sources[r.transcript - 1]
                         const all = src.text.split("\n")
+                        const ns = Array.from(new Set(r.lines)).filter(n => n >= 1 && n <= all.length).sort((a, b) => a - b).slice(0, 10)
                         return (
-                            <div key={i} className="space-y-0.5">
-                                {sources.length > 1 && <p style={{ color: LAB.muted }}>{src.rep_label || d.callN(r.transcript)}</p>}
-                                {r.lines.filter(n => n >= 1 && n <= all.length).slice(0, 8).map(n => {
+                            <div key={i}>
+                                {sources.length > 1 && <p className="px-3 pb-1 text-[11px] font-semibold text-[var(--color-muted)]">{sourceTitle(src, r.transcript - 1, d)}</p>}
+                                {ns.map((n, k) => {
                                     const raw = all[n - 1].trim()
                                     const m = raw.match(SPEAKER)
+                                    const who = m ? m[1].trim() : ""
+                                    const exp = who === src.expert_speaker
                                     return (
-                                        <p key={n}>
-                                            <span style={{ color: LAB.glow }}>{String(n).padStart(2, "0")} {m ? m[1].trim() + ":" : ""}</span>{" "}
-                                            {m ? raw.slice(m[0].length) : raw}
-                                        </p>
+                                        <div key={n}>
+                                            {k > 0 && n > ns[k - 1] + 1 && <p className="px-3 text-[11px] text-[var(--color-muted)] leading-none py-0.5">⋯</p>}
+                                            <div className="grid grid-cols-[32px_64px_1fr] gap-2 px-3 py-1 text-[13px] leading-snug">
+                                                <span className="font-mono text-[11px] text-right text-[var(--color-muted)] pt-0.5">{n}</span>
+                                                <span className={`font-semibold text-[12.5px] truncate ${exp ? "text-[var(--color-accent-deep)]" : "text-[var(--color-muted)]"}`}>{who}</span>
+                                                <span className="text-[var(--color-text)]">{m ? raw.slice(m[0].length) : raw}</span>
+                                            </div>
+                                        </div>
                                     )
                                 })}
                             </div>
@@ -446,8 +590,8 @@ export function DnaProfileHead({ name, meta, tones, actions }: {
                 <div className="w-12 h-12 rounded-full grid place-items-center text-white font-display font-extrabold flex-shrink-0"
                     style={{ background: "linear-gradient(135deg,#0C9482,#1D5C8A)" }}>{initialsOf(name)}</div>
                 <div className="min-w-0">
-                    <p className="font-display text-lg font-extrabold text-[var(--color-text)] truncate">{name}</p>
-                    <p className="text-[12.5px] text-[var(--color-muted)]">{meta}</p>
+                    <p className="font-display text-xl font-extrabold text-[var(--color-text)] truncate">{name}</p>
+                    <p className="text-[13px] text-[var(--color-muted)]">{meta}</p>
                     {tones.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
                             {tones.map(x => <span key={x} className="text-xs px-2.5 py-0.5 rounded-full bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-semibold">{x}</span>)}
@@ -462,8 +606,8 @@ export function DnaProfileHead({ name, meta, tones, actions }: {
 
 export function DnaStatTile({ label, value, small, note }: { label: string; value: React.ReactNode; small?: string; note?: React.ReactNode }) {
     return (
-        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
-            <p className="font-mono text-[10.5px] uppercase tracking-[.1em] text-[var(--color-muted)]">{label}</p>
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3">
+            <p className="text-xs font-semibold text-[var(--color-muted)]">{label}</p>
             <p className="font-display text-2xl font-extrabold text-[var(--color-text)] tabular-nums">
                 {value}{small && <small className="text-xs font-medium text-[var(--color-muted)] ml-1">{small}</small>}
             </p>
@@ -472,48 +616,80 @@ export function DnaStatTile({ label, value, small, note }: { label: string; valu
     )
 }
 
+/// A profile section: a plain heading with its count, then its content.
+export function DnaSection({ title, count, sub, children }: { title: string; count?: string; sub?: string; children: React.ReactNode }) {
+    return (
+        <section className="space-y-3 pt-5 border-t border-[var(--color-line-soft)]">
+            <div className="flex items-baseline justify-between gap-3">
+                <div>
+                    <h4 className="font-display text-base font-bold text-[var(--color-text)]">{title}</h4>
+                    {sub && <p className="text-xs text-[var(--color-muted)] mt-0.5">{sub}</p>}
+                </div>
+                {count && <span className="text-xs font-semibold text-[var(--color-muted)] whitespace-nowrap">{count}</span>}
+            </div>
+            {children}
+        </section>
+    )
+}
+
+/// How a call runs, as a numbered vertical timeline: one stage per row, full
+/// width, so long descriptions read as sentences instead of narrow columns.
 export function DnaStrand({ stages, sources }: { stages: DnaResultView["conversation_flow"]["stages"]; sources: DnaSource[] }) {
     const { t } = useLocale()
     const d = t.tabs.dna
     if (!stages.length) return null
     return (
-        <div>
-            <div className="flex items-center justify-between mb-2">
-                <span className="font-mono text-[10.5px] uppercase tracking-[.1em] text-[var(--color-muted)]">{d.howCallRuns}</span>
-                <span className="text-xs font-semibold text-[var(--color-text-secondary)]">{d.nStages(stages.length)}</span>
+        <ol className="relative">
+            {stages.map((s, i) => (
+                <li key={i} className="grid grid-cols-[32px_1fr] gap-3.5 pb-5 last:pb-0 relative">
+                    {i < stages.length - 1 && <span className="absolute left-[15px] top-8 bottom-0 w-px bg-[var(--color-border)]" />}
+                    <span className="w-8 h-8 rounded-full grid place-items-center text-sm font-bold bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] relative">{i + 1}</span>
+                    <div className="space-y-1.5 min-w-0 pt-1 max-w-3xl">
+                        <p className="font-display font-bold text-[15px] text-[var(--color-text)] leading-snug">{s.name}</p>
+                        <p className="text-[14px] leading-relaxed text-[var(--color-text-secondary)]">{s.description}</p>
+                        {s.transition_signal && (
+                            <p className="text-[13px] leading-relaxed text-[var(--color-text-secondary)]">
+                                <span className="font-semibold text-[var(--color-text)]">{d.movesOnLabel} </span>{s.transition_signal}
+                            </p>
+                        )}
+                        <DnaEvidenceLink evidence={s.evidence} sources={sources} />
+                    </div>
+                </li>
+            ))}
+        </ol>
+    )
+}
+
+/// One objection: what the client says, and how this person answers — as two
+/// labeled columns, so the pair reads at a glance.
+export function DnaObjectionRow({ said, answer, evidence, sources }: { said: string; answer: string; evidence?: DnaEvidence[]; sources: DnaSource[] }) {
+    const { t } = useLocale()
+    const d = t.tabs.dna
+    return (
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 grid gap-3">
+            <div className="grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3 md:gap-5">
+                <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-[.08em] mb-1" style={{ color: "var(--dna-gold)" }}>{d.objSaidLabel}</p>
+                    <p className="text-[14.5px] font-semibold leading-snug text-[var(--color-text)]">"{said}"</p>
+                </div>
+                <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-[.08em] text-[var(--color-accent-deep)] mb-1">{d.objAnswerLabel}</p>
+                    <p className="text-[14px] leading-relaxed text-[var(--color-text-secondary)]">{answer}</p>
+                </div>
             </div>
-            <div className={`grid grid-cols-1 sm:grid-cols-2 ${stages.length >= 4 ? "lg:grid-cols-4" : stages.length === 3 ? "lg:grid-cols-3" : ""} border border-[var(--color-border)] rounded-xl overflow-hidden`}>
-                    {stages.map((s, i) => (
-                        <div key={i} className="p-3.5 border-b sm:border-r border-[var(--color-line-soft)] bg-[var(--color-surface)] space-y-1">
-                            <p className="font-mono text-[10.5px] text-[var(--color-accent-deep)] tracking-[.08em]">{i + 1}</p>
-                            <p className="font-display font-bold text-[14.5px] text-[var(--color-text)]">{s.name}</p>
-                            <p className="text-[12.5px] text-[var(--color-text-secondary)]">{s.description}</p>
-                            {s.transition_signal && <p className="text-xs italic text-[var(--color-muted)]">{d.movesOnWhen(s.transition_signal)}</p>}
-                            <DnaEvidenceLink evidence={s.evidence} sources={sources} />
-                        </div>
-                    ))}
-            </div>
+            <DnaEvidenceLink evidence={evidence} sources={sources} />
         </div>
     )
 }
 
-export function DnaListCard({ title, count, children }: { title: string; count: string; children: React.ReactNode }) {
+/// One phrase they repeat: the words big, then what it's for.
+export function DnaPhraseCard({ phrase, why, evidence, sources }: { phrase: string; why: string; evidence?: DnaEvidence[]; sources: DnaSource[] }) {
+    const { t } = useLocale()
+    const d = t.tabs.dna
     return (
-        <div className="rounded-xl border border-[var(--color-border)] p-3.5 bg-[var(--color-surface)] grid gap-2.5 content-start">
-            <div className="flex items-center justify-between gap-2">
-                <p className="font-display text-sm font-bold text-[var(--color-text)]">{title}</p>
-                <span className="font-mono text-[11px] text-[var(--color-muted)]">{count}</span>
-            </div>
-            {children}
-        </div>
-    )
-}
-
-export function DnaEvidenceItem({ quote, body, evidence, sources }: { quote: string; body: string; evidence?: DnaEvidence[]; sources: DnaSource[] }) {
-    return (
-        <div className="grid gap-1 p-2.5 rounded-lg bg-[var(--color-bg)] border border-[var(--color-line-soft)]">
-            <p className="text-[13.5px] text-[var(--color-text)]"><em>{quote}</em></p>
-            <p className="text-[12.5px] text-[var(--color-text-secondary)]">{body}</p>
+        <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 grid gap-2 content-start">
+            <p className="text-[15px] font-semibold leading-snug text-[var(--color-text)] border-l-[3px] border-[var(--color-accent)] pl-3">"{phrase}"</p>
+            {why && <p className="text-[13.5px] leading-relaxed text-[var(--color-text-secondary)]"><span className="font-semibold text-[var(--color-text)]">{d.phraseWhyLabel} </span>{why}</p>}
             <DnaEvidenceLink evidence={evidence} sources={sources} />
         </div>
     )
