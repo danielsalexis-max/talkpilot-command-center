@@ -102,3 +102,10 @@ html[data-skin="dark"] .border-red-100,
 html[data-skin="dark"] .border-red-200,
 html[data-skin="dark"] .border-red-300     { border-color: #5A2A2A; }
 html[data-skin="dark"] .shadow-sm          { box-shadow: none; }
+
+/* D-461 — Team DNA reading screen: the scan line is decoration while the AI reads */
+@keyframes dna-scan-move { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+.dna-scan { position: absolute; left: 0; right: 0; height: 2px; top: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, #37E4C8, transparent); box-shadow: 0 0 12px #37E4C8;
+  animation: dna-scan-move 2.4s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .dna-scan { animation: none; display: none; } }

@@ -5,6 +5,11 @@ import { useEffect, useState, useCallback, useRef } from "react"
 import { embedObjections, reindexObjections, ingestKnowledgeInline, ingestKnowledgeInlineVerbose, reindexKnowledgeVerbose, replaceKnowledgeText, amendKnowledge, applyProposal, type AmendProposal, approvedResponsesFrom, guidanceOf, normalizeSeverity } from "@/lib/orgBrain"
 import { supabase, askClaude, type ChatTurn } from "@/lib/supabase"
 import { AskPanel } from "@/components/AskPanel"
+import {
+    DnaLab, DnaDropZone, DnaCallPicker, DnaPreRead, DnaReading, DnaProfileHead, DnaStatTile, DnaStrand,
+    DnaListCard, DnaEvidenceItem, DnaAsk, DnaApplyDrawer, DnaCompareGrid, DnaCopyThisWeek, dnaStats,
+    type ApplyOption, type PickerCall,
+} from "@/components/dnaViews"
 import { SearchBox } from "@/components/SearchBox"
 import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
 import { rollUpGuardrails } from "@/lib/guardrails"
@@ -72,6 +77,9 @@ interface TranscriptEntry {
     // model is never told about it and no per-rep analysis is claimed.
     repLabel: string
     detectedSpeakers: string[]
+    // The file it came from, or the platform call it was pulled from — what
+    // the drop zone's chip says (D-461). Display-only.
+    source?: string
 }
 
 interface DNAResult {
@@ -2952,7 +2960,7 @@ interface DNAProfileRow {
 }
 
 /// A scored call a rep already made on the platform — pickable as DNA source.
-interface PlatformCall { id: string; session_title: string | null; user_id: string; started_at: string }
+interface PlatformCall { id: string; session_title: string | null; user_id: string; started_at: string; duration_minutes: number | null }
 
 /// Same normalization the scorecard page applies: iOS stores a JSON array of
 /// {speaker,text}, macOS stores plain text. DNA needs "Name: line" dialogue.
@@ -3079,6 +3087,12 @@ function CompareRow({ label, a, b }: { label: string; a: React.ReactNode; b: Rea
     )
 }
 
+/// Same objection, different capitalization or punctuation, is the same
+/// objection: that's what "already on the team" means for the apply drawer.
+function normObjection(text: string): string {
+    return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9ñ ]+/g, " ").replace(/\s+/g, " ").trim()
+}
+
 function AnalyzingWords({ total }: { total: number }) {
     const { t, intl } = useLocale()
     const [n, setN] = useState(0)
@@ -3144,6 +3158,19 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
     const [loadingCallId, setLoadingCallId] = useState<string | null>(null)
     const [callError, setCallError]         = useState("")
     const [usedCallIds, setUsedCallIds]     = useState<Set<string>>(new Set())
+    // D-461 — the mockup's lab, reading screen, profile and apply drawer.
+    const [callEntry, setCallEntry]         = useState<Map<string, string>>(new Map())
+    const [dropBusy, setDropBusy]           = useState(false)
+    const [dropError, setDropError]         = useState("")
+    const [readingSources, setReadingSources] = useState<StoredTranscript[]>([])
+    const [readingResult, setReadingResult] = useState<DNAResult | null>(null)
+    const [teamTalk, setTeamTalk]           = useState<number | null>(null)
+    const [showApply, setShowApply]         = useState(false)
+    const [applyBusy, setApplyBusy]         = useState(false)
+    const [applyDone, setApplyDone]         = useState("")
+    const [showDetail, setShowDetail]       = useState(false)
+    const [existingObj, setExistingObj]     = useState<Set<string> | null>(null)
+    const [hasActivePlaybook, setHasActivePlaybook] = useState<boolean | null>(null)
 
     function enterReview(result: DNAResult, applied: Set<string>) {
         setDnaResult(result)
@@ -3178,6 +3205,46 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         return () => { cancelled = true }
     }, [orgId])
 
+    // The team's talk share, for the profile's "Equipo: X%" line: the average
+    // rep share across the org's scored calls of the last 90 days. Only
+    // shown when there are calls to average.
+    useEffect(() => {
+        let cancelled = false
+        ;(async () => {
+            const { data } = await supabase.from("session_scorecards").select("talk_ratio")
+                .eq("org_id", orgId).eq("status", "scored").is("excluded_at", null)
+                .not("talk_ratio", "is", null)
+                .gte("started_at", new Date(Date.now() - 90 * 86400e3).toISOString()).limit(500)
+            if (cancelled) return
+            const xs = ((data ?? []) as Array<{ talk_ratio: number }>).map(r => Number(r.talk_ratio)).filter(x => x > 0 && x <= 1)
+            setTeamTalk(xs.length >= 3 ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 100) : null)
+        })()
+        return () => { cancelled = true }
+    }, [orgId])
+
+    /// What the apply drawer has to say before anything is applied: whether a
+    /// playbook is already active (then this one lands as a draft) and which
+    /// objections already exist (those are skipped, not duplicated).
+    async function openApply() {
+        setShowApply(v => !v); setApplyDone("")
+        const [{ data: act }, { data: objs }] = await Promise.all([
+            supabase.from("org_playbooks").select("id").eq("org_id", orgId).eq("status", "active").limit(1),
+            supabase.from("org_objections").select("objection").eq("org_id", orgId).eq("active", true).limit(1000),
+        ])
+        setHasActivePlaybook((act?.length ?? 0) > 0)
+        setExistingObj(new Set(((objs ?? []) as Array<{ objection: string }>).map(o => normObjection(o.objection))))
+    }
+
+    async function runApply(keys: string[]) {
+        setApplyBusy(true)
+        try {
+            if (keys.includes("flow")) await applyFlow()
+            if (keys.includes("objections")) await applyObjections()
+            if (keys.includes("phrases")) await applyPhrases()
+            setApplyDone(t.tabs.dna.appliedDone)
+        } finally { setApplyBusy(false) }
+    }
+
     /// Restore a stored profile exactly as it was analyzed.
     function openProfile(row: DNAProfileRow) {
         const stored = (row.transcripts ?? []) as StoredTranscript[]
@@ -3191,6 +3258,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         setExpertName(row.expert_name ?? "")
         setCurrentExpertKey(row.expert_name ?? "")
         setAnalyzedAt(row.analyzed_at)
+        setShowApply(false); setShowDetail(false); setApplyDone("")
         enterReview(row.result, new Set(row.applied_sections ?? []))
     }
 
@@ -3198,7 +3266,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         setExpertName(""); setCurrentExpertKey("")
         setTranscripts([freshEntry()])
         setAnalyzedTranscripts([]); setAnalyzedAt(null)
-        setDnaResult(null); setError(""); setCallError(""); setUsedCallIds(new Set()); setOpenId(null)
+        setDnaResult(null); setError(""); setCallError(""); setUsedCallIds(new Set()); setCallEntry(new Map()); setOpenId(null); setDropError("")
         setStep("collect")
     }
 
@@ -3213,7 +3281,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
             // Listing calls that can only fail would be a list of dead buttons.
             const { data: { user } } = await supabase.auth.getUser()
             let q = supabase.from("session_scorecards")
-                .select("id, session_title, user_id, started_at")
+                .select("id, session_title, user_id, started_at, duration_minutes")
                 .eq("org_id", orgId).eq("status", "scored")
                 .eq("session_source", "plus_conversations")
             if (org.visibility !== "full_transcripts") q = q.eq("user_id", user?.id ?? "")
@@ -3251,6 +3319,7 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 expertSpeaker: speakers.includes("Rep") ? "Rep" : "",
                 repLabel: memberName.get(call.user_id) ?? "",
                 detectedSpeakers: speakers,
+                source: `${memberName.get(call.user_id) || t.common.rep} · ${call.session_title || t.tabs.dna.untitledCall}`,
             }
             setTranscripts(prev => {
                 const emptyIdx = prev.findIndex(t => !t.text.trim())
@@ -3260,10 +3329,57 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                 return withNextSlot(next)
             })
             setUsedCallIds(prev => new Set(prev).add(call.id))
+            setCallEntry(prev => new Map(prev).set(call.id, entry.id))
             if (!expertName.trim() && entry.repLabel) setExpertName(entry.repLabel)
         } finally {
             setLoadingCallId(null)
         }
+    }
+
+    /// Files dropped on (or chosen in) the lab: each becomes a transcript
+    /// entry, filling an empty slot first. Reasons a file can't be read are
+    /// the same words the old upload card used.
+    async function addFiles(files: File[]) {
+        setDropBusy(true); setDropError("")
+        try {
+            for (const file of files) {
+                try {
+                    const text = await extractTextFromFile(file)
+                    const entry: TranscriptEntry = {
+                        id: crypto.randomUUID(), text, expertSpeaker: "", repLabel: "",
+                        detectedSpeakers: detectSpeakers(text), source: file.name,
+                    }
+                    setTranscripts(prev => {
+                        const emptyIdx = prev.findIndex(x => !x.text.trim())
+                        const next = emptyIdx >= 0 ? prev.map((x, i) => i === emptyIdx ? entry : x) : [...prev, entry]
+                        return withNextSlot(next)
+                    })
+                } catch (err) {
+                    setDropError(extractErrorMessage(err, t, () => t.tabs.dna.fileError))
+                }
+            }
+        } finally { setDropBusy(false) }
+    }
+
+    function toggleCall(id: string) {
+        const call = (platformCalls ?? []).find(c => c.id === id)
+        if (!call) return
+        const entryId = callEntry.get(id)
+        if (usedCallIds.has(id) && entryId) {
+            removeTranscript(entryId)
+            setUsedCallIds(prev => { const x = new Set(prev); x.delete(id); return x })
+            setCallEntry(prev => { const x = new Map(prev); x.delete(id); return x })
+            return
+        }
+        addPlatformCall(call)
+    }
+
+    function openPaste() {
+        const empty = transcripts.find(x => !x.text.trim())
+        if (empty) { setOpenId(empty.id); return }
+        const fresh = freshEntry()
+        setTranscripts(prev => [...prev, fresh])
+        setOpenId(fresh.id)
     }
 
     function addTranscript() {
@@ -3325,6 +3441,8 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         const key = expertName.trim()
         setAnalyzingWords(words)
         setRevealLines([])
+        setReadingResult(null)
+        setReadingSources(valid.map(x => ({ text: x.text, expert_speaker: x.expertSpeaker, rep_label: x.repLabel.trim() || x.source || null })))
         setStep("analyzing")
         try {
             const { data: { session } } = await supabase.auth.getSession()
@@ -3362,24 +3480,12 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
             const row: DNAProfileRow = { expert_name: key, result, transcripts: stored, applied_sections: [], analyzed_at: now }
             setProfiles(prev => [row, ...prev.filter(p => p.expert_name !== key)])
 
-            // The reveal reads the real result back, one finding family at a
-            // time — the counts are what the model returned, nothing staged.
-            const lines = [
-                t.tabs.dna.revealTone(result.tone?.descriptors?.length ?? 0),
-                t.tabs.dna.revealStages(result.conversation_flow?.stages?.length ?? 0),
-                t.tabs.dna.revealObjections(result.objections?.length ?? 0),
-                t.tabs.dna.revealPhrases(result.power_phrases?.length ?? 0),
-            ]
-            for (let i = 1; i <= lines.length; i++) {
-                setRevealLines(lines.slice(0, i))
-                await new Promise(r => setTimeout(r, 450))
-            }
-            await new Promise(r => setTimeout(r, 500))
-
+            // The reading screen now has the real result; it paces the
+            // findings and the manager opens the profile from there.
             setAnalyzedTranscripts(stored)
             setAnalyzedAt(now)
             setCurrentExpertKey(key)
-            enterReview(result, new Set())
+            setReadingResult(result)
         } catch (e) {
             setError(errStr(e))
             setStep("collect")
@@ -3402,8 +3508,13 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         if (!dnaResult || selObjections.size === 0) return
         setApplyingObjections(true)
         try {
+            // Objections the team already has are skipped, not duplicated
+            // (the apply drawer says how many before you press it).
+            const known = existingObj ?? new Set<string>()
+            const fresh = dnaResult.objections.filter((o, i) => selObjections.has(i) && !known.has(normObjection(o.objection)))
+            if (fresh.length === 0) { await persistApplied("objections"); return }
             const { data: inserted } = await supabase.from("org_objections").insert(
-                dnaResult.objections.filter((_, i) => selObjections.has(i)).map(o => ({
+                fresh.map(o => ({
                     org_id: orgId, objection: o.objection, response_guidance: o.response_guidance,
                     // The expert's verbatim line is the strongest approved
                     // response there is — it used to be shown on the review
@@ -3476,36 +3587,13 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
 
     if (step === "analyzing") {
         return (
-            <div className={CARD + " flex flex-col items-center justify-center gap-5 py-16"}>
-                <div className="relative w-16 h-16">
-                    <div className="absolute inset-0 rounded-full border-4 border-teal-100" />
-                    <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-[var(--color-accent)] animate-spin" />
-                    <div className="absolute inset-3 rounded-full bg-teal-50 flex items-center justify-center text-sm font-semibold text-[var(--color-accent)]">
-                        {dnaInitials(expertName || "DNA")}
-                    </div>
-                </div>
-                <div className="text-center space-y-1">
-                    <p className="text-[var(--color-text)] font-semibold text-lg">
-                        {revealLines.length > 0 ? t.tabs.dna.revealDone : t.tabs.dna.analyzingTitle}
-                    </p>
-                    {revealLines.length === 0 && (
-                        <>
-                            <p className="text-[var(--color-text-secondary)] text-sm">{t.tabs.dna.analyzingSub}</p>
-                            <AnalyzingWords total={analyzingWords} />
-                        </>
-                    )}
-                </div>
-                {revealLines.length > 0 && (
-                    <ul className="space-y-1.5">
-                        {revealLines.map(l => (
-                            <li key={l} className="text-sm text-[var(--color-text)] flex items-center gap-2">
-                                <span className="w-5 h-5 rounded-full bg-green-100 text-green-700 text-xs flex items-center justify-center">✓</span>
-                                {l}
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </div>
+            <DnaReading
+                name={expertName.trim() || t.tabs.dna.unnamedExpert}
+                sources={readingSources}
+                result={readingResult}
+                totalWords={analyzingWords}
+                onOpenProfile={() => { if (readingResult) { setShowApply(false); setShowDetail(false); setApplyDone(""); enterReview(readingResult, new Set()) } }}
+            />
         )
     }
 
@@ -3517,73 +3605,30 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         const pa = comparePa, pb = comparePb
         const la = pa.expert_name || t.tabs.dna.unnamedExpert
         const lb = pb.expert_name || t.tabs.dna.unnamedExpert
-        const toneKey = (d: string) => d.trim().toLowerCase()
-        const toneB = new Set((pb.result.tone?.descriptors ?? []).map(toneKey))
-        const toneA = new Set((pa.result.tone?.descriptors ?? []).map(toneKey))
-        const tone = (p: DNAProfileRow, other: Set<string>) => (
-            <div className="flex flex-wrap gap-1.5">
-                {(p.result.tone?.descriptors ?? []).map(d => (
-                    <span key={d} className={`px-2 py-0.5 rounded-full text-[11px] border ${other.has(toneKey(d))
-                        ? "bg-teal-50 text-[var(--color-accent)] border-teal-300 font-semibold"
-                        : "bg-[var(--color-surface)] text-[var(--color-text-secondary)] border-[var(--color-border)]"}`}>
-                        {d}{other.has(toneKey(d)) && <> · {t.tabs.dna.compareShared}</>}
-                    </span>
-                ))}
-            </div>
-        )
-        const listOr = (items: React.ReactNode[]) => items.length
-            ? <ul className="space-y-1.5">{items}</ul>
-            : <p className="text-xs text-[var(--color-muted)]">{t.tabs.dna.compareNone}</p>
-        const flow = (p: DNAProfileRow) => listOr((p.result.conversation_flow?.stages ?? []).map((st, i) => (
-            <li key={i} className="text-xs text-[var(--color-text)] flex gap-2">
-                <span className="font-mono text-[10px] text-[var(--color-accent)] mt-0.5">{i + 1}</span>
-                <span><span className="font-medium">{st.name}</span> <span className="text-[var(--color-text-secondary)]">· {st.description}</span></span>
-            </li>
-        )))
-        const objections = (p: DNAProfileRow) => listOr((p.result.objections ?? []).map((o, i) => (
-            <li key={i} className="text-xs">
-                <p className="text-[var(--color-text)] font-medium">{o.objection}</p>
-                <p className="text-[var(--color-text-secondary)]">{o.expert_response_summary}</p>
-            </li>
-        )))
-        const phrases = (p: DNAProfileRow) => listOr((p.result.power_phrases ?? []).map((ph, i) => (
-            <li key={i} className="text-xs text-[var(--color-text)]">"{ph.phrase}"</li>
-        )))
-        const material = (p: DNAProfileRow) => (
-            <p className="text-xs text-[var(--color-text-secondary)]">
-                {t.tabs.dna.profileMeta((p.transcripts ?? []).length, (p.transcripts ?? []).reduce((n, s) => n + countWords(s.text), 0).toLocaleString(intl))}
-            </p>
-        )
-        const person = (label: string) => (
-            <div className="flex items-center gap-2 min-w-0">
-                <div className="w-9 h-9 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-xs font-semibold text-[var(--color-accent)] flex-shrink-0">{dnaInitials(label)}</div>
-                <p className="text-sm font-semibold text-[var(--color-text)] truncate">{label}</p>
-            </div>
-        )
+        const side = (p: DNAProfileRow, name: string) => ({
+            name, calls: (p.transcripts ?? []).length, result: p.result,
+            stats: dnaStats(p.transcripts ?? []),
+        })
         return (
             <div className="space-y-4">
                 <div className={CARD + " space-y-4"}>
-                    <div className="flex items-start justify-between gap-4">
-                        <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.compareTitle}</p>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p className="font-mono text-[11px] uppercase tracking-[.12em] text-[var(--color-accent-deep)] mb-1">{t.tabs.dna.compareTitle}</p>
+                            <h3 className="font-display text-xl font-extrabold text-[var(--color-text)]">{t.tabs.dna.compareVs(la, lb)}</h3>
+                            <p className="text-xs text-[var(--color-muted)] mt-1">{t.tabs.dna.compareCountedNote}</p>
+                        </div>
                         <button onClick={() => setStep("list")}
-                            className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] whitespace-nowrap flex-shrink-0">
-                            {t.tabs.dna.allProfiles}
-                        </button>
+                            className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] whitespace-nowrap">{t.tabs.dna.allProfiles}</button>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{person(la)}{person(lb)}</div>
-                    <CompareRow label={t.tabs.dna.compareMaterial} a={material(pa)} b={material(pb)} />
-                    <CompareRow label={t.tabs.dna.compareTone} a={tone(pa, toneB)} b={tone(pb, toneA)} />
-                    <CompareRow label={t.tabs.dna.compareFlow} a={flow(pa)} b={flow(pb)} />
-                    <CompareRow label={t.tabs.dna.compareObjections} a={objections(pa)} b={objections(pb)} />
-                    <CompareRow label={t.tabs.dna.comparePhrases} a={phrases(pa)} b={phrases(pb)} />
+                    <DnaCompareGrid a={side(pa, la)} b={side(pb, lb)} />
+                    <DnaCopyThisWeek key={`${pa.expert_name}|${pb.expert_name}`} from={la} to={lb}
+                        onGenerate={() => askDNACompare(pa, la, pb, lb, t.tabs.dna.copyPrompt(la, lb), [])} />
+                    <DnaAsk key={`ask|${pa.expert_name}|${pb.expert_name}`}
+                        placeholder={t.tabs.dna.askPlaceholder}
+                        suggestions={t.tabs.dna.compareSuggestions(la, lb)}
+                        onAsk={(q, h) => askDNACompare(pa, la, pb, lb, q, h)} />
                 </div>
-                <AskPanel
-                    key={`${pa.expert_name}|${pb.expert_name}`}
-                    heading={t.tabs.dna.compareAskHeading}
-                    placeholder={t.tabs.dna.askPlaceholder}
-                    suggestions={t.tabs.dna.compareSuggestions(la, lb)}
-                    onAsk={(q, h) => askDNACompare(pa, la, pb, lb, q, h)}
-                />
             </div>
         )
     }
@@ -3670,69 +3715,86 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         const profileName = currentExpertKey || t.tabs.dna.unnamedExpert
         const sourceWords = analyzedTranscripts.reduce((n, s) => n + countWords(s.text), 0)
         const stages = dnaResult.conversation_flow?.stages ?? []
+        const st = dnaStats(analyzedTranscripts)
+        const lastDate = analyzedAt ? new Date(analyzedAt).toLocaleDateString(intl, { day: "numeric", month: "short" }) : ""
+        const dupes = existingObj ? dnaResult.objections.filter((o, i) => selObjections.has(i) && existingObj.has(normObjection(o.objection))).length : 0
+        const others = profiles.filter(p => p.expert_name !== currentExpertKey)
+        const applyOptions: ApplyOption[] = [
+            { key: "flow", label: t.tabs.dna.applyPlaybookOpt(profileName, selFlow.size), applied: appliedSections.has("flow"), disabled: selFlow.size === 0,
+              note: hasActivePlaybook === null ? undefined : hasActivePlaybook ? t.tabs.dna.applyPlaybookDraft : t.tabs.dna.applyPlaybookActive },
+            { key: "objections", label: t.tabs.dna.applyObjectionsOpt(selObjections.size), applied: appliedSections.has("objections"), disabled: selObjections.size === 0,
+              note: dupes > 0 ? t.tabs.dna.applyObjDupes(dupes) : undefined },
+            { key: "phrases", label: t.tabs.dna.applyPhrasesOpt(selPower.size, selAvoid.size), applied: appliedSections.has("phrases"), disabled: selPower.size + selAvoid.size === 0 },
+        ]
         return (
             <div className="space-y-4">
-                {/* The profile: who this is, how they sound, how their calls run. */}
-                <div className={CARD + " space-y-4"}>
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-12 h-12 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-base font-semibold text-[var(--color-accent)] flex-shrink-0">
-                                {dnaInitials(profileName)}
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-xs font-medium text-[var(--color-accent)] uppercase tracking-wide">{t.tabs.dna.analysisComplete}</p>
-                                <p className="text-base font-semibold text-[var(--color-text)] truncate">{profileName}</p>
-                                <p className="text-xs text-[var(--color-muted)]">
-                                    {analyzedAt && <>{t.tabs.dna.analysisOf(new Date(analyzedAt).toLocaleDateString(intl, { dateStyle: "long" }))} · </>}
-                                    {t.tabs.dna.profileMeta(analyzedTranscripts.length, sourceWords.toLocaleString(intl))}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                            {profiles.length > 0 && (
-                                <button onClick={() => setStep("list")}
-                                    className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] whitespace-nowrap">
-                                    {t.tabs.dna.allProfiles}
+                {/* The profile, as the mockup drew it: who, how they sound,
+                    the numbers counted from the calls, how a call runs, what
+                    they handle and say — then ask, then apply. */}
+                <div className={CARD + " space-y-5"}>
+                    <DnaProfileHead
+                        name={profileName}
+                        meta={t.tabs.dna.profileHeadMeta(analyzedTranscripts.length, lastDate, sourceWords.toLocaleString(intl))}
+                        tones={dnaResult.tone?.descriptors ?? []}
+                        actions={<>
+                            {others.length > 0 && (
+                                <button className={BTN_GHOST + " !text-sm !px-3.5 !py-2"} onClick={() => { setCompareA(currentExpertKey); setCompareB(others[0].expert_name); setStep("compare") }}>
+                                    {t.tabs.dna.compareWithBtn}
                                 </button>
                             )}
-                            {/* Back to collect with the analyzed transcripts pre-filled.
-                                The stored row stays — only a new analysis under the
-                                same name replaces it, so backing out costs nothing. */}
-                            <button onClick={() => { setUsedCallIds(new Set()); setStep("collect") }}
-                                className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] whitespace-nowrap">
-                                {t.tabs.dna.newAnalysis}
-                            </button>
-                        </div>
+                            <button className={BTN_PRIMARY} onClick={openApply}>{t.tabs.dna.applyToTeam}</button>
+                        </>}
+                    />
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 -mt-2">
+                        {profiles.length > 0 && (
+                            <button onClick={() => setStep("list")} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">{t.tabs.dna.allProfiles}</button>
+                        )}
+                        {/* Back to collect with the analyzed transcripts pre-filled.
+                            The stored row stays — only a new analysis under the
+                            same name replaces it, so backing out costs nothing. */}
+                        <button onClick={() => { setUsedCallIds(new Set()); setStep("collect") }} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">{t.tabs.dna.newAnalysis}</button>
                     </div>
+                    {showApply && (
+                        <DnaApplyDrawer key={String(hasActivePlaybook) + String(existingObj?.size)}
+                            options={applyOptions} busy={applyBusy} doneMsg={applyDone || (flowLanded ? (flowLanded === "draft" ? t.tabs.dna.flowSavedDraft : t.tabs.dna.flowSavedActive) : "")}
+                            onApply={runApply} onPickItems={() => setShowDetail(true)} />
+                    )}
                     <p className="text-[var(--color-text)] text-sm leading-relaxed">{dnaResult.summary}</p>
-                    {(dnaResult.tone?.descriptors?.length ?? 0) > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
-                            {dnaResult.tone.descriptors.map(d => (
-                                <span key={d} className="px-2.5 py-0.5 rounded-full bg-teal-50 text-[var(--color-accent)] text-xs font-medium border border-teal-200">{d}</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <DnaStatTile label={t.tabs.dna.statTalksLabel} value={st.talkPct} small="%"
+                            note={teamTalk !== null ? t.tabs.dna.teamTalkNote(teamTalk, st.talkPct) : undefined} />
+                        <DnaStatTile label={t.tabs.dna.statQuestionsLabel} value={st.per10.toLocaleString(intl)} small={t.tabs.dna.perTenShort}
+                            note={t.tabs.dna.questionsTotal(st.questions, st.minutes)} />
+                        <DnaStatTile label={t.tabs.dna.statObjectionsLabel} value={dnaResult.objections.length}
+                            note={t.tabs.dna.objInCalls(analyzedTranscripts.length)} />
+                    </div>
+                    <DnaStrand stages={stages} sources={analyzedTranscripts} />
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                        <DnaListCard title={t.tabs.dna.objectionsHandled} count={t.tabs.dna.objInCalls(analyzedTranscripts.length)}>
+                            {dnaResult.objections.length === 0 && <p className="text-xs text-[var(--color-muted)]">{t.tabs.dna.compareNone}</p>}
+                            {dnaResult.objections.map((o, i) => (
+                                <DnaEvidenceItem key={i} quote={`"${o.objection}"`} body={o.expert_response_summary} evidence={o.evidence} sources={analyzedTranscripts} />
                             ))}
-                        </div>
-                    )}
-                    {stages.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            {stages.map((s, i) => (
-                                <span key={i} className="flex items-center gap-1.5">
-                                    <button onClick={() => setReviewTab("flow")}
-                                        className="px-2.5 py-1 rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] text-xs text-[var(--color-text-secondary)] hover:border-[var(--color-accent)]">
-                                        <span className="font-mono text-[10px] text-[var(--color-accent)] mr-1">{i + 1}</span>{s.name}
-                                    </button>
-                                    {i < stages.length - 1 && <span className="text-[var(--color-muted)] text-xs">→</span>}
-                                </span>
+                        </DnaListCard>
+                        <DnaListCard title={t.tabs.dna.phrasesRepeated} count={String(dnaResult.power_phrases.length)}>
+                            {dnaResult.power_phrases.length === 0 && <p className="text-xs text-[var(--color-muted)]">{t.tabs.dna.compareNone}</p>}
+                            {dnaResult.power_phrases.map((ph, i) => (
+                                <DnaEvidenceItem key={i} quote={`"${ph.phrase}"`} body={ph.context} evidence={ph.evidence} sources={analyzedTranscripts} />
                             ))}
-                        </div>
-                    )}
+                        </DnaListCard>
+                    </div>
+                    <DnaAsk key={currentExpertKey + (analyzedAt ?? "")}
+                        placeholder={t.tabs.dna.askPlaceholderName(profileName)}
+                        suggestions={t.tabs.dna.askSuggestions}
+                        onAsk={(q, h) => askDNA(profileName, dnaResult, analyzedTranscripts, q, h)} />
                 </div>
-                <AskPanel
-                    key={currentExpertKey + (analyzedAt ?? "")}
-                    heading={t.tabs.dna.askHeading}
-                    placeholder={t.tabs.dna.askPlaceholder}
-                    suggestions={t.tabs.dna.askSuggestions}
-                    onAsk={(q, h) => askDNA(profileName, dnaResult, analyzedTranscripts, q, h)}
-                />
+
+                {!showDetail && (
+                    <button onClick={() => setShowDetail(true)} className="text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">
+                        {t.tabs.dna.pickOneByOne} ↓
+                    </button>
+                )}
+                {showDetail && (<>
                 <div className="border-b border-[var(--color-border)] flex gap-1">
                     {reviewTabs.map(rt => (
                         <button key={rt.key} onClick={() => setReviewTab(rt.key)}
@@ -3918,6 +3980,8 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
                     </div>
                 )}
 
+                </>)}
+
                 {/* Sources — the transcripts this analysis is built from. Honest
                     display only: label, size, expert speaker. The model returns
                     one blended result, so no per-rep breakdown is invented. */}
@@ -3946,130 +4010,99 @@ export function TeamDNATab({ orgId, org, onApplied }: { orgId: string; org: OrgI
         )
     }
 
-    // Step 1: Collect
+    // Step 1: Collect — the lab (D-461). Drop a file or pick a real call;
+    // what can be counted shows at once; then one button reads the DNA.
+    const chipsForDrop = transcripts.filter(x => x.text.trim()).map((x, i) => ({
+        id: x.id,
+        label: x.source || x.repLabel || t.tabs.dna.transcriptN(i + 1),
+        words: countWords(x.text),
+        ok: !transcriptIssue(x.text) && !!x.expertSpeaker,
+    }))
+    const pickerCalls: PickerCall[] | null = platformCalls === null ? null : platformCalls.map(c => ({
+        id: c.id,
+        title: `${memberName.get(c.user_id) || t.common.rep} · ${c.session_title || t.tabs.dna.untitledCall}`,
+        meta: [new Date(c.started_at).toLocaleDateString(intl, { day: "numeric", month: "short" }),
+               c.duration_minutes ? `${Math.round(c.duration_minutes)} min` : null].filter(Boolean).join(" · "),
+        used: usedCallIds.has(c.id),
+        loading: loadingCallId === c.id,
+    }))
+    // Only a transcript that needs something from the manager (a speaker to
+    // pick, a problem to fix) or one they opened on purpose gets the card.
+    const needsCard = openId ? transcripts.find(x => x.id === openId) ?? null
+        : transcripts.find(x => x.text.trim() && (transcriptIssue(x.text) || !x.expertSpeaker)) ?? null
+    const expertLabel = expertName.trim() || completed.find(x => x.expertSpeaker)?.expertSpeaker || ""
     return (
         <div className="space-y-4">
-            <div className={CARD + " space-y-4"}>
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.title}</p>
-                        <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                            {t.tabs.dna.sub}
-                        </p>
-                    </div>
-                    {profiles.length > 0 && (
-                        <button onClick={() => setStep("list")}
-                            className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] whitespace-nowrap flex-shrink-0">
-                            {t.tabs.dna.allProfiles}
-                        </button>
-                    )}
+            <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.title}</p>
+                    <p className="text-xs text-[var(--color-text-secondary)] mt-1 max-w-2xl">{t.tabs.dna.sub}</p>
                 </div>
-                {/* Whose DNA this is. It names the profile, and analyzing the
-                    same name again replaces that person's profile (D-459). */}
-                <div className="space-y-1">
-                    <label className="text-xs font-semibold text-[var(--color-text-secondary)] block">{t.tabs.dna.playbookName}</label>
-                    <input type="text" placeholder={t.tabs.dna.playbookNamePlaceholder}
-                        value={expertName} onChange={e => setExpertName(e.target.value)}
-                        className={INPUT} />
-                    <p className="text-xs text-[var(--color-muted)]">
-                        {profiles.some(p => p.expert_name === expertName.trim())
-                            ? t.tabs.dna.replacesProfile
-                            : t.tabs.dna.playbookNameHint}
-                    </p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex-1 h-2 bg-[var(--color-line-soft)] rounded-full overflow-hidden">
-                        <div className="h-full bg-[var(--color-accent)] transition-all rounded-full"
-                            style={{ width: `${Math.min((completedWords / MIN_DNA_WORDS) * 100, 100)}%` }} />
-                    </div>
-                    <span className="text-xs text-[var(--color-text-secondary)] whitespace-nowrap">
+                {profiles.length > 0 && (
+                    <button onClick={() => setStep("list")}
+                        className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] whitespace-nowrap flex-shrink-0">
+                        {t.tabs.dna.allProfiles}
+                    </button>
+                )}
+            </div>
+
+            <DnaLab>
+                <DnaDropZone
+                    chips={chipsForDrop}
+                    accept={TRANSCRIPT_TEXT_EXTENSIONS.map(x => "." + x).join(",")}
+                    busy={dropBusy} error={dropError}
+                    onFiles={addFiles}
+                    onPaste={openPaste}
+                    onOpenChip={id => setOpenId(id)}
+                    onRemoveChip={id => {
+                        removeTranscript(id)
+                        const callId = Array.from(callEntry.entries()).find(([, e]) => e === id)?.[0]
+                        if (callId) {
+                            setUsedCallIds(prev => { const x = new Set(prev); x.delete(callId); return x })
+                            setCallEntry(prev => { const x = new Map(prev); x.delete(callId); return x })
+                        }
+                    }}
+                />
+                <DnaCallPicker calls={pickerCalls} busy={loadingCallId !== null}
+                    note={org.visibility !== "full_transcripts" ? t.tabs.dna.ownCallsOnly : undefined}
+                    error={callError} onToggle={toggleCall} />
+                {completed.length > 0 && (
+                    <DnaPreRead stats={dnaStats(completed.map(x => ({ text: x.text, expert_speaker: x.expertSpeaker })))} expert={expertLabel || t.tabs.dna.theExpert} />
+                )}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <span className="font-mono text-[11.5px]" style={{ color: "#94A2AB" }}>
                         {readyToAnalyze
-                            ? t.tabs.dna.progressReady(completedWords.toLocaleString(intl))
+                            ? t.tabs.dna.instantNote
                             : t.tabs.dna.progressWords(completedWords.toLocaleString(intl), MIN_DNA_WORDS.toLocaleString(intl))}
                     </span>
-                </div>
-            </div>
-
-            {/* Calls reps already made on TalkPilot — no export, no upload. */}
-            <div className={CARD + " space-y-3"}>
-                <button type="button" onClick={() => setShowCalls(v => !v)}
-                    className="w-full flex items-center justify-between gap-3 text-left">
-                    <div>
-                        <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.dna.platformCalls}</p>
-                        <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.tabs.dna.platformCallsSub}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <label className="font-mono text-[11.5px] flex items-center gap-2" style={{ color: "#94A2AB" }}>
+                            {t.tabs.dna.sellerLabel}
+                            <input value={expertName} onChange={e => setExpertName(e.target.value)}
+                                placeholder={t.tabs.dna.playbookNamePlaceholder}
+                                className="bg-transparent border-b font-body text-sm w-40 focus:outline-none"
+                                style={{ borderColor: "#24344D", color: "#37E4C8" }} />
+                        </label>
+                        <button onClick={analyze} disabled={!readyToAnalyze}
+                            className="px-4 py-2.5 rounded-lg text-sm font-bold disabled:opacity-40"
+                            style={{ background: "#37E4C8", color: "#06221C" }}>
+                            {expertName.trim() ? t.tabs.dna.readDna(expertName.trim()) : t.tabs.dna.readDnaNoName}
+                        </button>
                     </div>
-                    <span className="text-xs text-[var(--color-accent)] font-medium flex-shrink-0">
-                        {showCalls ? t.tabs.dna.hideCalls : t.tabs.dna.showCalls(platformCalls?.length ?? 0)}
-                    </span>
-                </button>
-                {showCalls && org.visibility !== "full_transcripts" && (
-                    <p className="text-xs text-amber-700">{t.tabs.dna.ownCallsOnly}</p>
-                )}
-                {showCalls && (
-                    platformCalls === null ? (
-                        <p className="text-xs text-[var(--color-muted)]">{t.tabs.dna.loadingCalls}</p>
-                    ) : platformCalls.length === 0 ? (
-                        <p className="text-xs text-[var(--color-muted)]">{t.tabs.dna.noPlatformCalls}</p>
-                    ) : (
-                        <div className="divide-y divide-[var(--color-border)] max-h-80 overflow-y-auto">
-                            {platformCalls.map(c => {
-                                const used = usedCallIds.has(c.id)
-                                return (
-                                    <div key={c.id} className="py-2 flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="text-sm text-[var(--color-text)] truncate">{c.session_title || t.tabs.dna.untitledCall}</p>
-                                            <p className="text-xs text-[var(--color-muted)]">
-                                                {(memberName.get(c.user_id) || t.common.rep)} · {new Date(c.started_at).toLocaleDateString(intl, { dateStyle: "medium" })}
-                                            </p>
-                                        </div>
-                                        <button className={BTN_GHOST + " flex-shrink-0"} disabled={used || loadingCallId !== null}
-                                            onClick={() => addPlatformCall(c)}>
-                                            {used ? t.tabs.dna.callAdded : loadingCallId === c.id ? t.tabs.dna.usingCall : t.tabs.dna.useCall}
-                                        </button>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    )
-                )}
-                {callError && <p className="text-xs text-amber-700">{callError}</p>}
-            </div>
-
-            {/* Finished transcripts collapse to chips so the card you are filling
-                is the only one competing for attention. Click one to reopen it. */}
-            {chips.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                    {chips.map(tr => (
-                        <TranscriptChip key={tr.id} index={transcripts.indexOf(tr)} entry={tr}
-                            onOpen={() => setOpenId(tr.id)}
-                            onRemove={transcripts.length > 1 ? () => removeTranscript(tr.id) : undefined}
-                        />
-                    ))}
                 </div>
+            </DnaLab>
+
+            {profiles.some(p => p.expert_name === expertName.trim()) && (
+                <p className="text-xs text-[var(--color-muted)]">{t.tabs.dna.replacesProfile}</p>
             )}
 
-            {openEntry && (
-                <TranscriptCard key={openEntry.id} index={transcripts.indexOf(openEntry)} entry={openEntry}
-                    onChange={(field, val) => updateTranscript(openEntry.id, field, val)}
-                    onRemove={transcripts.length > 1 ? () => removeTranscript(openEntry.id) : undefined}
-                    onCollapse={openId === openEntry.id ? () => setOpenId(null) : undefined}
+            {needsCard && (
+                <TranscriptCard key={needsCard.id} index={transcripts.indexOf(needsCard)} entry={needsCard}
+                    onChange={(field, val) => updateTranscript(needsCard.id, field, val)}
+                    onRemove={() => removeTranscript(needsCard.id)}
+                    onCollapse={openId === needsCard.id ? () => setOpenId(null) : undefined}
                 />
             )}
-
-            {!readyToAnalyze && completedCount > 0 && (
-                <p className="text-sm text-[var(--color-text-secondary)]">{t.tabs.dna.needMoreMaterial}</p>
-            )}
-
-            <div className="flex gap-3">
-                <button onClick={addTranscript}
-                    className="flex-1 border-2 border-dashed border-[var(--color-border)] rounded-xl py-3 text-sm text-[var(--color-muted)] hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] transition-colors">
-                    {t.tabs.dna.addTranscript}
-                </button>
-                <button onClick={analyze} disabled={!readyToAnalyze}
-                    className={BTN_PRIMARY + " flex-shrink-0" + (!readyToAnalyze ? " opacity-50 cursor-not-allowed" : "")}>
-                    {t.tabs.dna.analyzeN(completedCount)}
-                </button>
-            </div>
 
             {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
