@@ -6,8 +6,10 @@ import { supabase } from "@/lib/supabase"
 import { useT } from "@/i18n/LocaleProvider"
 import { GetTheApp } from "@/components/GetTheApp"
 
-/// D-474: AppSumo activation. This URL is the OAuth redirect registered with
-/// AppSumo, so a buyer arrives here as /appsumo?code=… after "Activate now".
+/// D-474/D-475: AppSumo activation. Served at https://talkpilot-appsumo.vercel.app/
+/// (its own host, so its sign-in never touches the Command Center's — see
+/// src/middleware.ts). That URL is the OAuth redirect registered with AppSumo,
+/// so a buyer arrives as /?code=… after "Activate now".
 ///
 ///   1. The single-use code goes straight to appsumo-oauth, which trades it
 ///      for the buyer's license key and returns a claim token. Spending the
@@ -93,7 +95,7 @@ function AppSumoContent() {
                     if (!token) { setStatus("error"); setMessage(t.appsumo.genericError); return }
                 }
                 // The code is spent — drop it so a reload doesn't try again.
-                window.history.replaceState(null, "", "/appsumo")
+                window.history.replaceState(null, "", window.location.pathname)
             }
             if (!token) { setStatus("no_code"); return }
             setClaim(token)
@@ -122,6 +124,9 @@ function AppSumoContent() {
             const body = await res.json().catch(() => ({}))
             if (res.ok) {
                 writeClaim(null)
+                // The sign-in existed only to claim the license — drop it so
+                // nothing stays signed in on this host (D-475).
+                await supabase.auth.signOut({ scope: "local" })
                 setPlan({ tier: Number(body.tier ?? 1), minutes: Number(body.minutes_cap ?? 600) })
                 setStatus("done")
             } else {
@@ -139,7 +144,7 @@ function AppSumoContent() {
     async function oauth(provider: "google" | "azure") {
         setMessage("")
         await supabase.auth.signOut({ scope: "local" })
-        const redirectTo = `${window.location.origin}/appsumo`
+        const redirectTo = `${window.location.origin}${window.location.pathname}`
         await supabase.auth.signInWithOAuth({
             provider,
             options: provider === "azure" ? { scopes: "openid profile email", redirectTo } : { redirectTo },
@@ -165,7 +170,7 @@ function AppSumoContent() {
             } else {
                 const { data, error } = await supabase.auth.signUp({
                     email, password,
-                    options: { emailRedirectTo: `${window.location.origin}/appsumo` },
+                    options: { emailRedirectTo: `${window.location.origin}${window.location.pathname}` },
                 })
                 if (error) { setMessage(error.message); return }
                 if (data.session) { setCurrentEmail(email); await activate() }
