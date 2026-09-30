@@ -309,6 +309,7 @@ export const en = {
     appsumo: {
         checking: "Checking your AppSumo license…",
         activating: "Activating your plan…",
+        tabTitle: "Activate TalkPilot",
         title: "Activate your AppSumo deal",
         intro: "Create your TalkPilot account, or sign in to the one you have. Your lifetime plan goes on that account.",
         noCode: "Start from AppSumo: open My Products and click \"Activate now\" on TalkPilot.",

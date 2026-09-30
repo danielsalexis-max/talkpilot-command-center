@@ -7,8 +7,10 @@ import { NextResponse, type NextRequest } from "next/server"
 /// Center on teams.talkpilot.co (it did while the page lived at
 /// teams.talkpilot.co/appsumo).
 ///
-///  * <appsumo host>/            → the /appsumo page (rewrite)
-///  * <appsumo host>/<anything>  → back to / (no Command Center there)
+///  * <appsumo host>/            → <appsumo host>/appsumo, query kept (a redirect,
+///    not a rewrite: AppShell keys its public/no-dashboard mode off the
+///    browser pathname, and a rewrite left it at "/", showing the Teams nav)
+///  * <appsumo host>/<anything>  → <appsumo host>/appsumo (no Command Center there)
 ///  * teams.talkpilot.co/appsumo… → the canonical appsumo host, query kept
 const APPSUMO_HOST = "talkpilot-appsumo.vercel.app"   // canonical — the URL registered with AppSumo
 const APPSUMO_HOSTS = new Set([APPSUMO_HOST, "appsumo.talkpilot.co"])
@@ -18,17 +20,13 @@ export function middleware(req: NextRequest) {
     const { pathname, search } = req.nextUrl
 
     if (APPSUMO_HOSTS.has(host)) {
-        if (pathname === "/") {
-            const url = req.nextUrl.clone()
-            url.pathname = "/appsumo"
-            return NextResponse.rewrite(url)
-        }
         if (pathname === "/appsumo") return NextResponse.next()
-        return NextResponse.redirect(new URL(`https://${host}/`))
+        const keep = pathname === "/" ? search : ""
+        return NextResponse.redirect(new URL(`https://${host}/appsumo${keep}`))
     }
 
     if (host === "teams.talkpilot.co" && pathname.startsWith("/appsumo")) {
-        return NextResponse.redirect(new URL(`https://${APPSUMO_HOST}/${search}`), 308)
+        return NextResponse.redirect(new URL(`https://${APPSUMO_HOST}/appsumo${search}`), 308)
     }
 
     return NextResponse.next()

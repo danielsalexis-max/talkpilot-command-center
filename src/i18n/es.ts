@@ -299,6 +299,7 @@ export const es: Dict = {
     appsumo: {
         checking: "Revisando tu licencia de AppSumo…",
         activating: "Activando tu plan…",
+        tabTitle: "Activa TalkPilot",
         title: "Activa tu oferta de AppSumo",
         intro: "Crea tu cuenta de TalkPilot o entra con la que ya tienes. Tu plan de por vida queda en esa cuenta.",
         noCode: "Empieza en AppSumo: abre My Products y haz clic en \"Activate now\" en TalkPilot.",
