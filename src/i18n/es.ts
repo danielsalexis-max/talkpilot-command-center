@@ -295,6 +295,32 @@ export const es: Dict = {
         backToApp: "Volver a TalkPilot",
     },
 
+    // /appsumo — donde llegan los compradores de AppSumo tras "Activate now" (D-474).
+    appsumo: {
+        checking: "Revisando tu licencia de AppSumo…",
+        activating: "Activando tu plan…",
+        title: "Activa tu oferta de AppSumo",
+        intro: "Crea tu cuenta de TalkPilot o entra con la que ya tienes. Tu plan de por vida queda en esa cuenta.",
+        noCode: "Empieza en AppSumo: abre My Products y haz clic en \"Activate now\" en TalkPilot.",
+        codeInvalid: "Este enlace de activación ya se usó o expiró. Vuelve a AppSumo y haz clic en \"Activate now\" otra vez.",
+        deactivated: "Esta licencia ya no está activa en AppSumo.",
+        alreadyLinked: "Esta licencia ya está en otra cuenta de TalkPilot. Entra con esa cuenta o escribe a support@talkpilot.co.",
+        genericError: "Algo salió mal. Prueba \"Activate now\" en AppSumo otra vez o escribe a support@talkpilot.co.",
+        signupHelp: "Usa el correo que quieras. Con él vas a entrar a la app.",
+        signinHelp: "Entra a tu cuenta de TalkPilot.",
+        choosePassword: "Elige una contraseña",
+        createAndActivate: "Crear cuenta y activar",
+        signInAndActivate: "Entrar y activar",
+        confirmEmailTitle: "Revisa tu correo",
+        confirmEmailBody: (email: string) => `Te enviamos un enlace a ${email}. Ábrelo y tu plan se activa en esta página.`,
+        doneEyebrow: "Plan de por vida activo",
+        doneTitle: "Todo listo",
+        doneSub: (tier: number, minutes: number) => `AppSumo Tier ${tier}: TalkPilot Pro de por vida, con ${minutes.toLocaleString("es-419")} minutos en vivo cada mes.`,
+        doneFootnote: "Descarga la app y entra con la misma cuenta.",
+        signedInAs: (email: string) => `Entraste como ${email}.`,
+        useOtherAccount: "Usar otra cuenta",
+    },
+
     acceptInvite: {
         checking: "Verificando invitación…",
         accepting: "Aceptando invitación…",

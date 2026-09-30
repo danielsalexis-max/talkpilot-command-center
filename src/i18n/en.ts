@@ -305,6 +305,32 @@ export const en = {
         backToApp: "Back to TalkPilot",
     },
 
+    // /appsumo — where AppSumo buyers land after "Activate now" (D-474).
+    appsumo: {
+        checking: "Checking your AppSumo license…",
+        activating: "Activating your plan…",
+        title: "Activate your AppSumo deal",
+        intro: "Create your TalkPilot account, or sign in to the one you have. Your lifetime plan goes on that account.",
+        noCode: "Start from AppSumo: open My Products and click \"Activate now\" on TalkPilot.",
+        codeInvalid: "This activation link was already used or expired. Go back to AppSumo and click \"Activate now\" again.",
+        deactivated: "This license is no longer active on AppSumo.",
+        alreadyLinked: "This license is already on another TalkPilot account. Sign in with that account, or email support@talkpilot.co.",
+        genericError: "Something went wrong. Try \"Activate now\" on AppSumo again, or email support@talkpilot.co.",
+        signupHelp: "Pick any email. You will use it to sign in to the app.",
+        signinHelp: "Sign in to your TalkPilot account.",
+        choosePassword: "Choose a password",
+        createAndActivate: "Create account and activate",
+        signInAndActivate: "Sign in and activate",
+        confirmEmailTitle: "Check your email",
+        confirmEmailBody: (email: string) => `We sent a link to ${email}. Open it, and your plan activates on this page.`,
+        doneEyebrow: "Lifetime plan active",
+        doneTitle: "You're all set",
+        doneSub: (tier: number, minutes: number) => `AppSumo Tier ${tier}: TalkPilot Pro for life, with ${minutes.toLocaleString("en-US")} live minutes every month.`,
+        doneFootnote: "Download the app and sign in with the same account.",
+        signedInAs: (email: string) => `Signed in as ${email}.`,
+        useOtherAccount: "Use a different account",
+    },
+
     acceptInvite: {
         checking: "Checking invite…",
         accepting: "Accepting invite…",
