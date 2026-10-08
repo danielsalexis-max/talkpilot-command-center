@@ -341,6 +341,7 @@ export const en = {
         code: "Code",
         verify: "Continue",
         badCode: "That code didn't work. Check it or ask for a new one.",
+        returnsTo: "After you allow it, you go back to",
         intro: "If you allow it, it can:",
         canDo: [
             "Read your conversations: summaries, Deep Dive analysis and full transcripts",

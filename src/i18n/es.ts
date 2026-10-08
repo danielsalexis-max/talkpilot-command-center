@@ -331,6 +331,7 @@ export const es: Dict = {
         code: "Código",
         verify: "Continuar",
         badCode: "Ese código no funcionó. Revísalo o pide uno nuevo.",
+        returnsTo: "Después de permitirlo, vuelves a",
         intro: "Si lo permites, podrá:",
         canDo: [
             "Leer tus conversaciones: resúmenes, análisis de Deep Dive y transcripciones completas",

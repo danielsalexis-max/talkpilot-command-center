@@ -22,6 +22,10 @@ type Details = {
     scope: string
 }
 
+function hostOf(uri: string): string {
+    try { return new URL(uri).host } catch { return uri }
+}
+
 export default function ConsentPage() {
     return (
         <Suspense fallback={null}>
@@ -186,6 +190,11 @@ function Consent() {
 
                 {phase === "consent" && details && (
                     <div className="space-y-5">
+                        {/* Dynamic registration means anyone can register an app with any
+                            name. The redirect domain is the part a fake "Claude" can't fake. */}
+                        <p className="rounded-lg bg-[var(--color-surface)] px-3 py-2 text-xs text-[var(--color-text-secondary)]">
+                            {t.returnsTo} <span className="font-semibold text-[var(--color-text)]">{hostOf(details.redirect_uri)}</span>
+                        </p>
                         <p className="text-sm text-[var(--color-text-secondary)]">{t.intro}</p>
                         <ul className="space-y-2 text-sm text-[var(--color-text)]">
                             {t.canDo.map(line => (
