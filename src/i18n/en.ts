@@ -305,6 +305,60 @@ export const en = {
         backToApp: "Back to TalkPilot",
     },
 
+    // D-538 — TalkPilot in Claude & ChatGPT, the admin card in Settings.
+    aiConnector: {
+        title: "Claude & ChatGPT",
+        intro: "Each person can use TalkPilot inside Claude or ChatGPT: ask about their calls, prep for the next one, write follow-ups. Pro and Teams only. Everyone connects their own account.",
+        copy: "Copy",
+        copied: "Copied",
+        steps: "In Claude: Settings → Connectors → Add custom connector. In ChatGPT: Settings → Apps & Connectors → Create (Developer mode). Paste the URL, then sign in to TalkPilot and click Allow. In the app: Settings → Integrations → Claude & ChatGPT.",
+        access: "It sees exactly what that person sees here. Managers see their reps' calls under the workspace's visibility setting. Admins can edit playbooks, objections and the knowledge base from their AI.",
+        noUse: "Nobody in this workspace has used it in the last 30 days.",
+        usage: (people: number, uses: number) => `Last 30 days: ${people === 1 ? "1 person" : `${people} people`}, ${uses === 1 ? "1 use" : `${uses} uses`}.`,
+        readLine: (who: string, whose: string, when: string) => `${who} opened a call by ${whose} · ${when}`,
+    },
+
+    // /oauth/consent — the TalkPilot MCP connector's consent screen (D-538).
+    // The AI app's name is interpolated, never translated.
+    oauthConsent: {
+        title: (app: string) => `${app} wants to use your TalkPilot account`,
+        anAiApp: "An AI app",
+        signInTitle: "Sign in to connect TalkPilot",
+        signInSub: "Use the same sign-in you use in the TalkPilot app.",
+        loading: "Loading…",
+        redirecting: "Done. Taking you back…",
+        google: "Continue with Google",
+        microsoft: "Continue with Microsoft",
+        or: "or",
+        email: "Email",
+        password: "Password",
+        signIn: "Sign in",
+        emailMeCode: "Email me a sign-in code instead",
+        appleHint: "Signed up with Apple? Use the email code. It goes to the email on your Apple account.",
+        enterEmailFirst: "Enter your email first.",
+        noAccountForEmail: "We couldn't send a code to that email. Check it's the email on your TalkPilot account.",
+        codeSent: (email: string) => `We sent a code to ${email}. Enter it here.`,
+        code: "Code",
+        verify: "Continue",
+        badCode: "That code didn't work. Check it or ask for a new one.",
+        intro: "If you allow it, it can:",
+        canDo: [
+            "Read your conversations: summaries, Deep Dive analysis and full transcripts",
+            "Read and update your action items",
+            "Read and update what the live coach knows about you",
+            "On TalkPilot Teams: managers see their reps' calls the same way they do in the Command Center, and admins can edit playbooks, objections and the knowledge base",
+        ],
+        limits: "It only sees what you can already see in TalkPilot. Every use is logged, and reps can see when a manager opens their calls.",
+        needsPro: "This works with TalkPilot Pro and TalkPilot Teams. You can connect now, but it won't show your data until you upgrade.",
+        signedInAs: (email: string) => `Signed in as ${email}.`,
+        switchAccount: "Use another account",
+        allow: "Allow",
+        deny: "Deny",
+        revokeHint: "You can disconnect any time in TalkPilot, under Integrations.",
+        missingRequest: "This link is missing its connection request. Start again from Claude or ChatGPT.",
+        expired: "This connection request expired. Start again from Claude or ChatGPT.",
+    },
+
     // /appsumo — where AppSumo buyers land after "Activate now" (D-474).
     appsumo: {
         checking: "Checking your AppSumo license…",

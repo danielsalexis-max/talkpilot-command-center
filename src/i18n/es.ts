@@ -295,6 +295,60 @@ export const es: Dict = {
         backToApp: "Volver a TalkPilot",
     },
 
+    // D-538 — TalkPilot en Claude y ChatGPT, la tarjeta del admin en Ajustes.
+    aiConnector: {
+        title: "Claude y ChatGPT",
+        intro: "Cada persona puede usar TalkPilot dentro de Claude o ChatGPT: preguntar por sus llamadas, prepararse para la próxima y escribir seguimientos. Solo Pro y Teams. Cada quien conecta su propia cuenta.",
+        copy: "Copiar",
+        copied: "Copiado",
+        steps: "En Claude: Settings → Connectors → Add custom connector. En ChatGPT: Settings → Apps & Connectors → Create (Developer mode). Pega la URL, entra a TalkPilot y haz clic en Permitir. En la app: Ajustes → Integraciones → Claude y ChatGPT.",
+        access: "Ve exactamente lo que esa persona ve aquí. Los managers ven las llamadas de su equipo según la visibilidad del espacio de trabajo. Los admins pueden editar playbooks, objeciones y la base de conocimiento desde su IA.",
+        noUse: "Nadie en este espacio de trabajo lo ha usado en los últimos 30 días.",
+        usage: (people: number, uses: number) => `Últimos 30 días: ${people === 1 ? "1 persona" : `${people} personas`}, ${uses === 1 ? "1 uso" : `${uses} usos`}.`,
+        readLine: (who: string, whose: string, when: string) => `${who} abrió una llamada de ${whose} · ${when}`,
+    },
+
+    // /oauth/consent — pantalla de permiso del conector MCP de TalkPilot (D-538).
+    // El nombre de la app de IA se interpola, nunca se traduce.
+    oauthConsent: {
+        title: (app: string) => `${app} quiere usar tu cuenta de TalkPilot`,
+        anAiApp: "Una app de IA",
+        signInTitle: "Entra para conectar TalkPilot",
+        signInSub: "Usa la misma forma de entrar que usas en la app de TalkPilot.",
+        loading: "Cargando…",
+        redirecting: "Listo. Te llevamos de vuelta…",
+        google: "Continuar con Google",
+        microsoft: "Continuar con Microsoft",
+        or: "o",
+        email: "Correo",
+        password: "Contraseña",
+        signIn: "Entrar",
+        emailMeCode: "Mejor envíame un código por correo",
+        appleHint: "¿Te registraste con Apple? Usa el código por correo. Llega al correo de tu cuenta de Apple.",
+        enterEmailFirst: "Primero escribe tu correo.",
+        noAccountForEmail: "No pudimos enviar un código a ese correo. Revisa que sea el correo de tu cuenta de TalkPilot.",
+        codeSent: (email: string) => `Enviamos un código a ${email}. Escríbelo aquí.`,
+        code: "Código",
+        verify: "Continuar",
+        badCode: "Ese código no funcionó. Revísalo o pide uno nuevo.",
+        intro: "Si lo permites, podrá:",
+        canDo: [
+            "Leer tus conversaciones: resúmenes, análisis de Deep Dive y transcripciones completas",
+            "Leer y actualizar tus tareas pendientes",
+            "Leer y actualizar lo que el coach en vivo sabe de ti",
+            "En TalkPilot Teams: los managers ven las llamadas de su equipo igual que en el Command Center, y los admins pueden editar playbooks, objeciones y la base de conocimiento",
+        ],
+        limits: "Solo ve lo que tú ya puedes ver en TalkPilot. Cada uso queda registrado, y cada vendedor puede ver cuándo un manager abre sus llamadas.",
+        needsPro: "Esto funciona con TalkPilot Pro y TalkPilot Teams. Puedes conectarlo ahora, pero no mostrará tus datos hasta que mejores tu plan.",
+        signedInAs: (email: string) => `Entraste como ${email}.`,
+        switchAccount: "Usar otra cuenta",
+        allow: "Permitir",
+        deny: "Rechazar",
+        revokeHint: "Puedes desconectarlo cuando quieras en TalkPilot, en Integraciones.",
+        missingRequest: "A este enlace le falta la solicitud de conexión. Empieza de nuevo desde Claude o ChatGPT.",
+        expired: "Esta solicitud de conexión expiró. Empieza de nuevo desde Claude o ChatGPT.",
+    },
+
     // /appsumo — donde llegan los compradores de AppSumo tras "Activate now" (D-474).
     appsumo: {
         checking: "Revisando tu licencia de AppSumo…",

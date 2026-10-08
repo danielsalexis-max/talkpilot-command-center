@@ -19,6 +19,7 @@ import { StarterKitPicker } from "@/components/starterKitPicker"
 import { VERTICALS, type Vertical } from "@/lib/starterKit"
 import { extractTextFromFile, isExtractError, MAX_FILE_BYTES, MAX_TEXT_CHARS, EXTRACT_ACCEPT } from "@/lib/extractText"
 import { EmailLink } from "@/components/EmailLink"
+import { AIConnectorCard } from "@/components/aiConnector"
 import { useLocale, useT } from "@/i18n/LocaleProvider"
 import { clientLocale, type Dict } from "@/i18n"
 
@@ -519,6 +520,7 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
                         {t.tabs.settings.autoLogHelp}
                     </p>
                 </div>
+                <AIConnectorCard orgId={org.id} />
 
                 <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)] bg-[var(--color-bg)] rounded-lg px-3 py-2">
                     <span>{t.tabs.settings.plan} <span className="text-[var(--color-text)] font-medium capitalize">{org.plan}</span></span>

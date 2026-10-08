@@ -9,15 +9,18 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "^2.3.1",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
     "jszip": "^3.10.2",
     "mammoth": "^1.12.1",
+    "mcp-handler": "^2.3.0",
     "next": "^15.3.4",
     "pdfjs-dist": "^6.2.108",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "recharts": "^2.15.3"
+    "recharts": "^2.15.3",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
