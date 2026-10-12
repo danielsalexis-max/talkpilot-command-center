@@ -75,7 +75,7 @@ export const en = {
         statuses: {
             active: "active", draft: "draft", archived: "archived",
             ready: "ready", error: "error", pending: "pending", processing: "processing",
-            disabled: "disabled",
+            disabled: "disabled", trialing: "trial",
         } as Record<string, string>,
         severities: {
             low: "low", medium: "medium", high: "high", critical: "critical", normal: "normal",
@@ -232,6 +232,11 @@ export const en = {
         payTitle: "One step left: add billing",
         paySub: (seats: number) => `Your workspace and playbook are ready. Activate ${seats} seat${seats !== 1 ? "s" : ""} to let your team start using it.`,
         goToCheckout: "Add billing",
+        // D-575: a sales grant that requires a card. Stripe opens a trial, so
+        // the first charge lands when the pilot ends, not today.
+        cardTrialTitle: (days: number) => `Last step: start your ${days}-day pilot`,
+        cardTrialSub: (days: number, seats: number) => `Add a card to activate ${seats} seat${seats !== 1 ? "s" : ""}. You pay $0 today and nothing is charged until day ${days}. Cancel anytime before then in Settings → Billing.`,
+        cardTrialCta: "Add card · $0 today",
         openingCheckout: "Opening checkout…",
         bookDemoInstead: "Book a demo instead",
         checkoutFailed: "Couldn't open checkout. Try again, or book a demo and we'll set it up with you.",
@@ -1384,6 +1389,7 @@ export const en = {
             subscription: "Subscription",
             status: "Status:",
             renews: (date: string) => `· renews ${date}`,
+            trialEnds: (date: string) => `· free until ${date}, first charge that day`,
             cancelsAtEnd: "cancels at period end",
             opening: "Opening…",
             manageBilling: "Manage billing ↗",

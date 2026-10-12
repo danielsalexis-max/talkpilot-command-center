@@ -176,6 +176,9 @@ export default function StartPage() {
     /// Whether a sales-granted trial was claimed at workspace creation (D-192).
     /// False is the normal path now: the wizard ends at checkout.
     const [hasTrial, setHasTrial] = useState(false)
+    /// D-575: a card-required grant. The final step is still checkout, but it
+    /// opens a Stripe trial of this many days ($0 today).
+    const [cardTrialDays, setCardTrialDays] = useState<number | null>(null)
     const [checkoutBusy, setCheckoutBusy] = useState(false)
 
     const [invites, setInvites]       = useState<string[]>(["", "", ""])
@@ -194,7 +197,7 @@ export default function StartPage() {
             .select("org_id, role").eq("user_id", user.id).eq("status", "active").maybeSingle()
         if (member && !doneRef.current) {
             const { data: o } = await supabase.from("organizations")
-                .select("name, plan, seats_purchased, trial_ends_at, stripe_subscription_id")
+                .select("name, plan, seats_purchased, trial_ends_at, stripe_subscription_id, card_trial_days")
                 .eq("id", member.org_id).single()
             const entitled = !!o && (
                 !!o.stripe_subscription_id
@@ -207,6 +210,7 @@ export default function StartPage() {
             setOrgName(o.name ?? "")
             setSeats(o.seats_purchased ?? 3)
             setHasTrial(false)
+            setCardTrialDays(o.card_trial_days ?? null)
             setEmail(user.email ?? "")
             if (new URLSearchParams(window.location.search).get("checkout") === "canceled") {
                 setError(t.start.checkoutCanceledNote)
@@ -306,6 +310,7 @@ export default function StartPage() {
             // the brain either way — a half-configured workspace is worthless
             // to them and to us — but the final step becomes checkout.
             setHasTrial(!!res.trial_ends_at)
+            setCardTrialDays(typeof res.card_trial_days === "number" ? res.card_trial_days : null)
             setStep("invite")
         } catch (e) {
             const msg = (e as Error).message
@@ -531,11 +536,15 @@ export default function StartPage() {
                                 anyone who would rather talk first. */}
                             {!hasTrial && (
                                 <div className="mt-7 rounded-lg border border-[var(--color-accent-light)] bg-[var(--color-accent-subtle)] px-4 py-3.5 space-y-2">
-                                    <p className="text-sm font-semibold text-[var(--color-accent-deep)]">{t.start.payTitle}</p>
-                                    <p className="text-xs text-[var(--color-accent-deep)]">{t.start.paySub(seats)}</p>
+                                    <p className="text-sm font-semibold text-[var(--color-accent-deep)]">
+                                        {cardTrialDays ? t.start.cardTrialTitle(cardTrialDays) : t.start.payTitle}
+                                    </p>
+                                    <p className="text-xs text-[var(--color-accent-deep)]">
+                                        {cardTrialDays ? t.start.cardTrialSub(cardTrialDays, seats) : t.start.paySub(seats)}
+                                    </p>
                                     <div className="flex flex-wrap gap-2 pt-1">
                                         <button onClick={startCheckout} disabled={checkoutBusy} className={BTN + " sm:w-auto px-5"}>
-                                            {checkoutBusy ? t.start.openingCheckout : t.start.goToCheckout}
+                                            {checkoutBusy ? t.start.openingCheckout : cardTrialDays ? t.start.cardTrialCta : t.start.goToCheckout}
                                         </button>
                                         <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className={BTN_GHOST + " sm:w-auto px-5 text-center"}>{t.start.bookDemoInstead}</a>
                                     </div>

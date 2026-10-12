@@ -4424,7 +4424,7 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                             <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.billing.subscription}</h3>
                             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
                                 {t.tabs.billing.status} <span className="capitalize">{t.data.statuses[info.stripe.status] ?? info.stripe.status}</span>
-                                {renewal && <> {t.tabs.billing.renews(renewal)}</>}
+                                {renewal && <> {info.stripe.status === "trialing" ? t.tabs.billing.trialEnds(renewal) : t.tabs.billing.renews(renewal)}</>}
                                 {info.stripe.cancel_at_period_end && <> · <span className="text-red-600">{t.tabs.billing.cancelsAtEnd}</span></>}
                             </p>
                         </div>

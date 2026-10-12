@@ -71,7 +71,7 @@ export const es: Dict = {
         statuses: {
             active: "activo", draft: "borrador", archived: "archivado",
             ready: "listo", error: "error", pending: "pendiente", processing: "procesando",
-            disabled: "desactivada",
+            disabled: "desactivada", trialing: "en prueba",
         } as Record<string, string>,
         severities: {
             low: "baja", medium: "media", high: "alta", critical: "crítica", normal: "normal",
@@ -225,6 +225,11 @@ export const es: Dict = {
         payTitle: "Falta un paso: agrega la facturación",
         paySub: (seats: number) => `Tu espacio de trabajo y tu playbook ya están listos. Activa ${seats} asiento${seats !== 1 ? "s" : ""} para que tu equipo empiece a usarlo.`,
         goToCheckout: "Agregar facturación",
+        // D-575: una concesión de ventas que pide tarjeta. Stripe abre una
+        // prueba, así que el primer cobro llega al terminar el piloto, no hoy.
+        cardTrialTitle: (days: number) => `Último paso: empieza tu piloto de ${days} días`,
+        cardTrialSub: (days: number, seats: number) => `Agrega una tarjeta para activar ${seats} asiento${seats !== 1 ? "s" : ""}. Hoy pagas $0 y no se cobra nada hasta el día ${days}. Puedes cancelar cuando quieras antes de esa fecha en Configuración → Facturación.`,
+        cardTrialCta: "Agregar tarjeta · $0 hoy",
         openingCheckout: "Abriendo el checkout…",
         bookDemoInstead: "Mejor agenda una demo",
         checkoutFailed: "No se pudo abrir el checkout. Inténtalo de nuevo, o agenda una demo y lo configuramos contigo.",
@@ -1358,6 +1363,7 @@ export const es: Dict = {
             subscription: "Suscripción",
             status: "Estado:",
             renews: (date: string) => `· se renueva el ${date}`,
+            trialEnds: (date: string) => `· gratis hasta el ${date}, ese día es el primer cobro`,
             cancelsAtEnd: "se cancela al final del periodo",
             opening: "Abriendo…",
             manageBilling: "Administrar facturación ↗",
