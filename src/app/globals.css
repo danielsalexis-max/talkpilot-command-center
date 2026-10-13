@@ -201,3 +201,6 @@ html[data-skin="dark"] {
 @keyframes dna-find-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .dna-find { animation: dna-find-in .35s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .dna-scan { display: none; } .dna-find { animation: none; } }
+
+/* Full-screen pages paint their own canvas; let the sky show through (D-584). */
+.min-h-screen.bg-\[var\(--color-bg\)\] { background: transparent; }
