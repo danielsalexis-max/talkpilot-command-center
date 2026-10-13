@@ -272,20 +272,22 @@ export default function HomePage() {
                 const href   = top ? top.href  : ("/calls" as Route)
                 const cta    = top ? top.cta   : t.home.heroSeeCalls
                 return (
-                    <Link href={href} className="tp-hero-banner group flex items-center gap-4 px-5 sm:px-6 py-5">
-                        <span className="relative z-[1] hidden sm:grid w-12 h-12 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-white/25">
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <Link href={href} className="tp-hero-banner group flex items-center gap-3.5 px-4 sm:px-5 py-3.5">
+                        <span className="relative z-[1] hidden sm:grid w-9 h-9 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-white/25">
+                            <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 {top
                                     ? <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v5m0 3.5v.01M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0z" />
                                     : <path strokeLinecap="round" strokeLinejoin="round" d="M4 20V10M10 20V4M16 20v-7M22 20H2" />}
                             </svg>
                         </span>
                         <span className="relative z-[1] min-w-0 flex-1">
-                            <span className="block text-[11.5px] font-semibold uppercase tracking-[0.08em] text-white/75">{kicker}</span>
-                            <span className="block font-display text-[19px] sm:text-[21px] font-bold leading-tight mt-0.5">{title}</span>
-                            <span className="block text-[13.5px] text-white/85 mt-1">{sub}</span>
+                            <span className="flex items-center gap-2 min-w-0">
+                                <span className="shrink-0 text-[10.5px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-md bg-white/15 text-white/90">{kicker}</span>
+                                <span className="truncate font-display text-[15.5px] font-bold" title={title}>{title}</span>
+                            </span>
+                            <span className="block truncate text-[12.5px] text-white/80 mt-0.5">{sub}</span>
                         </span>
-                        <span className="relative z-[1] hidden md:inline-flex items-center gap-1 shrink-0 px-3.5 h-9 rounded-[11px] bg-white text-[#0E182B] text-[13.5px] font-semibold shadow-[0_6px_18px_rgba(0,0,0,0.18)] group-hover:-translate-y-px transition-transform">
+                        <span className="relative z-[1] hidden md:inline-flex items-center gap-1 shrink-0 px-3 h-8 rounded-[10px] bg-white text-[#0E182B] text-[13px] font-semibold shadow-[0_4px_12px_rgba(0,0,0,0.16)] group-hover:-translate-y-px transition-transform">
                             {cta.replace(/\s*→\s*$/, "")}
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m9 6 6 6-6 6" /></svg>
                         </span>

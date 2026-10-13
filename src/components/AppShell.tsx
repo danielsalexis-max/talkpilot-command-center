@@ -308,11 +308,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <div className="glow g1" /><div className="glow g2" /><div className="glow g3" />
             <div className="grid" />
             {[
-                { l: "38%", t: "9%",  s: 14, d: "0s" },
-                { l: "72%", t: "22%", s: 10, d: "2.4s" },
-                { l: "58%", t: "64%", s: 12, d: "4.1s" },
-                { l: "86%", t: "78%", s: 9,  d: "1.2s" },
-                { l: "24%", t: "82%", s: 11, d: "5.3s" },
+                // Edges only, so a sparkle never sits behind page text.
+                { l: "97%", t: "16%", s: 12, d: "0s" },
+                { l: "94%", t: "52%", s: 9,  d: "2.6s" },
+                { l: "98%", t: "84%", s: 11, d: "4.4s" },
+                { l: "62%", t: "96%", s: 9,  d: "1.4s" },
             ].map((p, i) => (
                 <svg key={i} className="spark" style={{ left: p.l, top: p.t, width: p.s, height: p.s, animationDelay: p.d }} viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 0c.7 6.3 5.7 11.3 12 12-6.3.7-11.3 5.7-12 12-.7-6.3-5.7-11.3-12-12C6.3 11.3 11.3 6.3 12 0z" />

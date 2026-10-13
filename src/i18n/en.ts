@@ -1072,6 +1072,13 @@ export const en = {
         },
 
         practice: {
+            // D-586: the practice page as poster cards.
+            all: "All",
+            difficulty: { easy: "Easy", medium: "Medium", hard: "Hard" } as Record<string, string>,
+            minutes: (n: number) => `${n} min`,
+            withCharacter: (name: string) => `with ${name}`,
+            selected: "Selected",
+            assignedCount: (n: number) => `${n} active`,
             assignTitle: "Assign a practice",
             assignSub: "The rep runs it against an AI character in the TalkPilot app and gets a graded scorecard — the grade rolls up here automatically.",
             scenario: "Scenario",

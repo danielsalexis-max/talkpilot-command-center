@@ -1048,6 +1048,13 @@ export const es: Dict = {
         },
 
         practice: {
+            // D-586: la página de práctica con tarjetas de escena.
+            all: "Todas",
+            difficulty: { easy: "Fácil", medium: "Media", hard: "Difícil" } as Record<string, string>,
+            minutes: (n: number) => `${n} min`,
+            withCharacter: (name: string) => `con ${name}`,
+            selected: "Elegida",
+            assignedCount: (n: number) => `${n} activa${n === 1 ? "" : "s"}`,
             assignTitle: "Asignar una práctica",
             assignSub: "El rep la ejecuta contra un personaje de IA en la app de TalkPilot y recibe un scorecard calificado — la calificación sube aquí automáticamente.",
             scenario: "Escenario",

@@ -11,7 +11,8 @@ import {
     type ApplyOption, type PickerCall,
 } from "@/components/dnaViews"
 import { SearchBox } from "@/components/SearchBox"
-import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
+import { STOCK_PRACTICE_SCENARIOS, SCENARIO_SCENE, localizedScenario, scenarioTitle } from "@/lib/stockPracticeScenarios"
+import { SCENE_ART } from "@/lib/sceneArt"
 import { rollUpGuardrails } from "@/lib/guardrails"
 import { PlaybookAssignment, type AssignTarget } from "@/components/playbookAssignment"
 import { TeamsSection } from "@/components/teamsSection"
@@ -45,7 +46,7 @@ interface MemberRow { user_id: string; email: string | null; role: string; statu
 interface InviteRow { id: string; email: string; role: string; accepted_at: string | null; expires_at: string; revoked_at: string | null }
 interface TeamRow  { id: string; name: string }
 interface PracticeAssignmentRow {
-    id: string; title: string; note: string | null; due_at: string | null
+    id: string; title: string; note: string | null; due_at: string | null; scenario_id: string | null
     assignee_user_id: string | null; assignee_team_id: string | null; created_at: string
 }
 
@@ -2030,7 +2031,8 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
 interface Readiness { activePlaybooks: number; objections: number; knowledge: number }
 
 export function PracticeTab({ orgId }: { orgId: string }) {
-    const { t, intl } = useLocale()
+    const { t, intl, locale } = useLocale()
+    const [category, setCategory]       = useState<string | null>(null)
     const [assignments, setAssignments] = useState<PracticeAssignmentRow[]>([])
     const [members, setMembers]         = useState<MemberRow[]>([])
     const [teams, setTeams]              = useState<TeamRow[]>([])
@@ -2048,7 +2050,7 @@ export function PracticeTab({ orgId }: { orgId: string }) {
     const load = useCallback(async () => {
         const [assignRes, memberRes, teamRes] = await Promise.all([
             supabase.from("org_practice_assignments")
-                .select("id, title, note, due_at, assignee_user_id, assignee_team_id, created_at")
+                .select("id, title, note, due_at, scenario_id, assignee_user_id, assignee_team_id, created_at")
                 .eq("org_id", orgId).eq("active", true)
                 .order("created_at", { ascending: false }).limit(30),
             supabase.rpc("get_org_members_with_email", { p_org: orgId }).then(r => {
@@ -2116,90 +2118,154 @@ export function PracticeTab({ orgId }: { orgId: string }) {
 
     if (loading) return <div className="text-[var(--color-text-secondary)] text-sm">{t.common.loading}</div>
 
+    const P = t.tabs.practice
+    const categories = Array.from(new Set(STOCK_PRACTICE_SCENARIOS.map(s => localizedScenario(s, locale).category)))
+    const shown = STOCK_PRACTICE_SCENARIOS.filter(s => !category || localizedScenario(s, locale).category === category)
+    const chosen = STOCK_PRACTICE_SCENARIOS.find(s => s.id === scenarioId)
+    const chosenL = chosen ? localizedScenario(chosen, locale) : null
+    const Art = ({ sid, className }: { sid: string | null; className: string }) => (
+        <span className={`block overflow-hidden ${className}`}
+            dangerouslySetInnerHTML={{ __html: SCENE_ART[SCENARIO_SCENE[sid ?? ""] ?? "spotlight"] }} />
+    )
+    const chip = (on: boolean) => `inline-flex items-center h-8 px-3 rounded-[9px] text-[13px] font-semibold transition-colors ${
+        on ? "bg-[var(--color-text)] text-[var(--color-bg)]"
+           : "bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-border-strong)] hover:border-[var(--color-accent)]"}`
+
     return (
-        <div className="space-y-6">
-            <div className={CARD}>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.practice.assignTitle}</h3>
-                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                    {t.tabs.practice.assignSub}
-                </p>
-
-                <div className="mt-5 space-y-4">
-                    <div className="space-y-1">
-                        <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.practice.scenario}</label>
-                        <select className={INPUT} value={scenarioId} onChange={e => setScenarioId(e.target.value)}>
-                            {STOCK_PRACTICE_SCENARIOS.map(s => (
-                                <option key={s.id} value={s.id}>{s.title} · {s.category} · {s.difficulty}</option>
-                            ))}
-                        </select>
-                        <p className="text-xs text-[var(--color-muted)] mt-1">
-                            {STOCK_PRACTICE_SCENARIOS.find(s => s.id === scenarioId)?.objective}
-                        </p>
+        <div className="space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5 items-start">
+                {/* ── Scenes, as the apps show them (D-586) ── */}
+                <div className="min-w-0">
+                    <div className="flex flex-wrap gap-1.5 mb-3.5">
+                        <button className={chip(category === null)} onClick={() => setCategory(null)}>{P.all}</button>
+                        {categories.map(c => (
+                            <button key={c} className={chip(category === c)} onClick={() => setCategory(c)}>{c}</button>
+                        ))}
                     </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {shown.map(s => {
+                            const l = localizedScenario(s, locale)
+                            const on = s.id === scenarioId
+                            return (
+                                <button key={s.id} onClick={() => setScenarioId(s.id)} aria-pressed={on}
+                                    className={`group text-left rounded-[14px] overflow-hidden bg-[var(--color-surface)] border transition-all hover:-translate-y-0.5 ${
+                                        on ? "border-[var(--color-accent)] ring-2 ring-[var(--color-accent)]/60" : "border-[var(--color-border)]"}`}
+                                    style={{ boxShadow: "var(--shadow-card)" }}>
+                                    <span className="relative block h-[118px]">
+                                        <Art sid={s.id} className="absolute inset-0" />
+                                        <span className="absolute left-2.5 top-2.5 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-black/25 text-white backdrop-blur-sm">
+                                            {P.difficulty[s.difficulty] ?? s.difficulty} · {P.minutes(s.durationMinutes)}
+                                        </span>
+                                        {on && (
+                                            <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white text-[#0E182B]">
+                                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="m5 12 5 5 9-10" /></svg>
+                                                {P.selected}
+                                            </span>
+                                        )}
+                                    </span>
+                                    <span className="block p-3.5">
+                                        <span className="block font-display text-[15px] font-bold leading-snug text-[var(--color-text)]">{l.title}</span>
+                                        <span className="block text-[12px] font-medium text-[var(--color-accent-deep)] mt-0.5">{l.category} · {P.withCharacter(s.character)}</span>
+                                        <span className="block text-[12.5px] text-[var(--color-text-secondary)] mt-1.5 line-clamp-2">{l.objective}</span>
+                                        <span className="flex flex-wrap gap-1 mt-2.5">
+                                            {l.skills.slice(0, 3).map(k => (
+                                                <span key={k} className="text-[11px] font-medium px-1.5 py-0.5 rounded-md bg-[var(--color-accent-subtle)] text-[var(--color-text-secondary)]">{k}</span>
+                                            ))}
+                                        </span>
+                                    </span>
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.practice.assignTo}</label>
-                            <select className={INPUT} value={assigneeKind}
-                                onChange={e => { setAssigneeKind(e.target.value as "member" | "team"); setAssigneeId("") }}>
-                                <option value="member">{t.tabs.practice.aPerson}</option>
-                                <option value="team">{t.tabs.practice.aTeam}</option>
-                            </select>
+                {/* ── Assign panel ── */}
+                <aside className={CARD + " lg:sticky lg:top-6"}>
+                    <h3 className="font-display text-[15px] font-bold text-[var(--color-text)]">{P.assignTitle}</h3>
+                    <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{P.assignSub}</p>
+
+                    {chosen && chosenL && (
+                        <div className="flex items-center gap-3 mt-4 p-2 rounded-xl bg-[var(--color-accent-subtle)]">
+                            <Art sid={chosen.id} className="w-11 h-11 shrink-0 rounded-[10px]" />
+                            <div className="min-w-0">
+                                <p className="text-[13.5px] font-semibold text-[var(--color-text)] leading-snug">{chosenL.title}</p>
+                                <p className="text-[11.5px] text-[var(--color-text-secondary)]">{P.withCharacter(chosen.character)} · {P.minutes(chosen.durationMinutes)}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="mt-4 space-y-3.5">
+                        <div className="space-y-1.5">
+                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{P.assignTo}</label>
+                            <div className="grid grid-cols-2 gap-1 p-1 rounded-[11px] bg-[var(--color-bg)] border border-[var(--color-border)]">
+                                {(["member", "team"] as const).map(k => (
+                                    <button key={k} onClick={() => { setAssigneeKind(k); setAssigneeId("") }}
+                                        className={`h-8 rounded-[8px] text-[13px] font-semibold transition-colors ${
+                                            assigneeKind === k ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm" : "text-[var(--color-text-secondary)] hover:text-[var(--color-text)]"}`}>
+                                        {k === "member" ? P.aPerson : P.aTeam}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                         <div className="space-y-1">
                             <label className="text-xs text-[var(--color-text-secondary)] font-medium">
-                                {assigneeKind === "member" ? t.common.rep : t.tabs.practice.team}
+                                {assigneeKind === "member" ? t.common.rep : P.team}
                             </label>
                             <select className={INPUT} value={assigneeId} onChange={e => setAssigneeId(e.target.value)}>
-                                <option value="">{t.tabs.practice.select}</option>
+                                <option value="">{P.select}</option>
                                 {assigneeKind === "member"
                                     ? members.map(m => <option key={m.user_id} value={m.user_id}>{m.email ?? m.user_id}</option>)
-                                    : teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)
+                                    : teams.map(tm => <option key={tm.id} value={tm.id}>{tm.name}</option>)
                                 }
                             </select>
                             {assigneeKind === "team" && teams.length === 0 && (
-                                <p className="text-xs text-[var(--color-muted)] mt-1">{t.tabs.practice.noTeamsYet}</p>
+                                <p className="text-xs text-[var(--color-muted)] mt-1">{P.noTeamsYet}</p>
                             )}
                         </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1">
-                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.practice.coachNote}</label>
-                            <input className={INPUT} placeholder={t.tabs.practice.coachNotePlaceholder} value={note} onChange={e => setNote(e.target.value)} />
+                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{P.coachNote}</label>
+                            <input className={INPUT} placeholder={P.coachNotePlaceholder} value={note} onChange={e => setNote(e.target.value)} />
                         </div>
                         <div className="space-y-1">
-                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.practice.dueDate}</label>
+                            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{P.dueDate}</label>
                             <input type="date" className={INPUT} value={dueDate} onChange={e => setDueDate(e.target.value)} />
                         </div>
-                    </div>
 
-                    {msg && <p className={`text-xs ${isErr ? "text-red-600" : "text-emerald-600"}`}>{msg}</p>}
+                        {msg && <p className={`text-xs ${isErr ? "text-red-600" : "text-emerald-600"}`}>{msg}</p>}
 
-                    <div className="flex justify-end">
-                        <button className={BTN_PRIMARY} onClick={assign} disabled={assigning || !assigneeId}>
-                            {assigning ? t.tabs.practice.assigning : t.tabs.practice.assign}
+                        <button className={BTN_PRIMARY + " w-full h-10"} onClick={assign} disabled={assigning || !assigneeId}>
+                            {assigning ? P.assigning : P.assign}
                         </button>
                     </div>
-                </div>
+                </aside>
             </div>
 
-            <div className={CARD}>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.practice.recent}</h3>
+            {/* ── What's assigned now ── */}
+            <div>
+                <div className="flex items-baseline gap-2.5 mb-3">
+                    <h2 className="font-display text-[18px] font-bold text-[var(--color-text)]">{P.recent}</h2>
+                    {assignments.length > 0 && <span className="text-[13px] text-[var(--color-text-secondary)]">{P.assignedCount(assignments.length)}</span>}
+                </div>
                 {assignments.length === 0 ? (
-                    <p className="text-xs text-[var(--color-text-secondary)] mt-2">{t.tabs.practice.noAssignments}</p>
+                    <div className={CARD}><p className="text-sm text-[var(--color-text-secondary)]">{P.noAssignments}</p></div>
                 ) : (
-                    <div className="mt-3 space-y-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                         {assignments.map(a => (
-                            <div key={a.id} className={ROW}>
-                                <div className="min-w-0">
-                                    <p className="text-sm text-[var(--color-text)] truncate">{a.title}</p>
-                                    <p className="text-xs text-[var(--color-text-secondary)]">
+                            <div key={a.id} className="flex items-center gap-3 p-2.5 pr-3 rounded-[14px] bg-[var(--color-surface)] border border-[var(--color-border)]"
+                                style={{ boxShadow: "var(--shadow-card)" }}>
+                                <Art sid={a.scenario_id} className="w-12 h-12 shrink-0 rounded-[10px]" />
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[13.5px] font-semibold text-[var(--color-text)] truncate">{scenarioTitle(a.scenario_id, locale) || a.title}</p>
+                                    <p className="text-xs text-[var(--color-text-secondary)] truncate">
                                         {assigneeLabel(a)}
-                                        {a.due_at && ` · ${t.tabs.practice.due(new Date(a.due_at).toLocaleDateString(intl))}`}
                                         {a.note && ` · "${a.note}"`}
                                     </p>
                                 </div>
+                                {a.due_at && (
+                                    <span className="shrink-0 text-[11.5px] font-semibold px-2 py-0.5 rounded-md bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)]">
+                                        {P.due(new Date(a.due_at).toLocaleDateString(intl, { month: "short", day: "numeric" }))}
+                                    </span>
+                                )}
                                 <button className={BTN_GHOST + " flex-shrink-0"} onClick={() => unassign(a.id)}>{t.common.remove}</button>
                             </div>
                         ))}
