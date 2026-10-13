@@ -464,6 +464,13 @@ export const en = {
         gotInvite: "Got an invite email? Open its link to join your team's workspace.",
         headerMeta: (plan: string, seats: number, visibility: string) => `${plan} plan · ${seats} seats · ${visibility} visibility`,
         inviteReps: "Invite reps",
+        // D-584: the apps' greeting header and hero banner.
+        greeting: (part: "morning" | "afternoon" | "evening", name: string | null) =>
+            `Good ${part}${name ? `, ${name}` : ""}`,
+        heroTeamTitle: (n: number) => `${n} scored call${n === 1 ? "" : "s"} this month`,
+        heroTeamSub: (avg: number | null) => avg == null ? "Open the calls to see how your team is doing." : `Team average: ${avg}. Open the calls to see who needs coaching.`,
+        heroSeeCalls: "See calls",
+        last30: "Last 30 days",
         attnBreachTitle: (rule: string) => `Guardrail breach — ${rule}`,
         attnReviewCall: "Review call →",
         attnDeclineTitle: (name: string, drop: number) => `${name}’s adherence fell ${drop} pts`,

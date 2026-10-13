@@ -448,6 +448,13 @@ export const es: Dict = {
         gotInvite: "¿Recibiste un email de invitación? Abre su enlace para unirte al espacio de tu equipo.",
         headerMeta: (plan: string, seats: number, visibility: string) => `Plan ${plan} · ${seats} asientos · visibilidad: ${visibility}`,
         inviteReps: "Invitar reps",
+        // D-584: el saludo y el banner principal de las apps.
+        greeting: (part: "morning" | "afternoon" | "evening", name: string | null) =>
+            `${part === "morning" ? "Buenos días" : part === "afternoon" ? "Buenas tardes" : "Buenas noches"}${name ? `, ${name}` : ""}`,
+        heroTeamTitle: (n: number) => `${n} llamada${n === 1 ? "" : "s"} evaluada${n === 1 ? "" : "s"} este mes`,
+        heroTeamSub: (avg: number | null) => avg == null ? "Abre las llamadas para ver cómo va tu equipo." : `Promedio del equipo: ${avg}. Abre las llamadas para ver quién necesita coaching.`,
+        heroSeeCalls: "Ver llamadas",
+        last30: "Últimos 30 días",
         attnBreachTitle: (rule: string) => `Límite infringido — ${rule}`,
         attnReviewCall: "Revisar llamada →",
         attnDeclineTitle: (name: string, drop: number) => `La adherencia de ${name} cayó ${drop} pts`,

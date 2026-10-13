@@ -3,48 +3,74 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   TalkPilot Teams design tokens — Boardroom system (D-047 palette).
-   Light is the default; <html data-skin="dark"> swaps every token to the
-   obsidian set used by the B2C apps' dark appearance. Components style
-   through these variables (bg-[var(--color-surface)] …), so both skins come
-   from this one block. The skin attribute is set pre-hydration in layout.tsx.
+   TalkPilot Teams design tokens — the apps' v2 system (D-506; tokens exported
+   from PlusColors.swift into talkpilot-playground/design/tokens.css), brought
+   to the Command Center by D-584. Light is the default; <html data-skin="dark">
+   swaps every token to the apps' dark set. Components style through these
+   variables (bg-[var(--color-surface)] …), so both skins come from this block.
+   The skin attribute is set pre-hydration in layout.tsx.
    ──────────────────────────────────────────────────────────────────────────── */
 :root {
   --color-accent:        #0C9482;   /* Deep Teal — brand primary */
-  --color-accent-light:  #3EA48F;   /* Mint Green hover */
-  --color-accent-deep:   #076B5E;   /* AA-safe teal for text links / primary buttons on light */
-  --color-accent-subtle: #EDF5F1;   /* seafoam tint */
+  --color-accent-light:  #3EA48F;   /* Mint Green */
+  --color-accent-deep:   #076B5E;   /* AA-safe teal for text links on light */
+  --color-accent-subtle: color-mix(in srgb, #C6E5DC 45%, #FFFFFF);   /* the apps' "tint" */
   --color-bg:            #F6FAF8;   /* canvas — seafoam-tinted white */
   --color-surface:       #FFFFFF;   /* cards */
-  --color-hover:         #F2F7F5;   /* row/button hover wash */
-  --color-border:        #E2EBE7;
-  --color-line-soft:     #EDF5F1;   /* hairline dividers inside cards */
-  --color-text:          #0E182B;   /* Obsidian Navy */
+  --color-hero:          #FFFFFF;   /* one or two hero cards per screen */
+  --color-hover:         color-mix(in srgb, #C6E5DC 45%, #FFFFFF);
+  --color-border:        rgba(14, 24, 43, 0.08);   /* hairline */
+  --color-border-strong: rgba(14, 24, 43, 0.14);
+  --color-line-soft:     rgba(14, 24, 43, 0.06);
+  --color-text:          #0E182B;   /* Obsidian */
   --color-text-secondary:#46536A;
-  --color-muted:         #5A6B7D;   /* AA on white (the old #9CA3AF was 3:1) */
-  --btn-bg:              #076B5E;   /* primary action — AA with white label */
-  --btn-hover:           #054F45;
+  --color-muted:         #5A6B7D;   /* AA on white */
+  --btn-bg:              #0C9482;
+  --btn-hover:           #0B8575;
   --btn-ink:             #FFFFFF;
+  --shadow-card: 0 1px 2px rgba(14, 24, 43, 0.04), 0 6px 18px rgba(14, 24, 43, 0.05);
+  --shadow-up:   0 2px 4px rgba(14, 24, 43, 0.05), 0 16px 34px rgba(14, 24, 43, 0.10);
+  --glass:       color-mix(in srgb, #FFFFFF 55%, transparent);
+  --glow1: color-mix(in srgb, #0C9482 20%, transparent);
+  --glow2: color-mix(in srgb, #9CD9C6 42%, transparent);
+  --glow3: color-mix(in srgb, #C6E5DC 45%, transparent);
+  --grid-op: 0.85;
+  --spark: color-mix(in srgb, #0C9482 55%, transparent);
+  --spark-op: 0.42;
+  --bg-fade: linear-gradient(180deg, color-mix(in srgb, #C6E5DC 32%, #F6FAF8) 0%, #F6FAF8 520px);
 }
 html[data-skin="dark"] {
   --color-accent:        #2FB39E;
-  --color-accent-light:  #4FB8A2;
+  --color-accent-light:  #3EA48F;
   --color-accent-deep:   #9CD9C6;
-  --color-accent-subtle: #1A2B41;
-  --color-bg:            #0A1220;
-  --color-surface:       #0E182B;
-  --color-hover:         #16213A;
-  --color-border:        #24344D;
-  --color-line-soft:     #1A2436;
-  --color-text:          #EDF2F1;
-  --color-text-secondary:#B4C0C9;
+  --color-accent-subtle: color-mix(in srgb, #0C9482 20%, #172339);
+  --color-bg:            #0E182B;
+  --color-surface:       #172339;
+  --color-hero:          #1C2B47;
+  --color-hover:         color-mix(in srgb, #0C9482 20%, #172339);
+  --color-border:        rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.14);
+  --color-line-soft:     rgba(255, 255, 255, 0.06);
+  --color-text:          #EEF2F1;
+  --color-text-secondary:#B9C5CC;
   --color-muted:         #94A2AB;
   --btn-bg:              #3EA48F;   /* mint fill, obsidian label — AA on dark */
   --btn-hover:           #4FB8A2;
   --btn-ink:             #0A1220;
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.22);
+  --shadow-up:   inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 18px 40px rgba(0, 0, 0, 0.35);
+  --glass:       color-mix(in srgb, #172339 55%, transparent);
+  --glow1: color-mix(in srgb, #0C9482 30%, transparent);
+  --glow2: color-mix(in srgb, #3EA48F 16%, transparent);
+  --glow3: color-mix(in srgb, #3EA48F 8%, transparent);
+  --grid-op: 0.35;
+  --spark: #9CD9C6;
+  --spark-op: 0.7;
+  --bg-fade: none;
 }
 
 body {
+  background: var(--bg-fade, none), var(--color-bg);
   background-color: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-body), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -101,7 +127,52 @@ html[data-skin="dark"] .border-amber-300   { border-color: #574112; }
 html[data-skin="dark"] .border-red-100,
 html[data-skin="dark"] .border-red-200,
 html[data-skin="dark"] .border-red-300     { border-color: #5A2A2A; }
-html[data-skin="dark"] .shadow-sm          { box-shadow: none; }
+
+/* ── v2 surfaces and controls (D-584) ──────────────────────────────────────
+   The apps' card is a hairline + a soft two-layer shadow at 14px; the primary
+   button is a lit teal gradient that lifts on hover. Applied here, to the
+   utility classes every page already uses, so all screens move together. */
+.shadow-sm { box-shadow: var(--shadow-card); }
+.rounded-xl { border-radius: 14px; }
+.bg-\[var\(--color-surface\)\].border.rounded-xl,
+.bg-\[var\(--color-surface\)\].border.rounded-2xl { box-shadow: var(--shadow-card); }
+.bg-\[var\(--btn-bg\)\] {
+  background-image: linear-gradient(180deg, color-mix(in srgb, var(--btn-bg) 82%, #fff), var(--btn-bg) 60%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(0, 0, 0, 0.12),
+              0 1px 2px rgba(12, 148, 130, 0.35), 0 6px 16px -6px rgba(12, 148, 130, 0.55);
+  transition: transform 0.15s, box-shadow 0.2s, filter 0.15s;
+}
+.bg-\[var\(--btn-bg\)\]:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.05); }
+.bg-\[var\(--btn-bg\)\]:disabled { transform: none; filter: none; }
+.bg-\[var\(--btn-bg\)\].rounded-lg { border-radius: 11px; }
+main h1.text-2xl { font-size: clamp(26px, 2.6vw, 32px); line-height: 1.08; letter-spacing: -0.025em; }
+main h2.text-sm.font-semibold { font-family: var(--font-display), var(--font-body), sans-serif; font-size: 15px; }
+
+/* The apps' sky: two soft glows, a faint grid that fades out, a few slow
+   sparkles. Fixed behind everything, never interactive. */
+.tp-sky { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.tp-sky .glow { position: absolute; border-radius: 50%; filter: blur(70px); }
+.tp-sky .g1 { width: 680px; height: 520px; left: -160px; top: -220px; background: var(--glow1); }
+.tp-sky .g2 { width: 620px; height: 520px; right: -200px; bottom: -240px; background: var(--glow2); }
+.tp-sky .g3 { width: 560px; height: 380px; right: 8%; top: -120px; background: var(--glow3); }
+.tp-sky .grid { position: absolute; inset: 0; opacity: var(--grid-op);
+  background-image: linear-gradient(var(--color-border) 1px, transparent 1px), linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 85%); mask-image: radial-gradient(ellipse at 50% 0%, #000 0%, transparent 85%); }
+.tp-sky .spark { position: absolute; color: var(--spark); opacity: 0; animation: tp-twinkle 7s ease-in-out infinite; }
+@keyframes tp-twinkle { 0%, 100% { opacity: 0; transform: scale(0.6); } 50% { opacity: var(--spark-op); transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .tp-sky .spark { animation: none; opacity: calc(var(--spark-op) * 0.6); } }
+
+/* Sidebar glass + the "lit" hero banner used for a page's one main action. */
+.tp-side { background: var(--glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+.tp-hero-banner {
+  position: relative; overflow: hidden; color: #fff; border-radius: 16px;
+  background: linear-gradient(120deg, #0C9482 0%, #2E9C8A 55%, #3EA48F 100%);
+  box-shadow: 0 1px 2px rgba(12, 148, 130, 0.25), 0 14px 32px -12px rgba(12, 148, 130, 0.55);
+}
+.tp-hero-banner::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 85% -20%, rgba(255, 255, 255, 0.22), transparent 55%); }
+html[data-skin="dark"] .tp-hero-banner { background: linear-gradient(120deg, #0B7F70 0%, #0C9482 60%, #2E9C8A 100%); }
 
 /* D-461/D-462 — Team DNA "lab" tokens: follow the skin, light by default.
    The scan line is decoration while the AI reads. */

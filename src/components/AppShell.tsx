@@ -225,14 +225,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         return (
             <Link
                 href={n.href}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors ${
+                className={`flex items-center gap-2.5 h-9 px-2.5 rounded-[9px] text-[14.5px] transition-colors ${
                     active
-                        ? "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-semibold"
+                        ? "bg-[var(--color-accent-subtle)] text-[var(--color-text)] font-semibold"
                         : "text-[var(--color-text-secondary)] font-medium hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
                 }`}
             >
-                <svg className={`w-[17px] h-[17px] shrink-0 ${active ? "text-[var(--color-accent)]" : "text-[var(--color-muted)]"}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className={`w-[18px] h-[18px] shrink-0 ${active ? "text-[var(--color-accent)]" : "text-[var(--color-text-secondary)]"}`}
+                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                     {n.icon}
                 </svg>
                 {n.label}
@@ -249,18 +249,37 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         )
     }
 
-    const SkinToggle = () => (
+    /// The apps' round light/dark button (D-584), next to who's signed in.
+    const SkinButton = () => (
         <button
             onClick={toggleSkin}
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] transition-colors w-full text-left"
+            aria-label={dark ? t.nav.lightMode : t.nav.darkMode}
+            title={dark ? t.nav.lightMode : t.nav.darkMode}
+            className="w-9 h-9 shrink-0 rounded-full grid place-items-center border border-[var(--color-border-strong)] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)] transition-colors"
         >
-            <svg className="w-[17px] h-[17px] shrink-0 text-[var(--color-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-[17px] h-[17px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                 {dark
                     ? <><circle cx="12" cy="12" r="4" /><path strokeLinecap="round" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>
                     : <path strokeLinecap="round" strokeLinejoin="round" d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z" />}
             </svg>
-            {dark ? t.nav.lightMode : t.nav.darkMode}
         </button>
+    )
+
+    const initials = (email ?? "").split("@")[0].split(/[._+-]+/).filter(Boolean).map(w => w[0]).join("").slice(0, 2).toUpperCase() || "·"
+
+    /// Who's signed in, as the apps show it: a small card at the foot of the
+    /// sidebar with initials, the account, sign out and the theme button.
+    const MeCard = () => (
+        <div className="flex items-center gap-2.5 p-2 pl-2.5 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)]">
+            <span className="w-8 h-8 shrink-0 rounded-full grid place-items-center bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] text-[11px] font-semibold">
+                {initials}
+            </span>
+            <span className="min-w-0 flex-1">
+                {email && <span className="block text-[12.5px] font-semibold text-[var(--color-text)] truncate">{email}</span>}
+                <SignOut />
+            </span>
+            <SkinButton />
+        </div>
     )
 
     const SignOut = ({ className = "" }: { className?: string }) => (
@@ -273,21 +292,39 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     )
 
     const Brand = () => (
-        <Link href="/" className="flex items-center gap-2.5 min-w-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand-mark.png" alt="" className="w-8 h-8 object-contain shrink-0" />
-            <span className="min-w-0">
-                <span className="block font-display font-bold text-[15px] leading-tight text-[var(--color-text)] whitespace-nowrap">
-                    TalkPilot <span className="text-[var(--color-accent)]">Teams</span>
-                </span>
-                {orgName && <span className="block text-[11px] text-[var(--color-muted)] truncate">{orgName}</span>}
+        <Link href="/" className="block min-w-0" aria-label="TalkPilot Teams">
+            <span className="flex items-center gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={dark ? "/wordmark-dark.png" : "/wordmark-light.png"} alt="TalkPilot" className="h-[26px] w-auto shrink-0" />
+                <span className="text-[10.5px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-md bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)]">Teams</span>
             </span>
+            {orgName && <span className="block mt-1.5 text-[12px] text-[var(--color-text-secondary)] truncate">{orgName}</span>}
         </Link>
     )
 
+    /// The apps' background (D-584): glows, a faint grid and a few sparkles.
+    const Sky = () => (
+        <div className="tp-sky" aria-hidden>
+            <div className="glow g1" /><div className="glow g2" /><div className="glow g3" />
+            <div className="grid" />
+            {[
+                { l: "38%", t: "9%",  s: 14, d: "0s" },
+                { l: "72%", t: "22%", s: 10, d: "2.4s" },
+                { l: "58%", t: "64%", s: 12, d: "4.1s" },
+                { l: "86%", t: "78%", s: 9,  d: "1.2s" },
+                { l: "24%", t: "82%", s: 11, d: "5.3s" },
+            ].map((p, i) => (
+                <svg key={i} className="spark" style={{ left: p.l, top: p.t, width: p.s, height: p.s, animationDelay: p.d }} viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 0c.7 6.3 5.7 11.3 12 12-6.3.7-11.3 5.7-12 12-.7-6.3-5.7-11.3-12-12C6.3 11.3 11.3 6.3 12 0z" />
+                </svg>
+            ))}
+        </div>
+    )
+
     if (isPublic) return (
-        <main>
-            {children}
+        <main className="relative">
+            <Sky />
+            <div className="relative z-[1]">{children}</div>
             <LocaleSwitcher variant="floating" />
         </main>
     )
@@ -400,57 +437,67 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </main>
     )
 
+    // Settings and the app download sit under a divider, like Get Pro and
+    // Settings do in the apps' sidebar.
+    const footerHrefs = new Set<string>(["/settings", "/apps"])
+    const mainNav = nav.filter(n => !footerHrefs.has(n.href))
+    const footNav = nav.filter(n => footerHrefs.has(n.href))
+
+    const TrialChip = () => {
+        if (!trialEndsAt) return null
+        const days = Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400e3))
+        return (
+            <Link href="/settings?tab=billing"
+                className={`flex items-center justify-between rounded-xl px-2.5 py-2 text-[11.5px] font-medium transition-colors ${
+                    days <= 3 ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                              : "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] hover:bg-[var(--color-hover)]"}`}>
+                <span>{t.nav.trialChip(days)}</span>
+                <span className="font-semibold">{t.nav.addBilling}</span>
+            </Link>
+        )
+    }
+
+    const VisibilityCard = () => visibility ? (
+        <div className="flex items-start gap-2 rounded-xl px-2.5 py-2 bg-[var(--color-surface)] border border-[var(--color-border)]">
+            <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[var(--color-accent)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z" />
+            </svg>
+            <p className="text-[11px] leading-snug text-[var(--color-text-secondary)]">
+                <strong className="text-[var(--color-text)]">{t.nav.visibilityCardTitle(t.data.visibility[visibility] ?? visibility)}</strong><br />
+                {t.nav.visibilityCardSub}
+            </p>
+        </div>
+    ) : null
+
     return (
-        <div className="flex min-h-screen">
+        <div className="relative flex min-h-screen">
+            <Sky />
             {/* ── Sidebar (md+) ── */}
-            <aside className="hidden md:flex flex-col w-[232px] shrink-0 sticky top-0 h-screen bg-[var(--color-surface)] border-r border-[var(--color-border)] px-3.5 py-5">
+            <aside className="tp-side relative z-[1] hidden md:flex flex-col w-[232px] shrink-0 sticky top-0 h-screen border-r border-[var(--color-border)] px-3 pt-[18px] pb-3.5">
                 <div className="px-2 pb-5"><Brand /></div>
                 <nav className="flex flex-col gap-0.5">
-                    {nav.map(n => <NavLink key={n.href} n={n} />)}
+                    {mainNav.map(n => <NavLink key={n.href} n={n} />)}
+                    {footNav.length > 0 && <span className="block h-px bg-[var(--color-border)] mx-2 my-2.5" />}
+                    {footNav.map(n => <NavLink key={n.href} n={n} />)}
                 </nav>
                 <div className="mt-auto flex flex-col gap-2.5">
-                    <SkinToggle />
-                    <div className="px-3"><LocaleSwitcher /></div>
-                    {trialEndsAt && (() => {
-                        const days = Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400e3))
-                        return (
-                            <Link href="/settings?tab=billing"
-                                className={`flex items-center justify-between rounded-lg px-2.5 py-2 text-[11px] font-medium transition-colors ${
-                                    days <= 3 ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
-                                              : "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] hover:bg-[var(--color-hover)]"}`}>
-                                <span>{t.nav.trialChip(days)}</span>
-                                <span className="font-semibold">{t.nav.addBilling}</span>
-                            </Link>
-                        )
-                    })()}
-                    {visibility && (
-                        <div className="flex items-start gap-2 bg-[var(--color-accent-subtle)] rounded-lg px-2.5 py-2">
-                            <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[var(--color-accent)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6l8-3z" />
-                            </svg>
-                            <p className="text-[10.5px] leading-snug text-[var(--color-accent-deep)]">
-                                <strong>{t.nav.visibilityCardTitle(t.data.visibility[visibility] ?? visibility)}</strong><br />
-                                {t.nav.visibilityCardSub}
-                            </p>
-                        </div>
-                    )}
-                    <div className="flex items-center justify-between gap-2 px-2 pt-1">
-                        {email && <span className="text-[11px] text-[var(--color-muted)] truncate">{email}</span>}
-                        <SignOut className="shrink-0" />
-                    </div>
+                    <TrialChip />
+                    <VisibilityCard />
+                    <div className="px-1"><LocaleSwitcher /></div>
+                    <MeCard />
                 </div>
             </aside>
 
             {/* ── Mobile top bar + drawer ── */}
-            <div className="flex-1 min-w-0 flex flex-col">
-                <header className="md:hidden sticky top-0 z-50 bg-[var(--color-surface)] border-b border-[var(--color-border)]">
+            <div className="relative z-[1] flex-1 min-w-0 flex flex-col">
+                <header className="tp-side md:hidden sticky top-0 z-50 border-b border-[var(--color-border)]">
                     <div className="px-4 h-14 flex items-center justify-between">
                         <Brand />
                         <button
                             onClick={() => setMenuOpen(o => !o)}
                             aria-label={t.nav.toggleMenu}
                             aria-expanded={menuOpen}
-                            className="inline-flex items-center justify-center w-9 h-9 rounded-md text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] transition-colors"
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-[10px] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] transition-colors"
                         >
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 {menuOpen
@@ -461,17 +508,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     </div>
                     {menuOpen && (
                         <nav className="border-t border-[var(--color-border)] px-3 py-3 space-y-0.5">
-                            {nav.map(n => <NavLink key={n.href} n={n} />)}
-                            <SkinToggle />
-                            <div className="px-3 py-1"><LocaleSwitcher /></div>
-                            <div className="pt-2 mt-2 border-t border-[var(--color-border)] flex items-center justify-between px-3">
-                                {email && <span className="text-[11px] text-[var(--color-muted)] truncate">{email}</span>}
-                                <SignOut className="shrink-0" />
-                            </div>
+                            {mainNav.map(n => <NavLink key={n.href} n={n} />)}
+                            {footNav.length > 0 && <span className="block h-px bg-[var(--color-border)] mx-2 my-2.5" />}
+                            {footNav.map(n => <NavLink key={n.href} n={n} />)}
+                            <div className="px-1 py-2"><LocaleSwitcher /></div>
+                            <MeCard />
                         </nav>
                     )}
                 </header>
-                <main className="flex-1 w-full max-w-[1180px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+                <main className="flex-1 w-full max-w-[1180px] mx-auto px-4 sm:px-8 py-6 sm:py-7">
                     {children}
                 </main>
             </div>
