@@ -5,7 +5,7 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    TalkPilot Teams design tokens — the apps' v2 system (D-506; tokens exported
    from PlusColors.swift into talkpilot-playground/design/tokens.css), brought
-   to the Command Center by D-584. Light is the default; <html data-skin="dark">
+   to the Command Center by D-586. Light is the default; <html data-skin="dark">
    swaps every token to the apps' dark set. Components style through these
    variables (bg-[var(--color-surface)] …), so both skins come from this block.
    The skin attribute is set pre-hydration in layout.tsx.
@@ -128,7 +128,7 @@ html[data-skin="dark"] .border-red-100,
 html[data-skin="dark"] .border-red-200,
 html[data-skin="dark"] .border-red-300     { border-color: #5A2A2A; }
 
-/* ── v2 surfaces and controls (D-584) ──────────────────────────────────────
+/* ── v2 surfaces and controls (D-586) ──────────────────────────────────────
    The apps' card is a hairline + a soft two-layer shadow at 14px; the primary
    button is a lit teal gradient that lifts on hover. Applied here, to the
    utility classes every page already uses, so all screens move together. */
@@ -202,5 +202,5 @@ html[data-skin="dark"] {
 .dna-find { animation: dna-find-in .35s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .dna-scan { display: none; } .dna-find { animation: none; } }
 
-/* Full-screen pages paint their own canvas; let the sky show through (D-584). */
+/* Full-screen pages paint their own canvas; let the sky show through (D-586). */
 .min-h-screen.bg-\[var\(--color-bg\)\] { background: transparent; }

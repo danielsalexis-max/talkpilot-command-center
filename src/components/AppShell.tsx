@@ -249,7 +249,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         )
     }
 
-    /// The apps' round light/dark button (D-584), next to who's signed in.
+    /// The apps' round light/dark button (D-586), next to who's signed in.
     const SkinButton = () => (
         <button
             onClick={toggleSkin}
@@ -302,7 +302,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
     )
 
-    /// The apps' background (D-584): glows, a faint grid and a few sparkles.
+    /// The apps' background (D-586): glows, a faint grid and a few sparkles.
     const Sky = () => (
         <div className="tp-sky" aria-hidden>
             <div className="glow g1" /><div className="glow g2" /><div className="glow g3" />

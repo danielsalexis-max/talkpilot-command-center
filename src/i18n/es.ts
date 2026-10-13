@@ -448,7 +448,7 @@ export const es: Dict = {
         gotInvite: "¿Recibiste un email de invitación? Abre su enlace para unirte al espacio de tu equipo.",
         headerMeta: (plan: string, seats: number, visibility: string) => `Plan ${plan} · ${seats} asientos · visibilidad: ${visibility}`,
         inviteReps: "Invitar reps",
-        // D-584: el saludo y el banner principal de las apps.
+        // D-586: el saludo y el banner principal de las apps.
         greeting: (part: "morning" | "afternoon" | "evening", name: string | null) =>
             `${part === "morning" ? "Buenos días" : part === "afternoon" ? "Buenas tardes" : "Buenas noches"}${name ? `, ${name}` : ""}`,
         heroTeamTitle: (n: number) => `${n} llamada${n === 1 ? "" : "s"} evaluada${n === 1 ? "" : "s"} este mes`,

@@ -245,7 +245,7 @@ export default function HomePage() {
 
     return (
         <div className="space-y-5">
-            {/* ── The apps' greeting header (D-584) ── */}
+            {/* ── The apps' greeting header (D-586) ── */}
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-[var(--color-text)]">{t.home.greeting(dayPart, userName)}</h1>
@@ -325,7 +325,7 @@ export default function HomePage() {
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
                 <div className="space-y-4 min-w-0">
                     {/* KPI row — one card, big numbers over small labels, like
-                        the apps' "This week" card (D-584). */}
+                        the apps' "This week" card (D-586). */}
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
                         <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.last30}</h2>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-3">

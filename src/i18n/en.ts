@@ -464,7 +464,7 @@ export const en = {
         gotInvite: "Got an invite email? Open its link to join your team's workspace.",
         headerMeta: (plan: string, seats: number, visibility: string) => `${plan} plan · ${seats} seats · ${visibility} visibility`,
         inviteReps: "Invite reps",
-        // D-584: the apps' greeting header and hero banner.
+        // D-586: the apps' greeting header and hero banner.
         greeting: (part: "morning" | "afternoon" | "evening", name: string | null) =>
             `Good ${part}${name ? `, ${name}` : ""}`,
         heroTeamTitle: (n: number) => `${n} scored call${n === 1 ? "" : "s"} this month`,
