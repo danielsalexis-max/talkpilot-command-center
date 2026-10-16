@@ -174,7 +174,7 @@ export const en = {
     },
 
     start: {
-        stepLabels: { account: "Account", workspace: "Workspace", brain: "Playbook", invite: "Your team", done: "Live" },
+        stepLabels: { account: "Account", profile: "Your team", workspace: "Workspace", brain: "Playbook", invite: "Invites", done: "Live" },
         stepOf: (n: number, total: number) => `Step ${n} of ${total}`,
         slideAria: (n: number) => `Slide ${n}`,
         // Right-hand showcase
@@ -242,10 +242,39 @@ export const en = {
         checkoutFailed: "Couldn't open checkout. Try again, or book a demo and we'll set it up with you.",
         checkoutCanceledNote: "Checkout was canceled — your workspace is saved. Add billing whenever you're ready.",
         questionsBookDemo: "Rather talk first? Book a demo →",
-        trialBoxSub: "Minimum 3 seats, up to 20 on Teams. Above that, talk to us about Enterprise.",
+        trialBoxSub: "Every workspace starts with a 30-day pilot: add a card at the end, pay $0 today, cancel anytime before day 30. Minimum 3 seats, up to 20 on Teams — above that, talk to us about Enterprise.",
         creating: "Creating…",
         startFreeTrial: "Create workspace",
         personalEmailError: "Workspaces need a work email. Sign up with your company address — your reps' invites and billing all hang off it.",
+        // Profile step (D-604): three answers that configure the workspace —
+        // the vertical and recommended starter kit land on organizations.settings
+        // so the Playbook tab starts preselected — and drive the live preview.
+        profile: {
+            title: "Tell us about your team",
+            sub: "Three quick answers. We use them to pick your starter playbook and show you what your reps will see on their calls.",
+            teamQ: "What kind of team?",
+            teams: { sales: "Sales", customer_care: "Customer care", contact_center: "Contact center", real_estate: "Real estate" },
+            painQ: "Where do calls go wrong today?",
+            pains: {
+                objections: "Objections get improvised",
+                discovery: "Discovery stays shallow",
+                process: "Reps go off-process or break our rules",
+                closing: "Calls end without a clear next step",
+            },
+            methodologyQ: "Do you follow a sales methodology?",
+            methodologies: { none: "Not yet", spiced: "SPICED", bant: "BANT", sandler: "Sandler", meddic: "MEDDIC", own: "Our own" },
+            previewLabel: "What your reps see, live on the call",
+            previewCues: {
+                objections: { main: "They just said it's too expensive — your approved answer: ", accent: "anchor on payback, not a discount.", source: "From your objection library" },
+                discovery: { main: "Nobody has said who decides — ask: ", accent: "“Who else needs to see this before you move forward?”", source: "From your discovery stage" },
+                process: { main: "Heads up — your rule: ", accent: "no discounts over 10% without approval.", source: "Caught as the rep starts to say it" },
+                closing: { main: "Before you hang up, lock the next step: ", accent: "“Does Thursday work for the follow-up?”", source: "From your closing stage" },
+            },
+            recommendedKit: (kit: string) => `We'll start your workspace from the “${kit}” playbook. You can edit everything later.`,
+            knowledgeNote: "After setup you can upload your pricing, objection handling and product docs — the coach answers from them.",
+            continueBtn: "Continue",
+            skip: "Skip — set this up later",
+        },
         // Brain step
         brainTitle: "Give your reps a playbook",
         brainSub1: "This is what makes coaching ",
@@ -283,6 +312,7 @@ export const en = {
         doneTitle: (org: string) => `${org} is live`,
         doneFallbackOrg: "Your workspace",
         doneSteps: [
+            { title: "Add your playbook and knowledge", sub: "Pick your starter playbook, write your approved answers and upload the docs your team sells with (pricing, objection handling) — under Playbook." },
             { title: "Reps install TalkPilot", sub: "Mac, iPhone or Android — they sign in with their invite and they're in your workspace." },
             { title: "Their next call gets coached live", sub: "" },
             { title: "The scorecard lands here", sub: "Stage adherence, objection grades and coaching moments — in your Command Center minutes after the call ends." },

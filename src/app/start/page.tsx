@@ -5,20 +5,66 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { isPersonalEmail } from "@/lib/workEmail"
+import { starterKitsFor } from "@/lib/starterKit"
 import { GetTheApp } from "@/components/GetTheApp"
 import { EmailLink } from "@/components/EmailLink"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
 import type { Dict } from "@/i18n"
 
 /// /start — self-serve Teams onboarding (D-163).
-/// account → workspace → invite → live. The playbook step moved into the
-/// dashboard (D-215): asking for a playbook here — but not objections — left
-/// owners half-configured either way, so the whole coaching-brain setup now
-/// happens in Playbook, after billing. The right-hand panel shows what reps
-/// actually get — the product sells itself while the owner types.
+/// account → profile → workspace → invite → live. The playbook step moved into
+/// the dashboard (D-215): asking for a playbook here — but not objections —
+/// left owners half-configured either way, so the whole coaching-brain setup
+/// still happens in Playbook, after billing. The profile step (D-604) asks
+/// three questions that pick the starter kit (written to
+/// organizations.settings so Playbook starts preselected), drive a live "what
+/// your reps see" preview, and land in create-org's audit meta. The right-hand
+/// panel keeps selling while the owner types.
+///
+/// Every workspace now ends at the 30-day card-pilot checkout (D-602):
+/// create-org returns card_trial_days = 30 by default, and the done step's
+/// checkout opens a Stripe trial — $0 today, first charge on day 30.
 
-type Step = "account" | "workspace" | "invite" | "done"
-const STEPS: Step[] = ["account", "workspace", "invite", "done"]
+type Step = "account" | "profile" | "workspace" | "invite" | "done"
+const STEPS: Step[] = ["account", "profile", "workspace", "invite", "done"]
+
+type ProfileVertical = "sales" | "customer_care" | "contact_center" | "real_estate"
+type ProfilePain = "objections" | "discovery" | "process" | "closing"
+type ProfileMethodology = "none" | "spiced" | "bant" | "sandler" | "meddic" | "own"
+
+/// Which starter kit the profile answers point at (keys from lib/starterKit).
+/// The pick is written to organizations.settings.onboarding_profile; the
+/// Playbook tab reads settings.vertical to preselect the kit family.
+function recommendedKitKey(vertical: ProfileVertical, methodology: ProfileMethodology): string {
+    if (vertical === "customer_care") return "support-success"
+    if (vertical === "contact_center") return "contact-center"
+    if (vertical === "real_estate") return "real-estate"
+    switch (methodology) {
+        case "spiced": return "spiced"
+        case "bant": return "bant"
+        case "sandler": return "sandler"
+        case "meddic": return "meddic-lite"
+        default: return "discovery-led"
+    }
+}
+
+/// How this signup reached /start (?src=…&v=… from the /teams CTA experiment,
+/// D-603). Stashed in sessionStorage because the OAuth round-trip comes back
+/// to /start without the query string.
+const SOURCE_KEY = "tp.start.source"
+function captureSource(): { src: string; variant: string } | null {
+    try {
+        const params = new URLSearchParams(window.location.search)
+        const src = params.get("src"), v = params.get("v")
+        if (src || v) {
+            const source = { src: src ?? "", variant: v ?? "" }
+            sessionStorage.setItem(SOURCE_KEY, JSON.stringify(source))
+            return source
+        }
+        const stored = sessionStorage.getItem(SOURCE_KEY)
+        return stored ? JSON.parse(stored) : null
+    } catch { return null }
+}
 
 const INPUT = "w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
 const BTN = "w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors"
@@ -120,6 +166,28 @@ function AuditSlide({ t }: { t: Dict }) {
     )
 }
 
+/// The profile step's live preview: the HUD card re-cut to the pain the owner
+/// just picked, so the answer configures the product AND shows it working.
+function ProfilePreview({ t, pain }: { t: Dict; pain: ProfilePain }) {
+    const cue = t.start.profile.previewCues[pain]
+    return (
+        <div>
+            <p className="font-mono text-[9.5px] tracking-[0.12em] text-[var(--color-muted)] mb-2">{t.start.profile.previewLabel}</p>
+            <div className="w-full rounded-2xl bg-[#1A263D] border border-white/10 p-4 shadow-xl">
+                <div className="flex items-center gap-2 font-mono text-[9.5px] tracking-[0.12em] text-[#94A2AB]">
+                    <span className="w-2 h-2 rounded-full bg-[#3EA48F] animate-pulse" />
+                    {t.start.hud.liveLine}
+                    <span className="ml-auto">12:41</span>
+                </div>
+                <p className="mt-3 text-[14px] leading-snug text-[#EDF2F1] font-medium">
+                    {cue.main}<span className="text-[#9CD9C6]">{cue.accent}</span>
+                </p>
+                <p className="mt-2 text-[11px] text-[#94A2AB]">{cue.source}</p>
+            </div>
+        </div>
+    )
+}
+
 function Showcase() {
     const t = useT()
     const [idx, setIdx] = useState(0)
@@ -160,7 +228,7 @@ function Showcase() {
 
 export default function StartPage() {
     const router = useRouter()
-    const { t } = useLocale()
+    const { t, locale } = useLocale()
     const [step, setStep]         = useState<Step>("account")
     const [checking, setChecking] = useState(true)
     const [busy, setBusy]         = useState(false)
@@ -169,6 +237,12 @@ export default function StartPage() {
     const [mode, setMode]         = useState<"signup" | "signin">("signup")
     const [email, setEmail]       = useState("")
     const [password, setPassword] = useState("")
+
+    // Profile step (D-604). null = not answered; the step needs team + pain,
+    // and the methodology question only applies to sales teams.
+    const [pVertical, setPVertical]       = useState<ProfileVertical | null>(null)
+    const [pPain, setPPain]               = useState<ProfilePain | null>(null)
+    const [pMethodology, setPMethodology] = useState<ProfileMethodology>("none")
 
     const [orgName, setOrgName]   = useState("")
     const [seats, setSeats]       = useState(5)
@@ -221,11 +295,15 @@ export default function StartPage() {
             return
         }
         setEmail(user.email ?? "")
-        setStep(s => (s === "account" ? "workspace" : s))
+        setStep(s => (s === "account" ? "profile" : s))
         setChecking(false)
     }, [router, t])
 
     useEffect(() => { routeForUser() }, [routeForUser])
+
+    // Stash ?src&v (the /teams CTA experiment, D-603) before any OAuth
+    // round-trip strips the query string.
+    useEffect(() => { captureSource() }, [])
 
     async function handleAccount(e: React.FormEvent) {
         e.preventDefault(); setError(null)
@@ -250,7 +328,7 @@ export default function StartPage() {
             const { data: member } = await supabase.from("org_members")
                 .select("org_id").eq("user_id", user.id).eq("status", "active").maybeSingle()
             if (member) { router.replace("/"); return }
-            setStep("workspace")
+            setStep("profile")
         } catch (e) {
             setError((e as Error).message)
         } finally {
@@ -303,8 +381,34 @@ export default function StartPage() {
         }
         setBusy(true)
         try {
-            const res = await callFn("create-org", { name: orgName, seats })
+            // Profile answers and the CTA-experiment source ride along for the
+            // audit trail (D-603/D-604); create-org sanitizes and stores them.
+            const profile = pVertical && pPain ? {
+                vertical: pVertical,
+                pain: pPain,
+                methodology: pVertical === "sales" ? pMethodology : null,
+            } : null
+            const source = captureSource()
+            const res = await callFn("create-org", {
+                name: orgName, seats,
+                ...(source ? { source } : {}),
+                ...(profile ? { profile } : {}),
+            })
             setOrgId(res.org_id)
+            // The Playbook tab preselects the kit family from settings.vertical
+            // (same write the StarterKitPicker does); the full answers go with
+            // it so the dashboard can recommend the exact kit later. Best
+            // effort — a failed write must not block onboarding.
+            if (profile) {
+                try {
+                    await supabase.from("organizations").update({
+                        settings: {
+                            vertical: profile.vertical,
+                            onboarding_profile: { ...profile, recommended_kit: recommendedKitKey(profile.vertical, pMethodology) },
+                        },
+                    }).eq("id", res.org_id)
+                } catch { /* non-blocking */ }
+            }
             // A null trial_ends_at means no grant matched, which since D-192 is
             // the DEFAULT: this workspace pays before it is used. Keep building
             // the brain either way — a half-configured workspace is worthless
@@ -375,7 +479,7 @@ export default function StartPage() {
                 </div>
 
                 {/* Progress */}
-                <div className="flex items-center gap-1.5 mb-8" aria-label={t.start.stepOf(stepIdx + 1, STEPS.length)}>
+                <div className="flex items-center gap-1.5 mb-3" aria-label={t.start.stepOf(stepIdx + 1, STEPS.length)}>
                     {STEPS.map((s, i) => (
                         <div key={s} className="flex-1">
                             <div className={`h-1 rounded-full ${i <= stepIdx ? "bg-[var(--color-accent)]" : "bg-[var(--color-line-soft)]"}`} />
@@ -383,6 +487,16 @@ export default function StartPage() {
                         </div>
                     ))}
                 </div>
+
+                {/* The demo escape hatch stays one click away on every step —
+                    self-serve is the default motion, not the only one. */}
+                {step !== "done" && (
+                    <p className="mb-6 text-[11px]">
+                        <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className="text-[var(--color-muted)] hover:text-[var(--color-accent-deep)]">
+                            {t.start.questionsBookDemo}
+                        </a>
+                    </p>
+                )}
 
                 <div className="flex-1 flex flex-col justify-center">
                     {step === "account" && (
@@ -430,6 +544,77 @@ export default function StartPage() {
                         </div>
                     )}
 
+                    {step === "profile" && (() => {
+                        const CHIP = (active: boolean) =>
+                            `px-3 py-2 rounded-lg border text-[13px] text-left transition-colors ${
+                                active
+                                    ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-semibold"
+                                    : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]"
+                            }`
+                        const kitKey = pVertical ? recommendedKitKey(pVertical, pMethodology) : null
+                        const kitTitle = kitKey ? starterKitsFor(locale).find(k => k.key === kitKey)?.title : null
+                        return (
+                            <div>
+                                <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">{t.start.profile.title}</h1>
+                                <p className="text-sm text-[var(--color-text-secondary)] mt-2">{t.start.profile.sub}</p>
+                                <div className="space-y-5 mt-7">
+                                    <div>
+                                        <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">{t.start.profile.teamQ}</p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {(Object.keys(t.start.profile.teams) as ProfileVertical[]).map(v => (
+                                                <button key={v} type="button" onClick={() => setPVertical(v)} className={CHIP(pVertical === v)}>
+                                                    {t.start.profile.teams[v]}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">{t.start.profile.painQ}</p>
+                                        <div className="grid gap-2">
+                                            {(Object.keys(t.start.profile.pains) as ProfilePain[]).map(p => (
+                                                <button key={p} type="button" onClick={() => setPPain(p)} className={CHIP(pPain === p)}>
+                                                    {t.start.profile.pains[p]}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    {pVertical === "sales" && (
+                                        <div>
+                                            <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">{t.start.profile.methodologyQ}</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {(Object.keys(t.start.profile.methodologies) as ProfileMethodology[]).map(m => (
+                                                    <button key={m} type="button" onClick={() => setPMethodology(m)} className={CHIP(pMethodology === m)}>
+                                                        {t.start.profile.methodologies[m]}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {pPain && <ProfilePreview t={t} pain={pPain} />}
+                                    {kitTitle && (
+                                        <p className="text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-lg px-4 py-3">
+                                            {t.start.profile.recommendedKit(kitTitle)}{" "}
+                                            <span className="text-[var(--color-muted)]">{t.start.profile.knowledgeNote}</span>
+                                        </p>
+                                    )}
+                                    <button
+                                        onClick={() => setStep("workspace")}
+                                        disabled={!pVertical || !pPain}
+                                        className={BTN}
+                                    >
+                                        {t.start.profile.continueBtn}
+                                    </button>
+                                    <button
+                                        onClick={() => { setPVertical(null); setPPain(null); setStep("workspace") }}
+                                        className="block text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]"
+                                    >
+                                        {t.start.profile.skip}
+                                    </button>
+                                </div>
+                            </div>
+                        )
+                    })()}
+
                     {step === "workspace" && (
                         <div>
                             <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">{t.start.workspaceTitle}</h1>
@@ -470,10 +655,10 @@ export default function StartPage() {
                                         </p>
                                     )}
                                 </div>
-                                {/* This used to promise "14 days free, no card"
-                                    to everyone. Trials are granted by sales now
-                                    (D-192 #8), so promising one here would be a
-                                    lie for most people who read it. */}
+                                {/* The box promises the 30-day card pilot —
+                                    create-org's self-serve default since D-602.
+                                    (The old no-promise copy dated from D-192 #8,
+                                    when trials were sales-granted only.) */}
                                 <div className="bg-[var(--color-accent-subtle)] rounded-lg px-4 py-3 text-xs text-[var(--color-accent-deep)] leading-relaxed">
                                     <strong>{t.start.pricingBoxTitle}</strong><br />
                                     {t.start.trialBoxSub}
@@ -524,7 +709,9 @@ export default function StartPage() {
                                         <div>
                                             <p className="text-sm font-semibold text-[var(--color-text)]">{s.title}</p>
                                             <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                                                {i === 1 ? t.start.doneStep2NoKit : s.sub}
+                                                {/* The live-coaching step's sub depends on playbook state (D-215);
+                                                    it sits at index 2 since the knowledge step was prepended. */}
+                                                {i === 2 ? t.start.doneStep2NoKit : s.sub}
                                             </p>
                                         </div>
                                     </div>
