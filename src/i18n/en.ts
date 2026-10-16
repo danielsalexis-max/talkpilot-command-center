@@ -225,8 +225,8 @@ export const en = {
         fewerSeats: "Fewer seats",
         moreSeats: "More seats",
         minSeats: "minimum 3",
-        seatCapNote: "The Teams plan includes up to 20 seats.",
-        seatCapCta: "Need more? Talk to us →",
+        enterpriseNote: "Need custom terms, an SLA, invoice billing or a security review?",
+        enterpriseCta: "Talk to us about Enterprise →",
         useAnotherAccount: "Use a different account",
         pricingBoxTitle: "$40/seat/mo — or $32/seat/mo billed annually.",
         payTitle: "One step left: add billing",
@@ -242,11 +242,11 @@ export const en = {
         checkoutFailed: "Couldn't open checkout. Try again, or book a demo and we'll set it up with you.",
         checkoutCanceledNote: "Checkout was canceled — your workspace is saved. Add billing whenever you're ready.",
         questionsBookDemo: "Rather talk first? Book a demo →",
-        trialBoxSub: "Every workspace starts with a 30-day pilot: add a card at the end, pay $0 today, cancel anytime before day 30. Minimum 3 seats, up to 20 on Teams — above that, talk to us about Enterprise.",
+        trialBoxSub: "Every workspace starts with a 30-day pilot: add a card at the end, pay $0 today, cancel anytime before day 30. Minimum 3 seats, no maximum.",
         creating: "Creating…",
         startFreeTrial: "Create workspace",
         personalEmailError: "Workspaces need a work email. Sign up with your company address — your reps' invites and billing all hang off it.",
-        // Profile step (D-604): three answers that configure the workspace —
+        // Profile step (D-607): three answers that configure the workspace —
         // the vertical and recommended starter kit land on organizations.settings
         // so the Playbook tab starts preselected — and drive the live preview.
         profile: {
@@ -1393,8 +1393,8 @@ export const en = {
             legendPending: (n: number) => `${n} awaiting acceptance`,
             legendFree: (n: number) => `${n} free`,
             allSeatsUsed: "All seats are in use — new invites are blocked until you add seats.",
-            seatCapNote: "The Teams plan includes up to 20 seats.",
-            seatCapCta: "Need more? Talk to us about Enterprise →",
+            enterpriseNote: "Need custom terms, an SLA, invoice billing or a security review?",
+            enterpriseCta: "Talk to us about Enterprise →",
             updating: "Updating…",
             addSeats: (n: number) => `Add ${n} seat${n !== 1 ? "s" : ""}`,
             reduceTo: (n: number) => `Reduce to ${n}`,

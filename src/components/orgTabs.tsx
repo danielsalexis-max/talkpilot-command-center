@@ -4326,10 +4326,10 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                 )}
 
                 {info.has_stripe ? (() => {
-                    // Teams caps at 20 seats (mirrored in org-billing and
-                    // create-org); Enterprise has no plan cap — 500 is a
-                    // fat-finger ceiling only.
-                    const seatCap = info.plan === "team" ? 20 : 500
+                    // No plan has a seat maximum (D-603 removed D-192's
+                    // 20-seat Teams cap). 500 is a fat-finger ceiling only,
+                    // mirrored in org-billing and create-org.
+                    const seatCap = 500
                     return (
                     <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
                     <div className="flex flex-wrap items-end gap-3">
@@ -4353,11 +4353,11 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                         </button>
                         {perSeat && <span className="text-xs text-[var(--color-text-secondary)] pb-2.5">{t.tabs.billing.perSeatNote(perSeat)}</span>}
                     </div>
-                    {info.plan === "team" && seatDraft >= seatCap && (
+                    {info.plan === "team" && (
                         <p className="text-xs text-[var(--color-text-secondary)] mt-2">
-                            {t.tabs.billing.seatCapNote}{" "}
+                            {t.tabs.billing.enterpriseNote}{" "}
                             <EmailLink email="hello@talkpilot.co" subject="TalkPilot Enterprise" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
-                                {t.tabs.billing.seatCapCta}
+                                {t.tabs.billing.enterpriseCta}
                             </EmailLink>
                         </p>
                     )}

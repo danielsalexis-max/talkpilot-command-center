@@ -15,13 +15,13 @@ import type { Dict } from "@/i18n"
 /// account → profile → workspace → invite → live. The playbook step moved into
 /// the dashboard (D-215): asking for a playbook here — but not objections —
 /// left owners half-configured either way, so the whole coaching-brain setup
-/// still happens in Playbook, after billing. The profile step (D-604) asks
+/// still happens in Playbook, after billing. The profile step (D-607) asks
 /// three questions that pick the starter kit (written to
 /// organizations.settings so Playbook starts preselected), drive a live "what
 /// your reps see" preview, and land in create-org's audit meta. The right-hand
 /// panel keeps selling while the owner types.
 ///
-/// Every workspace now ends at the 30-day card-pilot checkout (D-602):
+/// Every workspace now ends at the 30-day card-pilot checkout (D-605):
 /// create-org returns card_trial_days = 30 by default, and the done step's
 /// checkout opens a Stripe trial — $0 today, first charge on day 30.
 
@@ -49,7 +49,7 @@ function recommendedKitKey(vertical: ProfileVertical, methodology: ProfileMethod
 }
 
 /// How this signup reached /start (?src=…&v=… from the /teams CTA experiment,
-/// D-603). Stashed in sessionStorage because the OAuth round-trip comes back
+/// D-606). Stashed in sessionStorage because the OAuth round-trip comes back
 /// to /start without the query string.
 const SOURCE_KEY = "tp.start.source"
 function captureSource(): { src: string; variant: string } | null {
@@ -75,10 +75,13 @@ const BTN_GHOST = "w-full py-2.5 bg-[var(--color-surface)] border border-[var(--
 // drift. `create-org` keeps its own copy on purpose: it is the server-side
 // backstop and must refuse regardless of what any client believes (D-171).
 
-// The Teams plan tops out at 20 seats (mirrored in create-org and org-billing).
-// Beyond that it's an Enterprise conversation — the stepper stops here and
-// shows the "talk to us" pointer instead of letting the number climb.
-const TEAM_SEAT_CAP = 20
+// Teams has a 3-seat minimum and no plan maximum (D-603, replacing D-192's
+// 20-seat cap). 500 is only a fat-finger ceiling, mirrored in create-org and
+// org-billing. Enterprise is about extra needs (custom terms, SLA, invoicing,
+// security review), not team size, so its pointer is always shown.
+const MIN_SEATS = 3
+const MAX_SEATS = 500
+const clampSeats = (n: number) => Math.max(MIN_SEATS, Math.min(MAX_SEATS, Math.round(n) || MIN_SEATS))
 
 /// Where "talk to us first" goes. The website's Teams button points here too
 /// (D-192 #8) — teams.talkpilot.co keeps working for whoever lands on it
@@ -238,7 +241,7 @@ export default function StartPage() {
     const [email, setEmail]       = useState("")
     const [password, setPassword] = useState("")
 
-    // Profile step (D-604). null = not answered; the step needs team + pain,
+    // Profile step (D-607). null = not answered; the step needs team + pain,
     // and the methodology question only applies to sales teams.
     const [pVertical, setPVertical]       = useState<ProfileVertical | null>(null)
     const [pPain, setPPain]               = useState<ProfilePain | null>(null)
@@ -301,7 +304,7 @@ export default function StartPage() {
 
     useEffect(() => { routeForUser() }, [routeForUser])
 
-    // Stash ?src&v (the /teams CTA experiment, D-603) before any OAuth
+    // Stash ?src&v (the /teams CTA experiment, D-606) before any OAuth
     // round-trip strips the query string.
     useEffect(() => { captureSource() }, [])
 
@@ -379,10 +382,13 @@ export default function StartPage() {
             setError(t.start.personalEmailError)
             return
         }
+        // Enter can submit while the seat field still holds a half-typed value.
+        const seatCount = clampSeats(seats)
+        setSeats(seatCount)
         setBusy(true)
         try {
             // Profile answers and the CTA-experiment source ride along for the
-            // audit trail (D-603/D-604); create-org sanitizes and stores them.
+            // audit trail (D-606/D-607); create-org sanitizes and stores them.
             const profile = pVertical && pPain ? {
                 vertical: pVertical,
                 pain: pPain,
@@ -390,7 +396,7 @@ export default function StartPage() {
             } : null
             const source = captureSource()
             const res = await callFn("create-org", {
-                name: orgName, seats,
+                name: orgName, seats: seatCount,
                 ...(source ? { source } : {}),
                 ...(profile ? { profile } : {}),
             })
@@ -639,24 +645,29 @@ export default function StartPage() {
                                 <div>
                                     <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.seatsLabel}</label>
                                     <div className="flex items-center gap-3 mt-1.5">
-                                        <button type="button" aria-label={t.start.fewerSeats} onClick={() => setSeats(s => Math.max(3, s - 1))}
+                                        <button type="button" aria-label={t.start.fewerSeats} onClick={() => setSeats(s => clampSeats(s - 1))}
                                             className="w-9 h-9 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]">−</button>
-                                        <span className="font-mono text-lg text-[var(--color-text)] w-10 text-center">{seats}</span>
-                                        <button type="button" aria-label={t.start.moreSeats} onClick={() => setSeats(s => Math.min(TEAM_SEAT_CAP, s + 1))}
+                                        {/* Typable, not just a stepper: with no plan
+                                            maximum (D-603) a 60-person team
+                                            shouldn't have to click + 55 times. */}
+                                        <input type="number" inputMode="numeric" aria-label={t.start.seatsLabel}
+                                            min={MIN_SEATS} max={MAX_SEATS} value={seats}
+                                            onChange={e => setSeats(Math.max(0, Math.min(MAX_SEATS, Math.round(Number(e.target.value)) || 0)))}
+                                            onBlur={() => setSeats(clampSeats)}
+                                            className="font-mono text-lg text-[var(--color-text)] w-16 text-center bg-transparent border border-[var(--color-border)] rounded-lg py-1 focus:outline-none focus:border-[var(--color-accent)]" />
+                                        <button type="button" aria-label={t.start.moreSeats} onClick={() => setSeats(s => clampSeats(s + 1))}
                                             className="w-9 h-9 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]">+</button>
                                         <span className="text-xs text-[var(--color-muted)]">{t.start.minSeats}</span>
                                     </div>
-                                    {seats >= TEAM_SEAT_CAP && (
-                                        <p className="text-xs text-[var(--color-text-secondary)] mt-2">
-                                            {t.start.seatCapNote}{" "}
-                                            <EmailLink email="hello@talkpilot.co" subject="TalkPilot Enterprise" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
-                                                {t.start.seatCapCta}
-                                            </EmailLink>
-                                        </p>
-                                    )}
+                                    <p className="text-xs text-[var(--color-text-secondary)] mt-2">
+                                        {t.start.enterpriseNote}{" "}
+                                        <EmailLink email="hello@talkpilot.co" subject="TalkPilot Enterprise" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
+                                            {t.start.enterpriseCta}
+                                        </EmailLink>
+                                    </p>
                                 </div>
                                 {/* The box promises the 30-day card pilot —
-                                    create-org's self-serve default since D-602.
+                                    create-org's self-serve default since D-605.
                                     (The old no-promise copy dated from D-192 #8,
                                     when trials were sales-granted only.) */}
                                 <div className="bg-[var(--color-accent-subtle)] rounded-lg px-4 py-3 text-xs text-[var(--color-accent-deep)] leading-relaxed">
