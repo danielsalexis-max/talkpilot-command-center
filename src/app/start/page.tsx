@@ -29,10 +29,13 @@ const BTN_GHOST = "w-full py-2.5 bg-[var(--color-surface)] border border-[var(--
 // drift. `create-org` keeps its own copy on purpose: it is the server-side
 // backstop and must refuse regardless of what any client believes (D-171).
 
-// The Teams plan tops out at 20 seats (mirrored in create-org and org-billing).
-// Beyond that it's an Enterprise conversation — the stepper stops here and
-// shows the "talk to us" pointer instead of letting the number climb.
-const TEAM_SEAT_CAP = 20
+// Teams has a 3-seat minimum and no plan maximum (D-603, replacing D-192's
+// 20-seat cap). 500 is only a fat-finger ceiling, mirrored in create-org and
+// org-billing. Enterprise is about extra needs (custom terms, SLA, invoicing,
+// security review), not team size, so its pointer is always shown.
+const MIN_SEATS = 3
+const MAX_SEATS = 500
+const clampSeats = (n: number) => Math.max(MIN_SEATS, Math.min(MAX_SEATS, Math.round(n) || MIN_SEATS))
 
 /// Where "talk to us first" goes. The website's Teams button points here too
 /// (D-192 #8) — teams.talkpilot.co keeps working for whoever lands on it
@@ -301,9 +304,12 @@ export default function StartPage() {
             setError(t.start.personalEmailError)
             return
         }
+        // Enter can submit while the seat field still holds a half-typed value.
+        const seatCount = clampSeats(seats)
+        setSeats(seatCount)
         setBusy(true)
         try {
-            const res = await callFn("create-org", { name: orgName, seats })
+            const res = await callFn("create-org", { name: orgName, seats: seatCount })
             setOrgId(res.org_id)
             // A null trial_ends_at means no grant matched, which since D-192 is
             // the DEFAULT: this workspace pays before it is used. Keep building
@@ -454,21 +460,26 @@ export default function StartPage() {
                                 <div>
                                     <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.seatsLabel}</label>
                                     <div className="flex items-center gap-3 mt-1.5">
-                                        <button type="button" aria-label={t.start.fewerSeats} onClick={() => setSeats(s => Math.max(3, s - 1))}
+                                        <button type="button" aria-label={t.start.fewerSeats} onClick={() => setSeats(s => clampSeats(s - 1))}
                                             className="w-9 h-9 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]">−</button>
-                                        <span className="font-mono text-lg text-[var(--color-text)] w-10 text-center">{seats}</span>
-                                        <button type="button" aria-label={t.start.moreSeats} onClick={() => setSeats(s => Math.min(TEAM_SEAT_CAP, s + 1))}
+                                        {/* Typable, not just a stepper: with no plan
+                                            maximum (D-603) a 60-person team
+                                            shouldn't have to click + 55 times. */}
+                                        <input type="number" inputMode="numeric" aria-label={t.start.seatsLabel}
+                                            min={MIN_SEATS} max={MAX_SEATS} value={seats}
+                                            onChange={e => setSeats(Math.max(0, Math.min(MAX_SEATS, Math.round(Number(e.target.value)) || 0)))}
+                                            onBlur={() => setSeats(clampSeats)}
+                                            className="font-mono text-lg text-[var(--color-text)] w-16 text-center bg-transparent border border-[var(--color-border)] rounded-lg py-1 focus:outline-none focus:border-[var(--color-accent)]" />
+                                        <button type="button" aria-label={t.start.moreSeats} onClick={() => setSeats(s => clampSeats(s + 1))}
                                             className="w-9 h-9 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]">+</button>
                                         <span className="text-xs text-[var(--color-muted)]">{t.start.minSeats}</span>
                                     </div>
-                                    {seats >= TEAM_SEAT_CAP && (
-                                        <p className="text-xs text-[var(--color-text-secondary)] mt-2">
-                                            {t.start.seatCapNote}{" "}
-                                            <EmailLink email="hello@talkpilot.co" subject="TalkPilot Enterprise" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
-                                                {t.start.seatCapCta}
-                                            </EmailLink>
-                                        </p>
-                                    )}
+                                    <p className="text-xs text-[var(--color-text-secondary)] mt-2">
+                                        {t.start.enterpriseNote}{" "}
+                                        <EmailLink email="hello@talkpilot.co" subject="TalkPilot Enterprise" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
+                                            {t.start.enterpriseCta}
+                                        </EmailLink>
+                                    </p>
                                 </div>
                                 {/* This used to promise "14 days free, no card"
                                     to everyone. Trials are granted by sales now
