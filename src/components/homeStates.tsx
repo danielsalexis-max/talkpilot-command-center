@@ -84,14 +84,14 @@ export function setupRequiredMet(r: SetupState): boolean {
     return setupChecks(r).filter(c => c.required).every(c => c.done)
 }
 
-/// One card, two halves. The checklist half auto-retires once EVERY item is
-/// done (no dismissal needed — a finished list has nothing left to say); the
-/// X, which appears once the required bar is met, lets an owner hide it
-/// earlier, per browser, via localStorage keyed by org (D-217's escape hatch
-/// kept, its "stays until dismissed" rule dropped). The status half shows
-/// what the dashboard is already doing at zero — a clear coaching queue and a
-/// clean guardrail record are findings, not absences — and retires once real
-/// scorecards exist and the live dashboard takes over.
+/// One card, one step at a time (Khu style, D-610 — replaces the four-rows-
+/// at-once list that read as a wall of homework). The first undone check is
+/// THE step: big display-type title, its hint, one prominent CTA. The other
+/// checks sit below as a compact divided overview so progress stays visible.
+/// Auto-retire and the X behave as before (X appears once the required bar is
+/// met; localStorage per browser keyed by org — D-217's escape hatch kept).
+/// The status strip keeps its job but moves under a clean divider instead of
+/// a side-by-side column, and retires once real scorecards exist.
 export function HomeSetupCard({ state, orgId, hasCards }: { state: SetupState; orgId: string; hasCards: boolean }) {
     const t = useT()
     const storageKey = `tp-setup-checklist-dismissed-${orgId}`
@@ -106,6 +106,8 @@ export function HomeSetupCard({ state, orgId, hasCards }: { state: SetupState; o
     const showStatus = !hasCards
     if (!showChecklist && !showStatus) return null
 
+    const current = checks.find(c => !c.done)
+
     const status: { ok: boolean; label: string; sub: string }[] = [
         { ok: true, label: t.homeStates.statusCoachingClear, sub: t.homeStates.statusCoachingClearSub },
         { ok: true, label: t.homeStates.statusNoBreaches,    sub: t.homeStates.statusNoBreachesSub },
@@ -115,25 +117,29 @@ export function HomeSetupCard({ state, orgId, hasCards }: { state: SetupState; o
     ]
 
     return (
-        <div className={`bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 shadow-sm ${showChecklist && showStatus ? "max-w-4xl" : "max-w-2xl"}`}>
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <h2 className="font-display text-lg font-bold text-[var(--color-text)]">
-                        {showChecklist ? t.homeStates.setupTitle : t.homeStates.readyTitle}
-                    </h2>
-                    <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                        {showChecklist ? t.homeStates.setupSub : t.homeStates.readySub}
-                    </p>
-                </div>
-                {showChecklist && (
-                    <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-mono text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-full px-2.5 py-1">{done}/{checks.length}</span>
+        <div className="tp-screen bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 sm:p-8 shadow-sm max-w-2xl">
+            {showChecklist && current && (
+                <>
+                    {/* The one step that matters right now */}
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2.5">
+                                <p className="text-[11px] uppercase tracking-wider text-[var(--color-accent-deep)] font-semibold">{t.homeStates.nextStep}</p>
+                                <span className="text-[11px] text-[var(--color-muted)]">{t.homeStates.stepCount(done, checks.length)}</span>
+                            </div>
+                            <h2 className="font-display text-2xl sm:text-[28px] font-bold leading-tight text-[var(--color-text)] mt-2">
+                                {t.homeStates.checks[current.key].label}
+                            </h2>
+                            <p className="text-sm text-[var(--color-text-secondary)] mt-2 max-w-md leading-relaxed">
+                                {t.homeStates.checks[current.key].hint}
+                            </p>
+                        </div>
                         {requiredMet && (
                             <button
                                 onClick={() => { try { localStorage.setItem(storageKey, "1") } catch {} ; setDismissed(true) }}
                                 aria-label={t.homeStates.dismissChecklist}
                                 title={t.homeStates.dismissChecklist}
-                                className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)] transition-colors"
+                                className="w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-[var(--color-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)] transition-colors"
                             >
                                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -141,73 +147,91 @@ export function HomeSetupCard({ state, orgId, hasCards }: { state: SetupState; o
                             </button>
                         )}
                     </div>
-                )}
-            </div>
 
-            <div className={`mt-5 grid gap-8 ${showChecklist && showStatus ? "md:grid-cols-2" : "grid-cols-1"}`}>
-                {showChecklist && (
-                    <div className="space-y-3">
-                        {checks.map(c => (
-                            <div key={c.key} className="flex items-start gap-3">
-                                <span className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                                    c.done ? "bg-emerald-500 text-white"
-                                           : c.required ? "bg-amber-100 text-amber-600 border border-amber-300"
-                                                        : "bg-[var(--color-line-soft)] text-[var(--color-muted)] border border-[var(--color-border)]"
-                                }`}>{c.done ? "✓" : ""}</span>
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <span className={`text-sm ${c.done ? "text-[var(--color-muted)] line-through" : "text-[var(--color-text)] font-medium"}`}>{t.homeStates.checks[c.key].label}</span>
-                                        {!c.done && (c.required
-                                            ? <span className="text-[10px] uppercase tracking-wide text-amber-600 font-semibold">{t.homeStates.required}</span>
-                                            : <span className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold">{t.homeStates.recommended}</span>)}
-                                    </div>
-                                    {!c.done && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.homeStates.checks[c.key].hint}</p>}
+                    <div className="flex items-center gap-3 mt-5">
+                        <Link href={current.href}
+                            className="px-5 py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-xl transition-colors">
+                            {t.homeStates.setUp}
+                        </Link>
+                        <span className={`text-[10px] uppercase tracking-wide font-semibold ${current.required ? "text-amber-600" : "text-[var(--color-muted)]"}`}>
+                            {current.required ? t.homeStates.required : t.homeStates.recommended}
+                        </span>
+                    </div>
+
+                    {/* Thin progress bar, same language as the /start wizard */}
+                    <div className="h-1 rounded-full bg-[var(--color-line-soft)] mt-7" aria-hidden>
+                        <div className="h-1 rounded-full bg-[var(--color-accent)] transition-all duration-300"
+                             style={{ width: `${Math.max(6, (done / checks.length) * 100)}%` }} />
+                    </div>
+
+                    {/* The whole list, one row per step, clearly separated */}
+                    <div className="mt-4 divide-y divide-[var(--color-line-soft)]">
+                        {checks.map(c => {
+                            const isCurrent = c.key === current.key
+                            const row = (
+                                <div className="flex items-center gap-3 py-3.5">
+                                    <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                        c.done ? "bg-emerald-500 text-white"
+                                               : isCurrent ? "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] ring-2 ring-[var(--color-accent)]"
+                                                           : "bg-[var(--color-line-soft)] text-[var(--color-muted)] border border-[var(--color-border)]"
+                                    }`}>{c.done ? "✓" : ""}</span>
+                                    <span className={`text-sm min-w-0 flex-1 truncate ${
+                                        c.done ? "text-[var(--color-muted)] line-through"
+                                               : isCurrent ? "text-[var(--color-text)] font-semibold"
+                                                           : "text-[var(--color-text-secondary)]"
+                                    }`}>{t.homeStates.checks[c.key].label}</span>
+                                    {!c.done && !isCurrent && (
+                                        <span className="flex-shrink-0 text-xs font-semibold text-[var(--color-accent-deep)]">{t.homeStates.setUp}</span>
+                                    )}
                                 </div>
-                                {!c.done && (
-                                    <Link href={c.href} className="flex-shrink-0 text-xs font-semibold text-[var(--color-accent-deep)] hover:underline mt-0.5">
-                                        {t.homeStates.setUp}
-                                    </Link>
-                                )}
+                            )
+                            return c.done || isCurrent
+                                ? <div key={c.key}>{row}</div>
+                                : <Link key={c.key} href={c.href} className="block hover:bg-[var(--color-hover)] -mx-2 px-2 rounded-lg transition-colors">{row}</Link>
+                        })}
+                    </div>
+                </>
+            )}
+
+            {!showChecklist && (
+                <div>
+                    <h2 className="font-display text-2xl sm:text-[28px] font-bold leading-tight text-[var(--color-text)]">{t.homeStates.readyTitle}</h2>
+                    <p className="text-sm text-[var(--color-text-secondary)] mt-2 max-w-md leading-relaxed">{t.homeStates.readySub}</p>
+                </div>
+            )}
+
+            {showStatus && (
+                <div className={showChecklist ? "border-t border-[var(--color-line-soft)] mt-6 pt-6" : "mt-6"}>
+                    <p className="text-[11px] uppercase tracking-wider text-[var(--color-muted)] font-semibold mb-3.5">{t.homeStates.statusToday}</p>
+                    <div className="space-y-3.5">
+                        {status.map((s, i) => (
+                            <div key={i} className="flex items-start gap-3">
+                                <span className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                    s.ok ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                                         : "bg-[var(--color-line-soft)] text-[var(--color-muted)] border border-[var(--color-border)]"
+                                }`}>{s.ok ? "✓" : "·"}</span>
+                                <div>
+                                    <p className="text-sm font-medium text-[var(--color-text)]">{s.label}</p>
+                                    <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{s.sub}</p>
+                                </div>
                             </div>
                         ))}
                     </div>
-                )}
-
-                {showStatus && (
-                    <div className={showChecklist ? "md:border-l md:border-[var(--color-line-soft)] md:pl-8" : ""}>
-                        {showChecklist && (
-                            <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)] font-semibold mb-3">{t.homeStates.statusToday}</p>
-                        )}
-                        <div className="space-y-3.5">
-                            {status.map((s, i) => (
-                                <div key={i} className="flex items-start gap-3">
-                                    <span className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                                        s.ok ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
-                                             : "bg-[var(--color-line-soft)] text-[var(--color-muted)] border border-[var(--color-border)]"
-                                    }`}>{s.ok ? "✓" : "·"}</span>
-                                    <div>
-                                        <p className="text-sm font-medium text-[var(--color-text)]">{s.label}</p>
-                                        <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{s.sub}</p>
-                                    </div>
-                                </div>
-                            ))}
+                    <p className="text-xs text-[var(--color-muted)] mt-4">{t.homeStates.statusScorecardsSub}</p>
+                    {!showChecklist && (
+                        <div className="flex gap-3 mt-5">
+                            <Link href={"/team?tab=members" as Route}
+                                className="px-4 py-2 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors">
+                                {t.homeStates.inviteMoreReps}
+                            </Link>
+                            <Link href={"/playbook" as Route}
+                                className="px-4 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors">
+                                {t.homeStates.reviewPlaybook}
+                            </Link>
                         </div>
-                        <p className="text-xs text-[var(--color-muted)] mt-4">{t.homeStates.statusScorecardsSub}</p>
-                        {!showChecklist && (
-                            <div className="flex gap-3 mt-5">
-                                <Link href={"/team?tab=members" as Route}
-                                    className="px-4 py-2 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors">
-                                    {t.homeStates.inviteMoreReps}
-                                </Link>
-                                <Link href={"/playbook" as Route}
-                                    className="px-4 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors">
-                                    {t.homeStates.reviewPlaybook}
-                                </Link>
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
+                    )}
+                </div>
+            )}
         </div>
     )
 }

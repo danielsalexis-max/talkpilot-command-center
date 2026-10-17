@@ -4167,7 +4167,13 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
             body: JSON.stringify({ action, org_id: orgId, ...extra }),
         })
         const json = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(errStr(json.error) || res.statusText)
+        if (!res.ok) {
+            // Carry the server's error code so callers can branch on it (the
+            // D-609 pilot_seat_cap confirm flow needs more than the message).
+            const e = new Error(errStr(json.error) || res.statusText) as Error & { code?: string }
+            e.code = typeof json.error?.code === "string" ? json.error.code : undefined
+            throw e
+        }
         return json
     }, [orgId])
 
@@ -4226,18 +4232,31 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
         return () => { cancelled = true }
     }, [t, call])
 
-    async function updateSeats() {
+    // D-609: the free pilot covers at most 5 seats (kept in sync with
+    // org-billing's MAX_PILOT_SEATS). Raising a trialing workspace past it is
+    // an explicit opt-in: the server answers pilot_seat_cap until the request
+    // carries confirm_start_billing, and this holds the pending seat count
+    // while the owner decides.
+    const MAX_PILOT_SEATS = 5
+    const [pilotConfirmSeats, setPilotConfirmSeats] = useState<number | null>(null)
+
+    async function updateSeats(confirmStartBilling = false) {
         if (!info || seatDraft === info.seats_purchased) return
-        setSaving(true); setMsg(null)
+        setSaving(true); setMsg(null); setPilotConfirmSeats(null)
         try {
-            await call("set_seats", { seats: seatDraft })
-            setMsg(seatDraft > info.seats_purchased
-                ? t.tabs.billing.seatsUpdatedUp(seatDraft)
-                : t.tabs.billing.seatsUpdatedDown(seatDraft))
+            await call("set_seats", { seats: seatDraft, ...(confirmStartBilling ? { confirm_start_billing: true } : {}) })
+            setMsg(confirmStartBilling ? t.tabs.billing.pilotEnded(seatDraft)
+                : seatDraft > info.seats_purchased
+                    ? t.tabs.billing.seatsUpdatedUp(seatDraft)
+                    : t.tabs.billing.seatsUpdatedDown(seatDraft))
             setIsErr(false)
             await load()
         } catch (e) {
-            setMsg(errStr(e)); setIsErr(true)
+            if ((e as { code?: string })?.code === "pilot_seat_cap") {
+                setPilotConfirmSeats(seatDraft)
+            } else {
+                setMsg(errStr(e)); setIsErr(true)
+            }
         } finally {
             setSaving(false)
         }
@@ -4348,11 +4367,28 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                                 <button className={BTN_GHOST} onClick={() => setSeatDraft(s => Math.min(seatCap, s + 1))} disabled={saving || seatDraft >= seatCap}>+</button>
                             </div>
                         </div>
-                        <button className={BTN_PRIMARY} onClick={updateSeats} disabled={saving || seatDraft === info.seats_purchased}>
+                        <button className={BTN_PRIMARY} onClick={() => updateSeats()} disabled={saving || seatDraft === info.seats_purchased}>
                             {saving ? t.tabs.billing.updating : seatDraft > info.seats_purchased ? t.tabs.billing.addSeats(seatDraft - info.seats_purchased) : seatDraft < info.seats_purchased ? t.tabs.billing.reduceTo(seatDraft) : t.tabs.billing.updateSeats}
                         </button>
                         {perSeat && <span className="text-xs text-[var(--color-text-secondary)] pb-2.5">{t.tabs.billing.perSeatNote(perSeat)}</span>}
                     </div>
+                    {pilotConfirmSeats != null && (
+                        <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                            <p className="text-sm text-amber-900 font-medium">
+                                {t.tabs.billing.pilotSeatCap(MAX_PILOT_SEATS, pilotConfirmSeats)}
+                            </p>
+                            <div className="flex flex-wrap gap-2 mt-3">
+                                <button className={BTN_PRIMARY} onClick={() => updateSeats(true)} disabled={saving}>
+                                    {saving ? t.tabs.billing.updating : t.tabs.billing.pilotSeatCapConfirm}
+                                </button>
+                                <button className={BTN_GHOST}
+                                    onClick={() => { setPilotConfirmSeats(null); setSeatDraft(info.seats_purchased) }}
+                                    disabled={saving}>
+                                    {t.tabs.billing.pilotSeatCapCancel}
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     {info.plan === "team" && (
                         <p className="text-xs text-[var(--color-text-secondary)] mt-2">
                             {t.tabs.billing.enterpriseNote}{" "}

@@ -246,35 +246,96 @@ export const en = {
         creating: "Creating…",
         startFreeTrial: "Create workspace",
         personalEmailError: "Workspaces need a work email. Sign up with your company address — your reps' invites and billing all hang off it.",
-        // Profile step (D-607): three answers that configure the workspace —
-        // the vertical and recommended starter kit land on organizations.settings
-        // so the Playbook tab starts preselected — and drive the live preview.
+        // Profile screens (D-607; re-cut to one question per screen, D-610):
+        // the answers configure the workspace — vertical and recommended
+        // starter kit land on organizations.settings so the Playbook tab
+        // starts preselected — and drive the live preview.
         profile: {
             title: "Tell us about your team",
-            sub: "Three quick answers. We use them to pick your starter playbook and show you what your reps will see on their calls.",
-            teamQ: "What kind of team?",
-            teams: { sales: "Sales", customer_care: "Customer care", contact_center: "Contact center", real_estate: "Real estate" },
+            sub: "A few quick answers. We use them to pick your starter playbook and show you what your reps will see on their calls.",
+            teamQ: "What kind of team is this for?",
+            teamSub: "Each kind starts from its own playbook.",
+            teams: {
+                sales: "Sales",
+                customer_care: "Customer care",
+                contact_center: "Contact center",
+                real_estate: "Real estate",
+                consultants: "Consultants & coaches",
+                other: "Something else",
+            },
+            teamSubs: {
+                sales: "Close more of the calls you already have",
+                customer_care: "Every answer on-policy, even on the hard calls",
+                contact_center: "The same rules on every agent's screen",
+                real_estate: "From first enquiry to offer",
+                consultants: "Client calls, discovery and renewals",
+                other: "We'll start you from a flexible playbook",
+            },
             painQ: "Where do calls go wrong today?",
+            painSub: "Pick the one that costs you the most.",
             pains: {
                 objections: "Objections get improvised",
                 discovery: "Discovery stays shallow",
                 process: "Reps go off-process or break our rules",
                 closing: "Calls end without a clear next step",
+                ramp: "New people take months to sound like our best",
+                inconsistent: "Everyone pitches it differently",
+                unknown: "Honestly, we don't know yet",
             },
             methodologyQ: "Do you follow a sales methodology?",
-            methodologies: { none: "Not yet", spiced: "SPICED", bant: "BANT", sandler: "Sandler", meddic: "MEDDIC", own: "Our own" },
+            methodologySub: "We'll pre-build your stages from it.",
+            methodologies: {
+                none: "Not yet", spiced: "SPICED", bant: "BANT", sandler: "Sandler",
+                meddic: "MEDDIC", challenger: "Challenger", spin: "SPIN",
+                solution: "Solution Selling", gap: "Gap Selling", own: "Our own",
+            },
             previewLabel: "What your reps see, live on the call",
             previewCues: {
                 objections: { main: "They just said it's too expensive — your approved answer: ", accent: "anchor on payback, not a discount.", source: "From your objection library" },
                 discovery: { main: "Nobody has said who decides — ask: ", accent: "“Who else needs to see this before you move forward?”", source: "From your discovery stage" },
                 process: { main: "Heads up — your rule: ", accent: "no discounts over 10% without approval.", source: "Caught as the rep starts to say it" },
                 closing: { main: "Before you hang up, lock the next step: ", accent: "“Does Thursday work for the follow-up?”", source: "From your closing stage" },
+                ramp: { main: "Day 3 on the job, and the stage is on screen: ", accent: "your playbook, line by line, while they talk.", source: "New reps sound trained from call one" },
+                inconsistent: { main: "One story, every call: ", accent: "your approved pitch shows before anyone improvises.", source: "From your playbook, not from memory" },
+                unknown: { main: "Every call gets scored against your playbook — ", accent: "two weeks in, you'll know exactly where calls go wrong.", source: "We'll find it together" },
             },
             recommendedKit: (kit: string) => `We'll start your workspace from the “${kit}” playbook. You can edit everything later.`,
-            knowledgeNote: "After setup you can upload your pricing, objection handling and product docs — the coach answers from them.",
             continueBtn: "Continue",
             skip: "Skip — set this up later",
         },
+        // Tools screen (D-610): which tools the team lives in. Selections are
+        // stored on the profile; real connects happen after setup (the done
+        // checklist points there). Honest: nothing OAuths from this screen.
+        tools: {
+            title: "Which tools does your team live in?",
+            sub: "Pick yours — we'll have them ready to connect right after setup. Calls get logged, recaps land where your team already works.",
+            options: {
+                hubspot: "HubSpot", salesforce: "Salesforce", gcal: "Google Calendar",
+                outlook: "Outlook", slack: "Slack", meetings: "Zoom / Meet / Teams",
+                none: "None of these",
+            },
+            note: "TalkPilot logs coached calls to your CRM and drops recaps in Slack — your reps stop doing data entry.",
+        },
+        // Knowledge screen (D-610): what the coach should learn. Selections are
+        // stored on the profile; uploads happen in Playbook → Knowledge after
+        // setup, and the done checklist carries them forward.
+        knowledge: {
+            title: "What should your coach know?",
+            sub: "Teams that feed TalkPilot their own material get coached answers from it on the very first call.",
+            options: {
+                pricing: "Our pricing and plans",
+                objections: "Objection answers that work",
+                product: "Product docs and battlecards",
+                transcripts: "Transcripts of our best calls",
+                nothing: "Nothing yet — we'll add it later",
+            },
+            note: "You'll upload these right after setup — PDF, Word, PowerPoint or text, up to 25 MB each.",
+        },
+        // Seat-dependent pilot copy (D-609): the free pilot covers up to 5 seats.
+        pilotBoxSmall: "Your 30-day pilot: add a card at the end, pay $0 today, cancel anytime before day 30.",
+        pilotBoxBig: (seats: number, monthly: number) => `The free pilot covers up to 5 seats. With ${seats} seats, billing starts today (~$${monthly}/month). Tip: start your pilot with up to 5 people — you can add seats anytime.`,
+        stepOfN: (n: number, total: number) => `${n} of ${total}`,
+        back: "Back",
         // Brain step
         brainTitle: "Give your reps a playbook",
         brainSub1: "This is what makes coaching ",
@@ -538,8 +599,8 @@ export const en = {
         required: "Required",
         recommended: "Recommended",
         setUp: "Set up →",
-        setupTitle: "Get your team coached",
-        setupSub: "Every step here is yours to do — no waiting on anyone else. This card retires itself once the list is done.",
+        nextStep: "Next step",
+        stepCount: (done: number, total: number) => `${done} of ${total} done`,
         dismissChecklist: "Dismiss this checklist",
         readyTitle: "You're set up — the first call does the rest",
         readySub: "Reps get coached live through your playbook on their next call, and the scorecard lands here minutes after it ends.",
@@ -1402,6 +1463,13 @@ export const en = {
             perSeatNote: (price: string) => `${price} · changes are prorated automatically`,
             seatsUpdatedUp: (n: number) => `Updated to ${n} seats — the difference is prorated onto your next invoice.`,
             seatsUpdatedDown: (n: number) => `Updated to ${n} seats — the credit is prorated onto your next invoice.`,
+            // D-609: a trialing workspace asking for more seats than the free
+            // pilot covers must opt in — raising seats ends the pilot.
+            pilotSeatCap: (max: number, n: number) =>
+                `The free pilot covers up to ${max} seats. Going to ${n} ends the pilot and billing starts today.`,
+            pilotSeatCapConfirm: "End pilot & start billing",
+            pilotSeatCapCancel: "Keep the pilot",
+            pilotEnded: (n: number) => `Updated to ${n} seats — the pilot ended and billing started today.`,
             trialDaysLeft: (n: number) => `${n} day${n === 1 ? "" : "s"} left`,
             trialActive1: "Free trial —",
             trialActive2: ". Every feature is on; add billing below and nothing changes at the switch.",

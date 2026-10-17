@@ -130,3 +130,9 @@ html[data-skin="dark"] {
 @keyframes dna-find-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .dna-find { animation: dna-find-in .35s ease-out both; }
 @media (prefers-reduced-motion: reduce) { .dna-scan { display: none; } .dna-find { animation: none; } }
+
+/* D-610 — /start wizard v2 (Khu-style, one question per screen): each screen
+   slides in as it mounts. Also used by the dashboard setup checklist. */
+@keyframes tp-screen-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.tp-screen { animation: tp-screen-in .28s ease; }
+@media (prefers-reduced-motion: reduce) { .tp-screen { animation: none; } }

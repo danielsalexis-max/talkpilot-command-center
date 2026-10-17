@@ -5,36 +5,49 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { isPersonalEmail } from "@/lib/workEmail"
-import { starterKitsFor } from "@/lib/starterKit"
+import { starterKitsFor, type Vertical } from "@/lib/starterKit"
 import { GetTheApp } from "@/components/GetTheApp"
 import { EmailLink } from "@/components/EmailLink"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
 import type { Dict } from "@/i18n"
 
-/// /start — self-serve Teams onboarding (D-163).
-/// account → profile → workspace → invite → live. The playbook step moved into
-/// the dashboard (D-215): asking for a playbook here — but not objections —
-/// left owners half-configured either way, so the whole coaching-brain setup
-/// still happens in Playbook, after billing. The profile step (D-607) asks
-/// three questions that pick the starter kit (written to
-/// organizations.settings so Playbook starts preselected), drive a live "what
-/// your reps see" preview, and land in create-org's audit meta. The right-hand
-/// panel keeps selling while the owner types.
+/// /start — self-serve Teams onboarding (D-163; one question per screen since
+/// D-610, in the Khu B2C onboarding's language: one big question, large option
+/// cards, auto-advance, a thin progress bar). The flow is a persuasion
+/// mechanism as much as a form: every answer configures the workspace
+/// (vertical + recommended starter kit land on organizations.settings so
+/// Playbook starts preselected) AND shows the product answering it — the HUD
+/// preview re-cuts to the pain they picked. Tools and knowledge screens ask
+/// for commitment before the card; real connects and uploads happen right
+/// after setup (the dashboard checklist carries them), so nothing here
+/// promises an OAuth or upload this page can't do.
 ///
-/// Every workspace now ends at the 30-day card-pilot checkout (D-605):
-/// create-org returns card_trial_days = 30 by default, and the done step's
-/// checkout opens a Stripe trial — $0 today, first charge on day 30.
+/// The card comes last (D-605): checkout opens a Stripe trial — $0 today,
+/// first charge on day 30 — for pilots of up to 5 seats (D-609). Bigger
+/// workspaces are told, on the seats screen, that billing starts today.
 
-type Step = "account" | "profile" | "workspace" | "invite" | "done"
-const STEPS: Step[] = ["account", "profile", "workspace", "invite", "done"]
+type Screen =
+    | "account" | "team" | "pain" | "methodology"
+    | "workspace" | "tools" | "knowledge" | "invite" | "done"
 
-type ProfileVertical = "sales" | "customer_care" | "contact_center" | "real_estate"
-type ProfilePain = "objections" | "discovery" | "process" | "closing"
-type ProfileMethodology = "none" | "spiced" | "bant" | "sandler" | "meddic" | "own"
+type ProfileVertical = "sales" | "customer_care" | "contact_center" | "real_estate" | "consultants" | "other"
+type ProfilePain = "objections" | "discovery" | "process" | "closing" | "ramp" | "inconsistent" | "unknown"
+type ProfileMethodology =
+    | "none" | "spiced" | "bant" | "sandler" | "meddic"
+    | "challenger" | "spin" | "solution" | "gap" | "own"
+
+/// Consultants/coaches and "something else" run on the sales kits — closest
+/// stages, and the flexible discovery-led kit is the recommendation anyway.
+const settingsVertical = (v: ProfileVertical): Vertical =>
+    v === "customer_care" || v === "contact_center" || v === "real_estate" ? v : "sales"
+
+/// Which methodology question applies: only team types that sell.
+const asksMethodology = (v: ProfileVertical | null) =>
+    v === "sales" || v === "consultants" || v === "other"
 
 /// Which starter kit the profile answers point at (keys from lib/starterKit).
-/// The pick is written to organizations.settings.onboarding_profile; the
-/// Playbook tab reads settings.vertical to preselect the kit family.
+/// Methodologies without a kit of their own (Challenger, SPIN, Solution, Gap)
+/// start from discovery-led — the stages are edited after setup anyway.
 function recommendedKitKey(vertical: ProfileVertical, methodology: ProfileMethodology): string {
     if (vertical === "customer_care") return "support-success"
     if (vertical === "contact_center") return "contact-center"
@@ -66,26 +79,26 @@ function captureSource(): { src: string; variant: string } | null {
     } catch { return null }
 }
 
-const INPUT = "w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
-const BTN = "w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors"
-const BTN_GHOST = "w-full py-2.5 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors"
+const INPUT = "w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-xl px-4 py-3 text-[15px] text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+const BTN = "w-full py-3 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] text-[15px] font-semibold rounded-xl transition-colors"
+const BTN_GHOST = "w-full py-3 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-[15px] font-medium text-[var(--color-text)] rounded-xl transition-colors"
 
 // The work-email rule and its domain list live in one place now — the login
 // page needed the same check, and three copies of a list like this is how they
 // drift. `create-org` keeps its own copy on purpose: it is the server-side
 // backstop and must refuse regardless of what any client believes (D-171).
 
-// Teams has a 3-seat minimum and no plan maximum (D-603, replacing D-192's
-// 20-seat cap). 500 is only a fat-finger ceiling, mirrored in create-org and
-// org-billing. Enterprise is about extra needs (custom terms, SLA, invoicing,
-// security review), not team size, so its pointer is always shown.
+// Teams has a 3-seat minimum and no plan maximum (D-603). 500 is only a
+// fat-finger ceiling, mirrored in create-org and org-billing. The FREE PILOT
+// covers up to 5 seats (D-609) — the seats screen says so the moment the
+// count crosses it, and create-org makes a bigger workspace pay from day one.
 const MIN_SEATS = 3
 const MAX_SEATS = 500
+const MAX_PILOT_SEATS = 5
+const SEAT_PRICE_MONTHLY = 40
 const clampSeats = (n: number) => Math.max(MIN_SEATS, Math.min(MAX_SEATS, Math.round(n) || MIN_SEATS))
 
-/// Where "talk to us first" goes. The website's Teams button points here too
-/// (D-192 #8) — teams.talkpilot.co keeps working for whoever lands on it
-/// directly, but the default motion is a conversation.
+/// Where "talk to us first" goes — one click away on every screen.
 const DEMO_URL = "https://talkpilot.co/demo"
 
 async function callFn(name: string, body: unknown) {
@@ -169,12 +182,12 @@ function AuditSlide({ t }: { t: Dict }) {
     )
 }
 
-/// The profile step's live preview: the HUD card re-cut to the pain the owner
+/// The pain screen's live payoff: the HUD card re-cut to the pain the owner
 /// just picked, so the answer configures the product AND shows it working.
 function ProfilePreview({ t, pain }: { t: Dict; pain: ProfilePain }) {
     const cue = t.start.profile.previewCues[pain]
     return (
-        <div>
+        <div className="tp-screen">
             <p className="font-mono text-[9.5px] tracking-[0.12em] text-[var(--color-muted)] mb-2">{t.start.profile.previewLabel}</p>
             <div className="w-full rounded-2xl bg-[#1A263D] border border-white/10 p-4 shadow-xl">
                 <div className="flex items-center gap-2 font-mono text-[9.5px] tracking-[0.12em] text-[#94A2AB]">
@@ -227,12 +240,45 @@ function Showcase() {
     )
 }
 
+// ─── Khu-style building blocks ──────────────────────────────────────────────
+
+/// One large option card: title, optional sub, selected ring. The B2C
+/// onboarding's card, translated into the Boardroom tokens.
+function OptionCard({ title, sub, selected, onClick }: {
+    title: string; sub?: string; selected: boolean; onClick: () => void
+}) {
+    return (
+        <button type="button" onClick={onClick} aria-pressed={selected}
+            className={`w-full text-left rounded-xl border px-4 py-3.5 transition-all duration-150 ${
+                selected
+                    ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)] ring-1 ring-[var(--color-accent)]"
+                    : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-muted)] hover:-translate-y-px"
+            }`}>
+            <span className={`block text-[15px] font-semibold ${selected ? "text-[var(--color-accent-deep)]" : "text-[var(--color-text)]"}`}>{title}</span>
+            {sub && <span className="block text-xs text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">{sub}</span>}
+        </button>
+    )
+}
+
+/// Screen scaffold: the big question, one line under it, then the body.
+function ScreenShell({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+    return (
+        <div className="tp-screen">
+            <h1 className="font-display text-[28px] sm:text-[32px] font-extrabold text-[var(--color-text)] leading-[1.15]" style={{ textWrap: "balance" }}>
+                {title}
+            </h1>
+            {sub && <p className="text-[15px] text-[var(--color-text-secondary)] mt-2.5 leading-relaxed">{sub}</p>}
+            <div className="mt-7">{children}</div>
+        </div>
+    )
+}
+
 // ─── The wizard ──────────────────────────────────────────────────────────────
 
 export default function StartPage() {
     const router = useRouter()
     const { t, locale } = useLocale()
-    const [step, setStep]         = useState<Step>("account")
+    const [screen, setScreen]     = useState<Screen>("account")
     const [checking, setChecking] = useState(true)
     const [busy, setBusy]         = useState(false)
     const [error, setError]       = useState<string | null>(null)
@@ -241,32 +287,55 @@ export default function StartPage() {
     const [email, setEmail]       = useState("")
     const [password, setPassword] = useState("")
 
-    // Profile step (D-607). null = not answered; the step needs team + pain,
-    // and the methodology question only applies to sales teams.
+    // Profile answers (D-607/D-610). null = not answered.
     const [pVertical, setPVertical]       = useState<ProfileVertical | null>(null)
     const [pPain, setPPain]               = useState<ProfilePain | null>(null)
-    const [pMethodology, setPMethodology] = useState<ProfileMethodology>("none")
+    const [pMethodology, setPMethodology] = useState<ProfileMethodology | null>(null)
+    const [pTools, setPTools]             = useState<string[]>([])
+    const [pKnow, setPKnow]               = useState<string[]>([])
 
     const [orgName, setOrgName]   = useState("")
-    const [seats, setSeats]       = useState(5)
+    const [seats, setSeats]       = useState(3)
     const [orgId, setOrgId]       = useState<string | null>(null)
     /// Whether a sales-granted trial was claimed at workspace creation (D-192).
-    /// False is the normal path now: the wizard ends at checkout.
     const [hasTrial, setHasTrial] = useState(false)
-    /// D-575: a card-required grant. The final step is still checkout, but it
-    /// opens a Stripe trial of this many days ($0 today).
+    /// D-575/D-605: the checkout opens a Stripe trial of this many days
+    /// ($0 today). Null = pay from day one (no grant and over the pilot cap).
     const [cardTrialDays, setCardTrialDays] = useState<number | null>(null)
     const [checkoutBusy, setCheckoutBusy] = useState(false)
 
     const [invites, setInvites]       = useState<string[]>(["", "", ""])
     const [inviteNote, setInviteNote] = useState<string | null>(null)
     const doneRef = useRef(false)
+    const advanceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-    // Signed-in users skip the account step. Users already in an org: if the
+    /// The flow, in order. Methodology only shows for team types that sell;
+    /// the progress counter stays honest either way.
+    const flow: Screen[] = asksMethodology(pVertical)
+        ? ["account", "team", "pain", "methodology", "workspace", "tools", "knowledge", "invite", "done"]
+        : ["account", "team", "pain", "workspace", "tools", "knowledge", "invite", "done"]
+    const screenIdx = Math.max(0, flow.indexOf(screen))
+    const progress = (screenIdx + 1) / flow.length
+
+    /// Single-select screens advance on their own, like the B2C onboarding —
+    /// pick, see it light up, move on. Short enough to feel instant, long
+    /// enough that the selection reads.
+    function pickAndAdvance(apply: () => void, next: Screen) {
+        apply()
+        if (advanceRef.current) clearTimeout(advanceRef.current)
+        advanceRef.current = setTimeout(() => setScreen(next), 260)
+    }
+    useEffect(() => () => { if (advanceRef.current) clearTimeout(advanceRef.current) }, [])
+
+    function goBack() {
+        if (screenIdx > 1) setScreen(flow[screenIdx - 1])
+    }
+
+    // Signed-in users skip the account screen. Users already in an org: if the
     // workspace is entitled, onboarding is over — go home. If it is NOT paid
-    // yet and this is the payer, resume the wizard at its final step — this is
-    // where Stripe's back button and stale tabs land, and bouncing those users
-    // to the dashboard's billing gate lost the wizard forever.
+    // yet and this is the payer, resume the wizard at its final screen — this
+    // is where Stripe's back button and stale tabs land, and bouncing those
+    // users to the dashboard's billing gate lost the wizard forever.
     const routeForUser = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { setChecking(false); return }
@@ -293,12 +362,12 @@ export default function StartPage() {
                 setError(t.start.checkoutCanceledNote)
             }
             doneRef.current = true
-            setStep("done")
+            setScreen("done")
             setChecking(false)
             return
         }
         setEmail(user.email ?? "")
-        setStep(s => (s === "account" ? "profile" : s))
+        setScreen(s => (s === "account" ? "team" : s))
         setChecking(false)
     }, [router, t])
 
@@ -331,7 +400,7 @@ export default function StartPage() {
             const { data: member } = await supabase.from("org_members")
                 .select("org_id").eq("user_id", user.id).eq("status", "active").maybeSingle()
             if (member) { router.replace("/"); return }
-            setStep("profile")
+            setScreen("team")
         } catch (e) {
             setError((e as Error).message)
         } finally {
@@ -373,7 +442,30 @@ export default function StartPage() {
     async function switchAccount() {
         await supabase.auth.signOut({ scope: "local" })
         setEmail(""); setPassword(""); setError(null)
-        setStep("account")
+        setScreen("account")
+    }
+
+    /// Best-effort settings write (same write the StarterKitPicker does): the
+    /// Playbook tab preselects the kit family from settings.vertical, and the
+    /// dashboard reads onboarding_profile for recommendations. Never blocks
+    /// the flow.
+    async function saveProfileSettings(id: string) {
+        if (!pVertical) return
+        try {
+            await supabase.from("organizations").update({
+                settings: {
+                    vertical: settingsVertical(pVertical),
+                    onboarding_profile: {
+                        vertical: pVertical,
+                        pain: pPain,
+                        methodology: asksMethodology(pVertical) ? pMethodology : null,
+                        recommended_kit: recommendedKitKey(pVertical, pMethodology ?? "none"),
+                        tools: pTools,
+                        knowledge: pKnow,
+                    },
+                },
+            }).eq("id", id)
+        } catch { /* non-blocking */ }
     }
 
     async function handleWorkspace(e: React.FormEvent) {
@@ -389,10 +481,10 @@ export default function StartPage() {
         try {
             // Profile answers and the CTA-experiment source ride along for the
             // audit trail (D-606/D-607); create-org sanitizes and stores them.
-            const profile = pVertical && pPain ? {
+            const profile = pVertical ? {
                 vertical: pVertical,
                 pain: pPain,
-                methodology: pVertical === "sales" ? pMethodology : null,
+                methodology: asksMethodology(pVertical) ? pMethodology : null,
             } : null
             const source = captureSource()
             const res = await callFn("create-org", {
@@ -401,27 +493,10 @@ export default function StartPage() {
                 ...(profile ? { profile } : {}),
             })
             setOrgId(res.org_id)
-            // The Playbook tab preselects the kit family from settings.vertical
-            // (same write the StarterKitPicker does); the full answers go with
-            // it so the dashboard can recommend the exact kit later. Best
-            // effort — a failed write must not block onboarding.
-            if (profile) {
-                try {
-                    await supabase.from("organizations").update({
-                        settings: {
-                            vertical: profile.vertical,
-                            onboarding_profile: { ...profile, recommended_kit: recommendedKitKey(profile.vertical, pMethodology) },
-                        },
-                    }).eq("id", res.org_id)
-                } catch { /* non-blocking */ }
-            }
-            // A null trial_ends_at means no grant matched, which since D-192 is
-            // the DEFAULT: this workspace pays before it is used. Keep building
-            // the brain either way — a half-configured workspace is worthless
-            // to them and to us — but the final step becomes checkout.
+            await saveProfileSettings(res.org_id)
             setHasTrial(!!res.trial_ends_at)
             setCardTrialDays(typeof res.card_trial_days === "number" ? res.card_trial_days : null)
-            setStep("invite")
+            setScreen("tools")
         } catch (e) {
             const msg = (e as Error).message
             if (msg.includes("already part")) { router.replace("/"); return }
@@ -457,60 +532,78 @@ export default function StartPage() {
             catch { failed++ }
         }
         setBusy(false)
-        // On the demo-first path the org has no billing yet, so invites queue
-        // rather than send — say that, or "1 invitación enviada" is false and
-        // the owner waits for an email that will not arrive until they pay.
+        // Pre-billing, invites queue rather than send — say that, or
+        // "1 invitación enviada" is false and the owner waits for an email
+        // that will not arrive until they pay.
         setInviteNote(queued ? t.start.inviteQueuedNote(queued)
                     : sent   ? t.start.inviteNote(sent, failed)
                     : null)
         doneRef.current = true
-        setStep("done")
+        setScreen("done")
     }
 
-    const stepIdx = STEPS.indexOf(step)
+    /// Toggle for the multi-select screens. The exclusive key ("none"/
+    /// "nothing") clears the rest, and picking anything clears it.
+    function toggleMulti(list: string[], set: (v: string[]) => void, key: string, exclusiveKey: string) {
+        if (key === exclusiveKey) { set(list.includes(key) ? [] : [key]); return }
+        const base = list.filter(k => k !== exclusiveKey)
+        set(base.includes(key) ? base.filter(k => k !== key) : [...base, key])
+    }
 
     if (checking) return (
         <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] text-sm text-[var(--color-muted)]">{t.common.loading}</div>
     )
 
+    const kitTitle = pVertical
+        ? starterKitsFor(locale).find(k => k.key === recommendedKitKey(pVertical, pMethodology ?? "none"))?.title
+        : null
+    const overPilotCap = seats > MAX_PILOT_SEATS
+
     return (
         <div className="min-h-screen flex bg-[var(--color-bg)]">
             {/* ── Left: the wizard ── */}
             <div className="flex-1 flex justify-center px-6 sm:px-10 lg:px-14 py-8 lg:py-12">
-                <div className="w-full max-w-[440px] flex flex-col">
-                <div className="flex items-center gap-2.5 mb-10">
+                <div className="w-full max-w-[460px] flex flex-col">
+                <div className="flex items-center gap-2.5 mb-8">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src="/brand-mark.png" alt="" className="w-8 h-8 object-contain" />
                     <span className="font-display font-bold text-[15px] text-[var(--color-text)]">TalkPilot <span className="text-[var(--color-accent)]">Teams</span></span>
                 </div>
 
-                {/* Progress */}
-                <div className="flex items-center gap-1.5 mb-3" aria-label={t.start.stepOf(stepIdx + 1, STEPS.length)}>
-                    {STEPS.map((s, i) => (
-                        <div key={s} className="flex-1">
-                            <div className={`h-1 rounded-full ${i <= stepIdx ? "bg-[var(--color-accent)]" : "bg-[var(--color-line-soft)]"}`} />
-                            <p className={`mt-1.5 text-[10px] font-medium hidden sm:block ${i === stepIdx ? "text-[var(--color-accent-deep)]" : "text-[var(--color-muted)]"}`}>{t.start.stepLabels[s]}</p>
+                {/* Progress: back chevron, one thin bar, n of N. */}
+                {screen !== "done" && (
+                    <div className="flex items-center gap-3 mb-2">
+                        <button type="button" onClick={goBack} aria-label={t.start.back}
+                            disabled={screenIdx <= 1}
+                            className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                                screenIdx > 1 ? "text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]" : "opacity-0 pointer-events-none"
+                            }`}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+                        </button>
+                        <div className="flex-1 h-1 rounded-full bg-[var(--color-line-soft)] overflow-hidden">
+                            <div className="h-full rounded-full bg-[var(--color-accent)] transition-all duration-300" style={{ width: `${Math.round(progress * 100)}%` }} />
                         </div>
-                    ))}
-                </div>
+                        <span className="font-mono text-[11px] text-[var(--color-muted)]">{t.start.stepOfN(screenIdx + 1, flow.length)}</span>
+                    </div>
+                )}
 
-                {/* The demo escape hatch stays one click away on every step —
+                {/* The demo escape hatch stays one click away on every screen —
                     self-serve is the default motion, not the only one. */}
-                {step !== "done" && (
-                    <p className="mb-6 text-[11px]">
+                {screen !== "done" && (
+                    <p className="mb-7 text-[11px] pl-10">
                         <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className="text-[var(--color-muted)] hover:text-[var(--color-accent-deep)]">
                             {t.start.questionsBookDemo}
                         </a>
                     </p>
                 )}
 
-                <div className="flex-1 flex flex-col justify-center">
-                    {step === "account" && (
-                        <div>
-                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight" style={{ textWrap: "balance" }}>
+                <div className="flex-1 flex flex-col justify-center" key={screen}>
+                    {screen === "account" && (
+                        <div className="tp-screen">
+                            <h1 className="font-display text-[28px] sm:text-[32px] font-extrabold text-[var(--color-text)] leading-[1.15]" style={{ textWrap: "balance" }}>
                                 {t.start.accountTitle}
                             </h1>
-                            <p className="text-sm text-[var(--color-text-secondary)] mt-2">
+                            <p className="text-[15px] text-[var(--color-text-secondary)] mt-2.5">
                                 {t.start.accountSub}
                                 <span className="font-semibold text-[var(--color-text)] whitespace-nowrap"> {t.start.accountFree}</span>
                             </p>
@@ -550,93 +643,68 @@ export default function StartPage() {
                         </div>
                     )}
 
-                    {step === "profile" && (() => {
-                        const CHIP = (active: boolean) =>
-                            `px-3 py-2 rounded-lg border text-[13px] text-left transition-colors ${
-                                active
-                                    ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] font-semibold"
-                                    : "border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]"
-                            }`
-                        const kitKey = pVertical ? recommendedKitKey(pVertical, pMethodology) : null
-                        const kitTitle = kitKey ? starterKitsFor(locale).find(k => k.key === kitKey)?.title : null
-                        return (
-                            <div>
-                                <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">{t.start.profile.title}</h1>
-                                <p className="text-sm text-[var(--color-text-secondary)] mt-2">{t.start.profile.sub}</p>
-                                <div className="space-y-5 mt-7">
-                                    <div>
-                                        <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">{t.start.profile.teamQ}</p>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {(Object.keys(t.start.profile.teams) as ProfileVertical[]).map(v => (
-                                                <button key={v} type="button" onClick={() => setPVertical(v)} className={CHIP(pVertical === v)}>
-                                                    {t.start.profile.teams[v]}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">{t.start.profile.painQ}</p>
-                                        <div className="grid gap-2">
-                                            {(Object.keys(t.start.profile.pains) as ProfilePain[]).map(p => (
-                                                <button key={p} type="button" onClick={() => setPPain(p)} className={CHIP(pPain === p)}>
-                                                    {t.start.profile.pains[p]}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    {pVertical === "sales" && (
-                                        <div>
-                                            <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">{t.start.profile.methodologyQ}</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {(Object.keys(t.start.profile.methodologies) as ProfileMethodology[]).map(m => (
-                                                    <button key={m} type="button" onClick={() => setPMethodology(m)} className={CHIP(pMethodology === m)}>
-                                                        {t.start.profile.methodologies[m]}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {pPain && <ProfilePreview t={t} pain={pPain} />}
-                                    {kitTitle && (
-                                        <p className="text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-lg px-4 py-3">
-                                            {t.start.profile.recommendedKit(kitTitle)}{" "}
-                                            <span className="text-[var(--color-muted)]">{t.start.profile.knowledgeNote}</span>
-                                        </p>
-                                    )}
-                                    <button
-                                        onClick={() => setStep("workspace")}
-                                        disabled={!pVertical || !pPain}
-                                        className={BTN}
-                                    >
-                                        {t.start.profile.continueBtn}
-                                    </button>
-                                    <button
-                                        onClick={() => { setPVertical(null); setPPain(null); setStep("workspace") }}
-                                        className="block text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]"
-                                    >
-                                        {t.start.profile.skip}
-                                    </button>
-                                </div>
+                    {screen === "team" && (
+                        <ScreenShell title={t.start.profile.teamQ} sub={t.start.profile.teamSub}>
+                            <div className="grid sm:grid-cols-2 gap-2.5">
+                                {(Object.keys(t.start.profile.teams) as ProfileVertical[]).map(v => (
+                                    <OptionCard key={v} title={t.start.profile.teams[v]} sub={t.start.profile.teamSubs[v]}
+                                        selected={pVertical === v}
+                                        onClick={() => pickAndAdvance(() => setPVertical(v), "pain")} />
+                                ))}
                             </div>
-                        )
-                    })()}
+                        </ScreenShell>
+                    )}
 
-                    {step === "workspace" && (
-                        <div>
-                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">{t.start.workspaceTitle}</h1>
-                            <p className="text-sm text-[var(--color-text-secondary)] mt-2">{t.start.workspaceSub}</p>
+                    {screen === "pain" && (
+                        <ScreenShell title={t.start.profile.painQ} sub={t.start.profile.painSub}>
+                            <div className="grid gap-2.5">
+                                {(Object.keys(t.start.profile.pains) as ProfilePain[]).map(p => (
+                                    <OptionCard key={p} title={t.start.profile.pains[p]}
+                                        selected={pPain === p}
+                                        onClick={() => pickAndAdvance(() => setPPain(p), asksMethodology(pVertical) ? "methodology" : "workspace")} />
+                                ))}
+                            </div>
+                            {pPain && <div className="mt-5"><ProfilePreview t={t} pain={pPain} /></div>}
+                        </ScreenShell>
+                    )}
+
+                    {screen === "methodology" && (
+                        <ScreenShell title={t.start.profile.methodologyQ} sub={t.start.profile.methodologySub}>
+                            <div className="flex flex-wrap gap-2.5">
+                                {(Object.keys(t.start.profile.methodologies) as ProfileMethodology[]).map(m => (
+                                    <button key={m} type="button" aria-pressed={pMethodology === m}
+                                        onClick={() => pickAndAdvance(() => setPMethodology(m), "workspace")}
+                                        className={`px-4 py-2.5 rounded-xl border text-[14px] font-semibold transition-all duration-150 ${
+                                            pMethodology === m
+                                                ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] ring-1 ring-[var(--color-accent)]"
+                                                : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]"
+                                        }`}>
+                                        {t.start.profile.methodologies[m]}
+                                    </button>
+                                ))}
+                            </div>
+                            {kitTitle && pMethodology && (
+                                <p className="text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-xl px-4 py-3 mt-5">
+                                    {t.start.profile.recommendedKit(kitTitle)}
+                                </p>
+                            )}
+                        </ScreenShell>
+                    )}
+
+                    {screen === "workspace" && (
+                        <ScreenShell title={t.start.workspaceTitle} sub={t.start.workspaceSub}>
                             {/* OAuth arrivals skip the account form, so a personal Google/
                                 Microsoft identity is only catchable here — say it now, with
                                 a way out, instead of on submit. */}
                             {isPersonalEmail(email) && (
-                                <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
+                                <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3">
                                     <p className="text-xs text-amber-900">{t.start.personalEmailError}</p>
                                     <button onClick={switchAccount} className="mt-1.5 text-xs font-semibold text-amber-900 underline">
                                         {t.start.useAnotherAccount}
                                     </button>
                                 </div>
                             )}
-                            <form onSubmit={handleWorkspace} className="space-y-4 mt-7">
+                            <form onSubmit={handleWorkspace} className="space-y-5">
                                 <div>
                                     <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.companyName}</label>
                                     <input required minLength={2} maxLength={80} placeholder={t.start.companyPlaceholder} className={INPUT + " mt-1.5"}
@@ -646,7 +714,7 @@ export default function StartPage() {
                                     <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.seatsLabel}</label>
                                     <div className="flex items-center gap-3 mt-1.5">
                                         <button type="button" aria-label={t.start.fewerSeats} onClick={() => setSeats(s => clampSeats(s - 1))}
-                                            className="w-9 h-9 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]">−</button>
+                                            className="w-10 h-10 rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]">−</button>
                                         {/* Typable, not just a stepper: with no plan
                                             maximum (D-603) a 60-person team
                                             shouldn't have to click + 55 times. */}
@@ -654,9 +722,9 @@ export default function StartPage() {
                                             min={MIN_SEATS} max={MAX_SEATS} value={seats}
                                             onChange={e => setSeats(Math.max(0, Math.min(MAX_SEATS, Math.round(Number(e.target.value)) || 0)))}
                                             onBlur={() => setSeats(clampSeats)}
-                                            className="font-mono text-lg text-[var(--color-text)] w-16 text-center bg-transparent border border-[var(--color-border)] rounded-lg py-1 focus:outline-none focus:border-[var(--color-accent)]" />
+                                            className="font-mono text-lg text-[var(--color-text)] w-16 text-center bg-transparent border border-[var(--color-border)] rounded-xl py-1.5 focus:outline-none focus:border-[var(--color-accent)]" />
                                         <button type="button" aria-label={t.start.moreSeats} onClick={() => setSeats(s => clampSeats(s + 1))}
-                                            className="w-9 h-9 rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]">+</button>
+                                            className="w-10 h-10 rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]">+</button>
                                         <span className="text-xs text-[var(--color-muted)]">{t.start.minSeats}</span>
                                     </div>
                                     <p className="text-xs text-[var(--color-text-secondary)] mt-2">
@@ -666,27 +734,67 @@ export default function StartPage() {
                                         </EmailLink>
                                     </p>
                                 </div>
-                                {/* The box promises the 30-day card pilot —
-                                    create-org's self-serve default since D-605.
-                                    (The old no-promise copy dated from D-192 #8,
-                                    when trials were sales-granted only.) */}
-                                <div className="bg-[var(--color-accent-subtle)] rounded-lg px-4 py-3 text-xs text-[var(--color-accent-deep)] leading-relaxed">
-                                    <strong>{t.start.pricingBoxTitle}</strong><br />
-                                    {t.start.trialBoxSub}
-                                </div>
+                                {/* The pilot promise flips with the count (D-609): up to 5
+                                    seats pilots free; above that, billing starts today and
+                                    the box says so before any card is asked for. */}
+                                {overPilotCap ? (
+                                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-900 leading-relaxed">
+                                        <strong>{t.start.pricingBoxTitle}</strong><br />
+                                        {t.start.pilotBoxBig(seats, seats * SEAT_PRICE_MONTHLY)}
+                                    </div>
+                                ) : (
+                                    <div className="bg-[var(--color-accent-subtle)] rounded-xl px-4 py-3 text-xs text-[var(--color-accent-deep)] leading-relaxed">
+                                        <strong>{t.start.pricingBoxTitle}</strong><br />
+                                        {t.start.pilotBoxSmall} {t.start.trialBoxSub}
+                                    </div>
+                                )}
                                 {error && <p className="text-xs text-red-600">{error}</p>}
                                 <button type="submit" disabled={busy} className={BTN}>{busy ? t.start.creating : t.start.startFreeTrial}</button>
                             </form>
-                        </div>
+                        </ScreenShell>
                     )}
 
-                    {step === "invite" && (
-                        <div>
-                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight">{t.start.inviteTitle}</h1>
-                            <p className="text-sm text-[var(--color-text-secondary)] mt-2">
-                                {t.start.inviteSubNoKit}
-                            </p>
-                            <form onSubmit={handleInvites} className="space-y-3 mt-7">
+                    {screen === "tools" && (
+                        <ScreenShell title={t.start.tools.title} sub={t.start.tools.sub}>
+                            <div className="grid sm:grid-cols-2 gap-2.5">
+                                {(Object.keys(t.start.tools.options) as (keyof Dict["start"]["tools"]["options"])[]).map(k => (
+                                    <OptionCard key={k} title={t.start.tools.options[k]}
+                                        selected={pTools.includes(k)}
+                                        onClick={() => toggleMulti(pTools, setPTools, k, "none")} />
+                                ))}
+                            </div>
+                            <p className="text-xs text-[var(--color-muted)] mt-4 leading-relaxed">{t.start.tools.note}</p>
+                            <button onClick={() => { if (orgId) saveProfileSettings(orgId); setScreen("knowledge") }} className={BTN + " mt-5"}>
+                                {t.start.profile.continueBtn}
+                            </button>
+                            <button onClick={() => setScreen("knowledge")} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
+                                {t.start.profile.skip}
+                            </button>
+                        </ScreenShell>
+                    )}
+
+                    {screen === "knowledge" && (
+                        <ScreenShell title={t.start.knowledge.title} sub={t.start.knowledge.sub}>
+                            <div className="grid gap-2.5">
+                                {(Object.keys(t.start.knowledge.options) as (keyof Dict["start"]["knowledge"]["options"])[]).map(k => (
+                                    <OptionCard key={k} title={t.start.knowledge.options[k]}
+                                        selected={pKnow.includes(k)}
+                                        onClick={() => toggleMulti(pKnow, setPKnow, k, "nothing")} />
+                                ))}
+                            </div>
+                            <p className="text-xs text-[var(--color-muted)] mt-4 leading-relaxed">{t.start.knowledge.note}</p>
+                            <button onClick={() => { if (orgId) saveProfileSettings(orgId); setScreen("invite") }} className={BTN + " mt-5"}>
+                                {t.start.profile.continueBtn}
+                            </button>
+                            <button onClick={() => setScreen("invite")} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
+                                {t.start.profile.skip}
+                            </button>
+                        </ScreenShell>
+                    )}
+
+                    {screen === "invite" && (
+                        <ScreenShell title={t.start.inviteTitle} sub={t.start.inviteSubNoKit}>
+                            <form onSubmit={handleInvites} className="space-y-3">
                                 {invites.map((v, i) => (
                                     <input key={i} type="email" placeholder={t.start.invitePlaceholder(i + 1)} className={INPUT}
                                         value={v} onChange={e => setInvites(prev => prev.map((p, j) => j === i ? e.target.value : p))} />
@@ -699,19 +807,19 @@ export default function StartPage() {
                                 </button>
                             </form>
                             <div className="flex items-center gap-4 mt-4">
-                                <button onClick={() => { doneRef.current = true; setStep("done") }} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">
+                                <button onClick={() => { doneRef.current = true; setScreen("done") }} className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]">
                                     {t.start.skipInvites}
                                 </button>
                             </div>
-                        </div>
+                        </ScreenShell>
                     )}
 
-                    {step === "done" && (
-                        <div className="max-w-md">
+                    {screen === "done" && (
+                        <div className="max-w-md tp-screen">
                             <div className="w-12 h-12 rounded-full bg-[var(--color-accent-subtle)] flex items-center justify-center">
                                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12.5 10 18 20 6" /></svg>
                             </div>
-                            <h1 className="font-display text-[26px] font-extrabold text-[var(--color-text)] leading-tight mt-4">{t.start.doneTitle(orgName || t.start.doneFallbackOrg)}</h1>
+                            <h1 className="font-display text-[28px] font-extrabold text-[var(--color-text)] leading-tight mt-4">{t.start.doneTitle(orgName || t.start.doneFallbackOrg)}</h1>
                             {inviteNote && <p className="text-xs text-[var(--color-accent-deep)] font-medium mt-1">{inviteNote}</p>}
                             <div className="space-y-4 mt-6">
                                 {t.start.doneSteps.map((s, i) => (
@@ -728,12 +836,11 @@ export default function StartPage() {
                                     </div>
                                 ))}
                             </div>
-                            {/* No grant, no trial (D-192 #8): the workspace and
-                                its playbook are built, and the last step is
-                                paying. The demo route stays one click away for
-                                anyone who would rather talk first. */}
+                            {/* The card comes last: the pilot checkout for up to 5 seats
+                                ($0 today, D-605/D-609), the pay-today checkout above that.
+                                The demo route stays one click away either way. */}
                             {!hasTrial && (
-                                <div className="mt-7 rounded-lg border border-[var(--color-accent-light)] bg-[var(--color-accent-subtle)] px-4 py-3.5 space-y-2">
+                                <div className="mt-7 rounded-xl border border-[var(--color-accent-light)] bg-[var(--color-accent-subtle)] px-4 py-3.5 space-y-2">
                                     <p className="text-sm font-semibold text-[var(--color-accent-deep)]">
                                         {cardTrialDays ? t.start.cardTrialTitle(cardTrialDays) : t.start.payTitle}
                                     </p>
