@@ -6,6 +6,7 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { isPersonalEmail } from "@/lib/workEmail"
 import { starterKitsFor, type Vertical } from "@/lib/starterKit"
+import { loadGoogleAdsTag, trackWorkspaceCreated } from "@/lib/googleAds"
 import { GetTheApp } from "@/components/GetTheApp"
 import { EmailLink } from "@/components/EmailLink"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
@@ -279,6 +280,7 @@ export default function StartPage() {
     const router = useRouter()
     const { t, locale } = useLocale()
     const [screen, setScreen]     = useState<Screen>("account")
+    useEffect(() => { loadGoogleAdsTag() }, [])
     const [checking, setChecking] = useState(true)
     const [busy, setBusy]         = useState(false)
     const [error, setError]       = useState<string | null>(null)
@@ -493,6 +495,7 @@ export default function StartPage() {
                 ...(profile ? { profile } : {}),
             })
             setOrgId(res.org_id)
+            trackWorkspaceCreated()
             await saveProfileSettings(res.org_id)
             setHasTrial(!!res.trial_ends_at)
             setCardTrialDays(typeof res.card_trial_days === "number" ? res.card_trial_days : null)
