@@ -6,6 +6,7 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { isPersonalEmail } from "@/lib/workEmail"
 import { starterKitsFor } from "@/lib/starterKit"
+import { loadGoogleAdsTag, trackWorkspaceCreated } from "@/lib/googleAds"
 import { GetTheApp } from "@/components/GetTheApp"
 import { EmailLink } from "@/components/EmailLink"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
@@ -233,6 +234,7 @@ export default function StartPage() {
     const router = useRouter()
     const { t, locale } = useLocale()
     const [step, setStep]         = useState<Step>("account")
+    useEffect(() => { loadGoogleAdsTag() }, [])
     const [checking, setChecking] = useState(true)
     const [busy, setBusy]         = useState(false)
     const [error, setError]       = useState<string | null>(null)
@@ -401,6 +403,7 @@ export default function StartPage() {
                 ...(profile ? { profile } : {}),
             })
             setOrgId(res.org_id)
+            trackWorkspaceCreated()
             // The Playbook tab preselects the kit family from settings.vertical
             // (same write the StarterKitPicker does); the full answers go with
             // it so the dashboard can recommend the exact kit later. Best
