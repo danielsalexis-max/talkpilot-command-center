@@ -209,12 +209,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         // your best rep is the highest-leverage setup action, and buried as a
         // fourth tab inside Playbook it read as a detail of it.
         { href: "/dna" as Route, label: t.nav.teamDna, icon: ICONS.dna, match: p => p.startsWith("/dna") },
-        { href: "/calls",     label: t.nav.calls,    icon: ICONS.calls,    match: p => p.startsWith("/calls") || p.startsWith("/scorecard") },
-        // "Coaching" next to "Playbook" read as two names for one thing; the page
-        // is a review queue, so it's called Review (D-175). Insights folded into
-        // Home the same change — five ways to look at the same scorecards was
-        // the "convoluted" feeling in one sentence.
-        { href: "/coaching",  label: t.nav.review,   icon: ICONS.coaching, match: p => p.startsWith("/coaching") },
+        // Review merged into Calls as its "Needs review" filter (D-615) — the
+        // queue was a strict subset of this table, and a second nav item for a
+        // subset read as a second product. /coaching redirects.
+        { href: "/calls",     label: t.nav.calls,    icon: ICONS.calls,    match: p => p.startsWith("/calls") || p.startsWith("/scorecard") || p.startsWith("/coaching") },
         { href: "/team",      label: t.nav.team,     icon: ICONS.team,     match: p => p.startsWith("/team"),
           attention: needsTeam },
         // Practice is its own page (D-192): Review is about calls that already

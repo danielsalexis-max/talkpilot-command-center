@@ -9,6 +9,8 @@ import { starterKitsFor, type Vertical } from "@/lib/starterKit"
 import { loadGoogleAdsTag, trackWorkspaceCreated } from "@/lib/googleAds"
 import { EmailLink } from "@/components/EmailLink"
 import { ToolIcon } from "@/components/toolIcons"
+import { extractTextFromFile, EXTRACT_ACCEPT } from "@/lib/extractText"
+import { ingestKnowledgeInlineVerbose } from "@/lib/orgBrain"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
 import type { Dict } from "@/i18n"
 
@@ -107,6 +109,21 @@ const MAX_PILOT_SEATS = 5
 const SEAT_PRICE_MONTHLY = 40
 const clampSeats = (n: number) => Math.max(MIN_SEATS, Math.min(MAX_SEATS, Math.round(n) || MIN_SEATS))
 
+/// A document staged on the knowledge screen, already extracted to text in
+/// the browser (same parser the Knowledge tab uses). The workspace doesn't
+/// exist yet at that point — the actual ingest fires right after create-org.
+type StagedDoc = { title: string; fileName: string; kind: string; content: string }
+
+/// Same kind values the Knowledge tab's selector offers (org_knowledge_kind_check).
+function guessKind(fileName: string): string {
+    const n = fileName.toLowerCase()
+    if (/(pric|plan|tarif|precio)/.test(n)) return "pricing"
+    if (/(objec|objeci)/.test(n)) return "objection"
+    if (/faq/.test(n)) return "faq"
+    if (/(battle|compar)/.test(n)) return "battlecard"
+    return "doc"
+}
+
 /// Where "talk to us first" goes — one click away on every screen.
 const DEMO_URL = "https://talkpilot.co/demo"
 
@@ -196,9 +213,9 @@ function AuditSlide({ t }: { t: Dict }) {
 function ProfilePreview({ t, pain }: { t: Dict; pain: ProfilePain }) {
     const cue = t.start.profile.previewCues[pain]
     return (
-        <div className="tp-screen">
-            <p className="font-mono text-[9.5px] tracking-[0.12em] text-[var(--color-muted)] mb-2">{t.start.profile.previewLabel}</p>
-            <div className="w-full rounded-2xl bg-[#1A263D] border border-white/10 p-4 shadow-xl">
+        <div className="tp-screen w-full max-w-[360px]">
+            <p className="font-mono text-[9.5px] tracking-[0.12em] text-[#94A2AB] mb-2 text-left">{t.start.profile.previewLabel}</p>
+            <div className="w-full rounded-2xl bg-[#1A263D] border border-white/10 p-4 shadow-xl text-left">
                 <div className="flex items-center gap-2 font-mono text-[9.5px] tracking-[0.12em] text-[#94A2AB]">
                     <span className="w-2 h-2 rounded-full bg-[#3EA48F] animate-pulse" />
                     {t.start.hud.liveLine}
@@ -213,41 +230,129 @@ function ProfilePreview({ t, pain }: { t: Dict; pain: ProfilePain }) {
     )
 }
 
-function Showcase() {
+/// The tools screen's slide: your tools flow into TalkPilot, and after every
+/// call the boring work flows back out.
+function IntegrationsSlide({ t }: { t: Dict }) {
+    const flowDown = (
+        <div className="flex justify-center my-2">
+            <svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="#3EA48F" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M7 1v13M2.5 10.5 7 15l4.5-4.5" />
+            </svg>
+        </div>
+    )
+    return (
+        <div className="w-full max-w-[360px] rounded-2xl bg-[#1A263D] border border-white/10 p-4 shadow-2xl text-left">
+            <p className="font-mono text-[9.5px] tracking-[0.12em] text-[#94A2AB]">{t.start.toolsSlide.inLabel}</p>
+            <div className="flex items-center gap-2.5 mt-2">
+                {["hubspot", "salesforce", "gcal", "outlook", "slack", "meetings"].map(k => (
+                    <span key={k} className="w-9 h-9 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
+                        <ToolIcon tool={k} />
+                    </span>
+                ))}
+            </div>
+            {flowDown}
+            <div className="flex items-center gap-2 rounded-xl bg-[#0C9482]/15 border border-[#2FB39E]/40 px-3.5 py-2.5">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/brand-mark.png" alt="" className="w-5 h-5 object-contain" />
+                <span className="text-[13px] font-semibold text-[#EDF2F1]">TalkPilot</span>
+            </div>
+            {flowDown}
+            <p className="font-mono text-[9.5px] tracking-[0.12em] text-[#94A2AB]">{t.start.toolsSlide.outLabel}</p>
+            <div className="mt-2 space-y-1.5">
+                {t.start.toolsSlide.outputs.map(o => (
+                    <div key={o} className="flex items-center gap-2">
+                        <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-[#14311F] text-[#6FCB84]">✓</span>
+                        <span className="text-[12.5px] text-[#EDF2F1]">{o}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+/// The knowledge screen's slide: your documents feeding the coach.
+function KnowledgeSlide({ t }: { t: Dict }) {
+    return (
+        <div className="w-full max-w-[360px] rounded-2xl bg-[#1A263D] border border-white/10 p-4 shadow-2xl text-left">
+            <div className="flex flex-wrap gap-2">
+                {t.start.knowledgeSlide.chips.map(c => (
+                    <span key={c} className="font-mono text-[10.5px] text-[#EDF2F1] bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5">{c}</span>
+                ))}
+            </div>
+            <div className="flex justify-center my-2">
+                <svg width="14" height="18" viewBox="0 0 14 18" fill="none" stroke="#3EA48F" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M7 1v13M2.5 10.5 7 15l4.5-4.5" />
+                </svg>
+            </div>
+            <div className="rounded-xl bg-[#0C9482]/15 border border-[#2FB39E]/40 px-3.5 py-3">
+                <p className="font-mono text-[9.5px] tracking-[0.12em] text-[#9CD9C6]">{t.start.knowledgeSlide.brainLabel}</p>
+                <p className="text-[13px] text-[#EDF2F1] font-medium mt-1">{t.start.knowledgeSlide.brainLine}</p>
+            </div>
+        </div>
+    )
+}
+
+/// The right column: one framed exhibit. The frame is what makes it read as
+/// "poster", never "more form" — in dark mode both halves share the page
+/// background, so the separation must come from the object, not the column
+/// (D-615 follow-up; the earlier divider+tag wasn't enough). Content follows
+/// the question on screen: the pain preview, the integrations flow, the
+/// knowledge flow — and falls back to the rotating carousel on the neutral
+/// screens.
+function Showcase({ screen, lastPain }: { screen: Screen; lastPain: ProfilePain | null }) {
     const t = useT()
     const [idx, setIdx] = useState(0)
+    const rotating = screen === "account" || screen === "workspace" || screen === "invite" || screen === "done"
     const slides = [
         { ...t.start.slides[0], node: <HudSlide t={t} /> },
         { ...t.start.slides[1], node: <ScorecardSlide t={t} /> },
         { ...t.start.slides[2], node: <AuditSlide t={t} /> },
     ]
     useEffect(() => {
+        if (!rotating) return
         if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return
         const timer = setInterval(() => setIdx(i => (i + 1) % 3), 6000)
         return () => clearInterval(timer)
-    }, [])
-    const slide = slides[idx]
+    }, [rotating])
+
+    let node: React.ReactNode, caption: string, sub: string
+    if (screen === "team") {
+        node = <HudSlide t={t} />; caption = slides[0].caption; sub = slides[0].sub
+    } else if (screen === "pain") {
+        node = lastPain ? <ProfilePreview t={t} pain={lastPain} /> : <HudSlide t={t} />
+        caption = slides[0].caption; sub = slides[0].sub
+    } else if (screen === "methodology") {
+        node = <ScorecardSlide t={t} />; caption = slides[1].caption; sub = slides[1].sub
+    } else if (screen === "tools") {
+        node = <IntegrationsSlide t={t} />; caption = t.start.toolsSlide.caption; sub = t.start.toolsSlide.sub
+    } else if (screen === "knowledge") {
+        node = <KnowledgeSlide t={t} />; caption = t.start.knowledgeSlide.caption; sub = t.start.knowledgeSlide.sub
+    } else {
+        node = slides[idx].node; caption = slides[idx].caption; sub = slides[idx].sub
+    }
+
     return (
-        <div className="hidden lg:flex flex-col items-center justify-center flex-1 bg-[#0A1220] border-l border-white/10 px-10 py-12 relative overflow-hidden">
-            <div className="absolute inset-0 opacity-40" style={{ background: "radial-gradient(ellipse 60% 50% at 50% 40%, rgba(12,148,130,0.25), transparent)" }} />
-            {/* Says out loud what this column is — in dark mode both halves are
-                dark, and without the tag the showcase read as more questions
-                (D-615). */}
-            <p className="absolute top-6 left-10 font-mono text-[9.5px] tracking-[0.16em] text-[#5A6B7D]">{t.start.showcaseTag}</p>
-            <div className="relative flex flex-col items-center text-center max-w-md">
-                {slide.node}
-                <h2 className="font-display text-[22px] font-bold text-[#EDF2F1] mt-8 leading-tight" style={{ textWrap: "balance" }}>{slide.caption}</h2>
-                <p className="text-[13.5px] text-[#94A2AB] mt-2 leading-relaxed">{slide.sub}</p>
-                <div className="flex gap-2 mt-6">
-                    {slides.map((_, i) => (
-                        <button key={i} onClick={() => setIdx(i)} aria-label={t.start.slideAria(i + 1)}
-                            className={`w-2 h-2 rounded-full transition-colors ${i === idx ? "bg-[#3EA48F]" : "bg-white/20 hover:bg-white/40"}`} />
-                    ))}
+        <div className="hidden lg:flex items-center justify-center flex-1 bg-[var(--color-bg)] px-8 py-10">
+            <div className="relative w-full max-w-[520px] rounded-3xl bg-[#111D33] border border-white/10 shadow-2xl overflow-hidden px-10 pt-14 pb-10 flex flex-col items-center text-center">
+                <div className="absolute inset-0 opacity-40 pointer-events-none" style={{ background: "radial-gradient(ellipse 70% 55% at 50% 35%, rgba(12,148,130,0.25), transparent)" }} />
+                <p className="absolute top-5 left-7 font-mono text-[9.5px] tracking-[0.16em] text-[#5A6B7D]">{t.start.showcaseTag}</p>
+                <div key={rotating ? `r${idx}` : screen} className="tp-screen relative flex flex-col items-center w-full max-w-md">
+                    {node}
+                    <h2 className="font-display text-[22px] font-bold text-[#EDF2F1] mt-7 leading-tight" style={{ textWrap: "balance" }}>{caption}</h2>
+                    <p className="text-[13.5px] text-[#94A2AB] mt-2 leading-relaxed">{sub}</p>
+                    {rotating && (
+                        <div className="flex gap-2 mt-6">
+                            {slides.map((_, i) => (
+                                <button key={i} onClick={() => setIdx(i)} aria-label={t.start.slideAria(i + 1)}
+                                    className={`w-2 h-2 rounded-full transition-colors ${i === idx ? "bg-[#3EA48F]" : "bg-white/20 hover:bg-white/40"}`} />
+                            ))}
+                        </div>
+                    )}
                 </div>
-            </div>
-            <div className="relative mt-10 flex flex-col items-center gap-1.5">
-                <p className="font-mono text-[11px] tracking-[0.16em] text-[#9CD9C6] border border-[#2FB39E]/40 rounded-full px-4 py-1.5">{t.start.coachUp}</p>
-                <p className="font-mono text-[9.5px] tracking-[0.12em] text-[#5A6B7D]">{t.start.repsSeeOwn}</p>
+                <div className="relative mt-9 flex flex-col items-center gap-1.5">
+                    <p className="font-mono text-[11px] tracking-[0.16em] text-[#9CD9C6] border border-[#2FB39E]/40 rounded-full px-4 py-1.5">{t.start.coachUp}</p>
+                    <p className="font-mono text-[9.5px] tracking-[0.12em] text-[#5A6B7D]">{t.start.repsSeeOwn}</p>
+                </div>
             </div>
         </div>
     )
@@ -274,6 +379,24 @@ function OptionCard({ title, sub, selected, onClick, icon }: {
                     {sub && <span className="block text-xs text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">{sub}</span>}
                 </span>
             </span>
+        </button>
+    )
+}
+
+/// Compact multi-select row: small checkbox square + one line of text.
+/// Seven of these fit without scrolling where seven fat cards did not.
+function CheckRow({ label, checked, onClick }: { label: string; checked: boolean; onClick: () => void }) {
+    return (
+        <button type="button" onClick={onClick} aria-pressed={checked}
+            className={`w-full flex items-center gap-3 text-left rounded-lg border px-3.5 py-2.5 transition-colors ${
+                checked
+                    ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]"
+                    : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-muted)]"
+            }`}>
+            <span className={`w-[18px] h-[18px] rounded-md flex-shrink-0 flex items-center justify-center text-[11px] font-bold transition-colors ${
+                checked ? "bg-[var(--color-accent)] text-white" : "border border-[var(--color-border)] bg-[var(--color-bg)]"
+            }`}>{checked ? "✓" : ""}</span>
+            <span className={`text-[14px] ${checked ? "font-semibold text-[var(--color-accent-deep)]" : "text-[var(--color-text)]"}`}>{label}</span>
         </button>
     )
 }
@@ -314,7 +437,15 @@ export default function StartPage() {
     const [lastPain, setLastPain]         = useState<ProfilePain | null>(null)
     const [pMethodology, setPMethodology] = useState<ProfileMethodology | null>(null)
     const [pTools, setPTools]             = useState<string[]>([])
-    const [pKnow, setPKnow]               = useState<string[]>([])
+    // Knowledge screen: real documents, extracted client-side and held until
+    // the workspace exists. knowStatus drives the "coach is reading" line on
+    // the invite/done screens.
+    const [staged, setStaged]             = useState<StagedDoc[]>([])
+    const [extracting, setExtracting]     = useState(false)
+    const [knowErr, setKnowErr]           = useState<string | null>(null)
+    const [knowStatus, setKnowStatus]     = useState<"uploading" | "done" | null>(null)
+    const [knowCount, setKnowCount]       = useState(0)
+    const knowFileRef = useRef<HTMLInputElement | null>(null)
 
     const [orgName, setOrgName]   = useState("")
     const [seats, setSeats]       = useState(3)
@@ -486,11 +617,47 @@ export default function StartPage() {
                         methodology: asksMethodology(pVertical) ? pMethodology : null,
                         recommended_kit: recommendedKitKey(pVertical, pMethodology ?? "none"),
                         tools: pTools,
-                        knowledge: pKnow,
+                        knowledge: staged.map(d => d.title),
                     },
                 },
             }).eq("id", id)
         } catch { /* non-blocking */ }
+    }
+
+    /// The knowledge screen stages files; this reads them to text right away
+    /// (same client-side parsers the Knowledge tab uses), so a bad file is
+    /// rejected while the person is still looking at it.
+    async function handleKnowledgeFiles(e: React.ChangeEvent<HTMLInputElement>) {
+        const files = Array.from(e.target.files ?? [])
+        e.target.value = ""
+        if (!files.length) return
+        setExtracting(true); setKnowErr(null)
+        for (const f of files) {
+            try {
+                const content = await extractTextFromFile(f)
+                const title = f.name.replace(/\.[^.]+$/, "")
+                setStaged(prev => prev.some(d => d.fileName === f.name) ? prev
+                    : [...prev, { title, fileName: f.name, kind: guessKind(f.name), content }])
+            } catch {
+                setKnowErr(t.start.knowledge.extractFailed(f.name))
+            }
+        }
+        setExtracting(false)
+    }
+
+    /// Fire-and-forget after create-org: each staged doc goes through the same
+    /// `ingest-knowledge` path the Knowledge tab uses (chunk + embed server-side).
+    /// Failures are logged, not fatal — the Knowledge tab can re-add later.
+    async function uploadStaged(id: string) {
+        if (!staged.length) return
+        setKnowStatus("uploading")
+        let ok = 0
+        for (const d of staged) {
+            try { await ingestKnowledgeInlineVerbose(id, d.title, d.kind, d.content); ok++ }
+            catch (e) { console.error("wizard knowledge ingest failed:", d.fileName, e) }
+        }
+        setKnowCount(ok)
+        setKnowStatus("done")
     }
 
     async function handleWorkspace(e: React.FormEvent) {
@@ -520,6 +687,7 @@ export default function StartPage() {
             setOrgId(res.org_id)
             trackWorkspaceCreated()
             await saveProfileSettings(res.org_id)
+            void uploadStaged(res.org_id)
             setHasTrial(!!res.trial_ends_at)
             setCardTrialDays(typeof res.card_trial_days === "number" ? res.card_trial_days : null)
             setScreen("invite")
@@ -683,10 +851,13 @@ export default function StartPage() {
 
                     {screen === "pain" && (
                         <ScreenShell title={t.start.profile.painQ} sub={t.start.profile.painSub}>
-                            <div className="grid gap-2.5">
+                            {/* Compact rows, not cards: all seven fit without scrolling,
+                                and the checkbox square says "pick several" at a glance.
+                                The live preview reacts in the showcase column. */}
+                            <div className="grid gap-2">
                                 {(Object.keys(t.start.profile.pains) as ProfilePain[]).map(p => (
-                                    <OptionCard key={p} title={t.start.profile.pains[p]}
-                                        selected={pPains.includes(p)}
+                                    <CheckRow key={p} label={t.start.profile.pains[p]}
+                                        checked={pPains.includes(p)}
                                         onClick={() => {
                                             // "we don't know" stands alone; anything else clears it.
                                             const next = p === "unknown"
@@ -699,7 +870,6 @@ export default function StartPage() {
                                         }} />
                                 ))}
                             </div>
-                            {lastPain && <div className="mt-5"><ProfilePreview t={t} pain={lastPain} /></div>}
                             <button disabled={pPains.length === 0}
                                 onClick={() => setScreen(asksMethodology(pVertical) ? "methodology" : "tools")}
                                 className={BTN + " mt-5"}>
@@ -816,18 +986,41 @@ export default function StartPage() {
 
                     {screen === "knowledge" && (
                         <ScreenShell title={t.start.knowledge.title} sub={t.start.knowledge.sub}>
-                            <div className="grid gap-2.5">
-                                {(Object.keys(t.start.knowledge.options) as (keyof Dict["start"]["knowledge"]["options"])[]).map(k => (
-                                    <OptionCard key={k} title={t.start.knowledge.options[k]}
-                                        selected={pKnow.includes(k)}
-                                        onClick={() => toggleMulti(pKnow, setPKnow, k, "nothing")} />
+                            <input ref={knowFileRef} type="file" multiple accept={EXTRACT_ACCEPT}
+                                className="hidden" onChange={handleKnowledgeFiles} />
+                            <button type="button" onClick={() => knowFileRef.current?.click()} disabled={extracting}
+                                className="w-full rounded-xl border-2 border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] bg-[var(--color-surface)] px-4 py-6 text-center transition-colors">
+                                <span className="block text-[15px] font-semibold text-[var(--color-text)]">
+                                    {extracting ? t.start.knowledge.reading : t.start.knowledge.dropTitle}
+                                </span>
+                                <span className="block text-xs text-[var(--color-muted)] mt-1">{t.start.knowledge.dropSub}</span>
+                            </button>
+                            <div className="flex flex-wrap gap-1.5 mt-3">
+                                {t.start.knowledge.examples.map(x => (
+                                    <span key={x} className="text-[11px] text-[var(--color-muted)] border border-[var(--color-line-soft)] rounded-full px-2.5 py-1">{x}</span>
                                 ))}
                             </div>
-                            <p className="text-xs text-[var(--color-muted)] mt-4 leading-relaxed">{t.start.knowledge.note}</p>
-                            <button onClick={() => setScreen("workspace")} className={BTN + " mt-5"}>
+                            {staged.length > 0 && (
+                                <div className="mt-4 divide-y divide-[var(--color-line-soft)] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
+                                    {staged.map(d => (
+                                        <div key={d.fileName} className="flex items-center gap-3 px-3.5 py-2.5">
+                                            <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] uppercase">{d.kind}</span>
+                                            <span className="text-[13.5px] text-[var(--color-text)] min-w-0 flex-1 truncate">{d.fileName}</span>
+                                            <button onClick={() => setStaged(prev => prev.filter(x => x.fileName !== d.fileName))}
+                                                aria-label={t.start.knowledge.removeDoc}
+                                                className="text-[var(--color-muted)] hover:text-[var(--color-text)] text-sm leading-none">✕</button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {staged.length > 0 && (
+                                <p className="text-xs text-[var(--color-accent-deep)] mt-2.5">{t.start.knowledge.stagedNote(staged.length)}</p>
+                            )}
+                            {knowErr && <p className="text-xs text-amber-700 mt-2.5">{knowErr}</p>}
+                            <button onClick={() => setScreen("workspace")} disabled={extracting} className={BTN + " mt-5"}>
                                 {t.start.profile.continueBtn}
                             </button>
-                            <button onClick={() => { setPKnow([]); setScreen("workspace") }} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
+                            <button onClick={() => { setStaged([]); setScreen("workspace") }} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
                                 {t.start.profile.skip}
                             </button>
                         </ScreenShell>
@@ -835,6 +1028,11 @@ export default function StartPage() {
 
                     {screen === "invite" && (
                         <ScreenShell title={t.start.inviteTitle} sub={t.start.inviteSubNoKit}>
+                            {knowStatus && (
+                                <p className="text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-xl px-4 py-2.5 mb-4">
+                                    {knowStatus === "uploading" ? t.start.knowledge.uploading(staged.length) : t.start.knowledge.uploaded(knowCount)}
+                                </p>
+                            )}
                             <form onSubmit={handleInvites} className="space-y-3">
                                 {invites.map((v, i) => (
                                     <input key={i} type="email" placeholder={t.start.invitePlaceholder(i + 1)} className={INPUT}
@@ -862,6 +1060,11 @@ export default function StartPage() {
                             </div>
                             <h1 className="font-display text-[28px] font-extrabold text-[var(--color-text)] leading-tight mt-4">{t.start.doneTitle(orgName || t.start.doneFallbackOrg)}</h1>
                             {inviteNote && <p className="text-xs text-[var(--color-accent-deep)] font-medium mt-1">{inviteNote}</p>}
+                            {knowStatus && (
+                                <p className="text-xs text-[var(--color-accent-deep)] font-medium mt-1">
+                                    {knowStatus === "uploading" ? t.start.knowledge.uploading(staged.length) : t.start.knowledge.uploaded(knowCount)}
+                                </p>
+                            )}
                             <div className="space-y-4 mt-6">
                                 {t.start.doneSteps.map((s, i) => (
                                     <div key={i} className="flex gap-3">
@@ -926,7 +1129,7 @@ export default function StartPage() {
                 </div>
             </div>
 
-            <Showcase />
+            <Showcase screen={screen} lastPain={lastPain} />
         </div>
     )
 }

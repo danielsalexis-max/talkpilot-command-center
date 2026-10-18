@@ -11,8 +11,17 @@ import { useLocale } from "@/i18n/LocaleProvider"
 
 interface MemberInfo { user_id: string; email: string | null; full_name: string | null }
 
-type Filter = "all" | "breach" | "low" | "top"
-const FILTER_KEYS: Filter[] = ["all", "breach", "low", "top"]
+// "review" is the old /coaching page folded in (D-615): scored, not excluded,
+// last 30 days, with a breach or adherence under 60 — the calls a manager
+// should actually open. /coaching redirects here with ?filter=review.
+type Filter = "all" | "review" | "breach" | "low" | "top"
+const FILTER_KEYS: Filter[] = ["all", "review", "breach", "low", "top"]
+
+function needsReview(c: Scorecard): boolean {
+    if (c.status !== "scored" || c.excluded_at) return false
+    if (!c.started_at || new Date(c.started_at).getTime() < Date.now() - 30 * 86400e3) return false
+    return (c.guardrail_breaches ?? []).length > 0 || (c.adherence_score != null && c.adherence_score < 60)
+}
 
 export default function CallsPage() {
     const router = useRouter()
@@ -21,7 +30,13 @@ export default function CallsPage() {
     const [members, setMembers] = useState<MemberInfo[]>([])
     const [loading, setLoading] = useState(true)
     const [query, setQuery]     = useState("")
-    const [filter, setFilter]   = useState<Filter>("all")
+    // Deep-linkable: /calls?filter=review is where the Home attention feed and
+    // the old /coaching URL land. Read once at mount; no Suspense needed.
+    const [filter, setFilter]   = useState<Filter>(() => {
+        if (typeof window === "undefined") return "all"
+        const f = new URLSearchParams(window.location.search).get("filter")
+        return (FILTER_KEYS as string[]).includes(f ?? "") ? (f as Filter) : "all"
+    })
     const [role, setRole]       = useState<string | null>(null)
     const [busy, setBusy]       = useState<string | null>(null)
 
@@ -68,7 +83,10 @@ export default function CallsPage() {
     const byUser = useMemo(() => new Map(members.map(m => [m.user_id, m])), [members])
     const label = (id: string) => byUser.get(id)?.full_name || byUser.get(id)?.email || t.common.rep
 
+    const reviewCount = cards.filter(needsReview).length
+
     const filtered = cards.filter(c => {
+        if (filter === "review" && !needsReview(c)) return false
         if (filter === "breach" && (c.guardrail_breaches ?? []).length === 0) return false
         if (filter === "low" && !(c.adherence_score != null && c.adherence_score < 60)) return false
         if (filter === "top" && !(c.overall_score != null && c.overall_score >= 80)) return false
@@ -101,9 +119,18 @@ export default function CallsPage() {
                                 ? "bg-[var(--color-accent-subtle)] border-[var(--color-accent-light)] text-[var(--color-accent-deep)] font-semibold"
                                 : "bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]"
                         }`}
-                    >{t.calls.filters[f]}</button>
+                    >
+                        {t.calls.filters[f]}
+                        {f === "review" && reviewCount > 0 && (
+                            <span className="ml-1.5 font-mono text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-700">{reviewCount}</span>
+                        )}
+                    </button>
                 ))}
             </div>
+
+            {filter === "review" && (
+                <p className="text-xs text-[var(--color-text-secondary)]">{t.calls.reviewExplainer}</p>
+            )}
 
             <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] shadow-sm overflow-x-auto">
                 <table className="w-full text-sm">
@@ -126,6 +153,11 @@ export default function CallsPage() {
                                     <>
                                         {t.calls.emptyNoCalls1}{" "}
                                         <Link href="/team?tab=members" className="text-[var(--color-accent-deep)] font-medium hover:underline">{t.calls.emptyCheckJoined}</Link>
+                                    </>
+                                ) : filter === "review" ? (
+                                    <>
+                                        {t.coaching.queueEmpty}{" "}
+                                        <Link href="/playbook" className="text-[var(--color-accent-deep)] font-medium hover:underline">{t.coaching.tightenPlaybook}</Link>
                                     </>
                                 ) : (
                                     t.calls.emptyNoMatch

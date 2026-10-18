@@ -230,3 +230,46 @@ export function replaceKnowledgeText(
 ): Promise<IngestOutcome> {
     return ingestOutcome({ org_id: orgId, knowledge_id: knowledgeId, content })
 }
+
+// ── Describing a change to objections and playbooks (D-624) ─────────────────
+//
+// The D-414 "something changed? just say it" card, extended past the knowledge
+// library: `amend-brain` proposes corrected FIELDS (whole, before/after — an
+// objection or a stage description is short enough to read in full), the admin
+// approves, and the writes go through the same client paths the tabs already
+// use: org_objections update + re-embed, org_playbooks.stages update.
+
+export interface ObjectionAmendProposal {
+    objection_id: string
+    objection: string
+    guidance: string | null
+    set_objection: string | null
+    set_guidance: string | null
+    why: string
+}
+
+export interface StageAmendProposal {
+    playbook_id: string
+    playbook_name: string
+    stage_index: number
+    stage_name: string
+    current_description: string
+    set_name: string | null
+    set_description: string | null
+    why: string
+}
+
+export async function amendBrain(
+    orgId: string, target: "objections" | "playbooks", instruction: string,
+): Promise<{ proposals: (ObjectionAmendProposal | StageAmendProposal)[]; note: string | null; error?: string }> {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return { proposals: [], note: null, error: "no_session" }
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/amend-brain`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ org_id: orgId, target, instruction, locale: clientLocale() }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { proposals: [], note: null, error: json?.error?.message ?? `Request failed (${res.status})` }
+    return { proposals: json.proposals ?? [], note: json.note ?? null }
+}

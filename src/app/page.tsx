@@ -185,7 +185,7 @@ export default function HomePage() {
             kind: "review",
             title: t.home.attnReviewTitle(reviewable.length),
             sub: t.home.attnReviewSub,
-            cta: t.home.attnOpenQueue, href: "/coaching",
+            cta: t.home.attnOpenQueue, href: "/calls?filter=review",
         })
     }
 

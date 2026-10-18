@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useState, useCallback, useRef } from "react"
-import { embedObjections, reindexObjections, ingestKnowledgeInline, ingestKnowledgeInlineVerbose, reindexKnowledgeVerbose, replaceKnowledgeText, amendKnowledge, applyProposal, type AmendProposal, approvedResponsesFrom, guidanceOf, normalizeSeverity } from "@/lib/orgBrain"
+import { embedObjections, reindexObjections, ingestKnowledgeInline, ingestKnowledgeInlineVerbose, reindexKnowledgeVerbose, replaceKnowledgeText, amendKnowledge, applyProposal, type AmendProposal, approvedResponsesFrom, guidanceOf, normalizeSeverity, amendBrain, type ObjectionAmendProposal, type StageAmendProposal } from "@/lib/orgBrain"
 import { supabase, askClaude, type ChatTurn } from "@/lib/supabase"
 import { AskPanel } from "@/components/AskPanel"
 import {
@@ -418,14 +418,38 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
         else { setMsg(t.common.saved); setIsErr(false); onSaved() }
     }
 
+    // One card per concern (D-615): the old single card with border-t
+    // dividers and uniformly tiny text read as "text everywhere, no
+    // divisions". Each card now has a real header and one job; the save
+    // button still writes everything at once.
+    const Section = ({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) => (
+        <div className={CARD + " space-y-3.5"}>
+            <div>
+                <h3 className="font-display text-[15px] font-bold text-[var(--color-text)]">{title}</h3>
+                {sub && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">{sub}</p>}
+            </div>
+            {children}
+        </div>
+    )
+    const s = t.tabs.settings.sections
+
     return (
-        <div className="space-y-6 max-w-2xl">
-            <div className={CARD + " space-y-4"}>
-                <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.settings.orgTitle}</h3>
+        <div className="space-y-4 max-w-2xl">
+            <Section title={s.workspace} sub={s.workspaceSub}>
                 <div className="space-y-1">
                     <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.settings.name}</label>
                     <input className={INPUT} value={name} onChange={e => setName(e.target.value)} />
                 </div>
+                <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)] bg-[var(--color-bg)] rounded-lg px-3 py-2">
+                    <span>{t.tabs.settings.plan} <span className="text-[var(--color-text)] font-medium capitalize">{org.plan}</span></span>
+                    <span>·</span>
+                    <span>{t.tabs.settings.seats} <span className="text-[var(--color-text)] font-medium">{org.seats_purchased}</span></span>
+                    <span>·</span>
+                    <span>{t.tabs.settings.slug} <span className="text-[var(--color-text)] font-medium">{org.slug}</span></span>
+                </div>
+            </Section>
+
+            <Section title={s.privacy} sub={s.privacySub}>
                 <div className="space-y-1">
                     <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.settings.transcriptVisibility}</label>
                     <select className={INPUT} value={visibility} onChange={e => setVisibility(e.target.value)}>
@@ -437,32 +461,29 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
                         {t.tabs.settings.visEnforced}
                     </p>
                 </div>
-                <div className="pt-1 space-y-1.5">
-                    <p className="text-xs text-[var(--color-text-secondary)]">
-                        {t.tabs.settings.repVisibilityIntro}
-                    </p>
-                    <div className="flex items-center gap-4">
-                        <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
-                            <input type="checkbox" checked={repPlaybook} onChange={e => setRepPlaybook(e.target.checked)}
-                                className="accent-[var(--color-accent)] w-3.5 h-3.5" />
-                            {t.tabs.settings.playbookVisible}
+            </Section>
+
+            <Section title={s.reps} sub={s.repsSub}>
+                <div className="space-y-2">
+                    {([
+                        [repPlaybook, setRepPlaybook, t.tabs.settings.playbookVisible],
+                        [repKnowledge, setRepKnowledge, t.tabs.settings.knowledgeVisible],
+                        [repObjections, setRepObjections, t.tabs.settings.objectionsVisible],
+                    ] as [boolean, (v: boolean) => void, string][]).map(([val, set, label]) => (
+                        <label key={label} className="flex items-center gap-2.5 text-[13px] text-[var(--color-text)] rounded-lg border border-[var(--color-line-soft)] px-3 py-2.5 cursor-pointer hover:border-[var(--color-muted)] transition-colors">
+                            <input type="checkbox" checked={val} onChange={e => set(e.target.checked)}
+                                className="accent-[var(--color-accent)] w-4 h-4" />
+                            {label}
                         </label>
-                        <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
-                            <input type="checkbox" checked={repKnowledge} onChange={e => setRepKnowledge(e.target.checked)}
-                                className="accent-[var(--color-accent)] w-3.5 h-3.5" />
-                            {t.tabs.settings.knowledgeVisible}
-                        </label>
-                        <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
-                            <input type="checkbox" checked={repObjections} onChange={e => setRepObjections(e.target.checked)}
-                                className="accent-[var(--color-accent)] w-3.5 h-3.5" />
-                            {t.tabs.settings.objectionsVisible}
-                        </label>
-                    </div>
+                    ))}
                 </div>
-                {/* Playbook policy (D-307). A rep can hold several playbooks and
-                    picks one per call; this says whether "None" is one of the
-                    choices. Enforced is the default and preserves today. */}
-                <div className="pt-3 border-t border-[var(--color-border)] space-y-1.5">
+            </Section>
+
+            {/* Playbook policy (D-307). A rep can hold several playbooks and
+                picks one per call; this says whether "None" is one of the
+                choices. Enforced is the default and preserves today. */}
+            <Section title={s.policy} sub={s.policySub}>
+                <div className="space-y-1">
                     <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.settings.playbookPolicy}</label>
                     <select className={INPUT} value={playbookPolicy} onChange={e => setPlaybookPolicy(e.target.value)}>
                         <option value="enforced">{t.tabs.settings.policyEnforced}</option>
@@ -472,12 +493,13 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
                         {t.tabs.settings.playbookPolicyHelp}
                     </p>
                 </div>
-                {/* Recording notice (D-192). TalkPilot puts no bot in the call
-                    and does not record audio, so nothing announces itself —
-                    which is exactly why this has to be a deliberate policy
-                    choice rather than a default. */}
-                <div className="pt-3 border-t border-[var(--color-border)] space-y-1.5">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.settings.recordingNotice}</label>
+            </Section>
+
+            {/* Recording notice (D-192). TalkPilot puts no bot in the call and
+                does not record audio, so nothing announces itself — which is
+                exactly why this has to be a deliberate policy choice. */}
+            <Section title={s.disclosure} sub={s.disclosureSub}>
+                <div className="space-y-1.5">
                     <select className={INPUT} value={recordingNotice} onChange={e => setRecordingNotice(e.target.value)}>
                         <option value="off">{t.tabs.settings.recordingOff}</option>
                         <option value="calendar_note">{t.tabs.settings.recordingCalendar}</option>
@@ -490,47 +512,37 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
                         {t.tabs.settings.recordingLegal}
                     </p>
                 </div>
-                {/* CRM & integrations (spec §8). Connections are per-rep and
-                    live in the app; this card shows counts and holds the one
-                    org policy bit: auto-log. Stage changes have no toggle —
-                    they always need a human, by design. */}
-                <div className="pt-3 border-t border-[var(--color-border)] space-y-1.5">
-                    <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.settings.integrationsTitle}</label>
-                    <p className="text-xs text-[var(--color-text-secondary)]">
-                        {t.tabs.settings.integrationsIntro}
-                    </p>
-                    {integrations !== null && (
-                        integrations.length === 0
-                            ? <p className="text-xs text-[var(--color-muted)]">{t.tabs.settings.integrationsNone}</p>
-                            : <div className="space-y-1 pt-1">
-                                {integrations.map(i => (
-                                    <p key={i.provider} className="text-xs text-[var(--color-text)]">
-                                        <span className="font-medium">{PROVIDER_NAMES[i.provider] ?? i.provider}</span>
-                                        {" — "}{t.tabs.settings.integrationsConnected(i.connected_users)}
-                                    </p>
-                                ))}
-                            </div>
-                    )}
-                    <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] pt-2">
-                        <input type="checkbox" checked={autoLogCalls} onChange={e => setAutoLogCalls(e.target.checked)}
-                            className="accent-[var(--color-accent)] w-3.5 h-3.5" />
-                        {t.tabs.settings.autoLogCalls}
-                    </label>
-                    <p className="text-xs text-[var(--color-text-secondary)]">
-                        {t.tabs.settings.autoLogHelp}
-                    </p>
-                </div>
-                <AIConnectorCard orgId={org.id} />
+            </Section>
 
-                <div className="flex items-center gap-3 text-xs text-[var(--color-text-secondary)] bg-[var(--color-bg)] rounded-lg px-3 py-2">
-                    <span>{t.tabs.settings.plan} <span className="text-[var(--color-text)] font-medium capitalize">{org.plan}</span></span>
-                    <span>·</span>
-                    <span>{t.tabs.settings.seats} <span className="text-[var(--color-text)] font-medium">{org.seats_purchased}</span></span>
-                    <span>·</span>
-                    <span>{t.tabs.settings.slug} <span className="text-[var(--color-text)] font-medium">{org.slug}</span></span>
-                </div>
-            </div>
-            <div className="flex items-center gap-3">
+            {/* CRM & integrations (spec §8). Connections are per-rep and live
+                in the app; this card shows counts and holds the one org policy
+                bit: auto-log. Stage changes always need a human, by design. */}
+            <Section title={s.integrations} sub={s.integrationsSub}>
+                {integrations !== null && (
+                    integrations.length === 0
+                        ? <p className="text-xs text-[var(--color-muted)]">{t.tabs.settings.integrationsNone}</p>
+                        : <div className="space-y-1">
+                            {integrations.map(i => (
+                                <p key={i.provider} className="text-xs text-[var(--color-text)]">
+                                    <span className="font-medium">{PROVIDER_NAMES[i.provider] ?? i.provider}</span>
+                                    {" — "}{t.tabs.settings.integrationsConnected(i.connected_users)}
+                                </p>
+                            ))}
+                        </div>
+                )}
+                <label className="flex items-center gap-2.5 text-[13px] text-[var(--color-text)] rounded-lg border border-[var(--color-line-soft)] px-3 py-2.5 cursor-pointer hover:border-[var(--color-muted)] transition-colors">
+                    <input type="checkbox" checked={autoLogCalls} onChange={e => setAutoLogCalls(e.target.checked)}
+                        className="accent-[var(--color-accent)] w-4 h-4" />
+                    {t.tabs.settings.autoLogCalls}
+                </label>
+                <p className="text-xs text-[var(--color-text-secondary)]">
+                    {t.tabs.settings.autoLogHelp}
+                </p>
+            </Section>
+
+            <AIConnectorCard orgId={org.id} />
+
+            <div className="sticky bottom-4 flex items-center gap-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-4 py-3 shadow-md">
                 <button className={BTN_PRIMARY} onClick={save} disabled={saving}>
                     {saving ? t.common.saving : t.tabs.settings.saveSettings}
                 </button>
@@ -922,6 +934,10 @@ export function KnowledgeTab({ orgId }: { orgId: string }) {
 
     return (
         <div className="space-y-6">
+            <div>
+                <h3 className="font-display text-[15px] font-bold text-[var(--color-text)]">{t.tabs.knowledge.pageTitle}</h3>
+                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 leading-relaxed max-w-xl">{t.tabs.knowledge.pageSub}</p>
+            </div>
             {/* Upload zone — primary action */}
             {!stagedFile && (
                 <div className="space-y-4">
@@ -1205,6 +1221,86 @@ function AmendReview({ proposals, skipped, busy, msg, isErr, onCancel, onApply }
     )
 }
 
+// ── "Something changed? Just say it" for objections and playbooks (D-624) ───
+// Same card and review shape as the knowledge amend (D-414), but the fields
+// are short enough to show whole: before on red, after on green, per item.
+
+function BrainAmendCard({ sub, busy, msg, isErr, onFind }: {
+    sub: string; busy: boolean; msg: string | null; isErr: boolean; onFind: (instruction: string) => void
+}) {
+    const t = useT()
+    const [text, setText] = useState("")
+    return (
+        <div className={CARD + " space-y-3"}>
+            <div className="space-y-1">
+                <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.knowledge.amendTitle}</p>
+                <p className="text-xs text-[var(--color-text-secondary)]">{sub}</p>
+            </div>
+            <textarea className={TEXTAREA} rows={3}
+                placeholder={t.tabs.knowledge.amendPlaceholder}
+                value={text} onChange={e => setText(e.target.value)} />
+            <div className="flex items-center gap-3">
+                <button className={BTN_PRIMARY} onClick={() => onFind(text.trim())}
+                    disabled={busy || text.trim().length < 8}>
+                    {busy ? t.tabs.knowledge.amendSearching : t.tabs.knowledge.amendFind}
+                </button>
+                <Msg msg={msg} error={isErr} />
+            </div>
+        </div>
+    )
+}
+
+/// One proposed edit, pre-rendered for the generic review sheet.
+interface BrainEditView {
+    key: string
+    heading: string
+    why: string
+    fields: { label: string; before: string; after: string }[]
+}
+
+function BrainAmendReview({ edits, busy, onCancel, onApply }: {
+    edits: BrainEditView[]; busy: boolean; onCancel: () => void; onApply: (keys: string[]) => void
+}) {
+    const t = useT()
+    return (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8">
+            <div className={CARD + " w-full max-w-3xl space-y-4 my-auto"}>
+                <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.knowledge.amendReviewTitle}</h3>
+                    <button className={BTN_GHOST} onClick={onCancel} disabled={busy}>{t.tabs.knowledge.amendDiscard}</button>
+                </div>
+                <p className="text-xs text-[var(--color-text-secondary)]">{t.tabs.brainAmend.foundN(edits.length)}</p>
+                <div className="space-y-3 max-h-[55vh] overflow-y-auto">
+                    {edits.map(e => (
+                        <div key={e.key} className="border border-[var(--color-border)] rounded-lg p-3 space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-medium text-[var(--color-text)]">{e.heading}</p>
+                                <button className={BTN_GHOST} disabled={busy} onClick={() => onApply([e.key])}>
+                                    {busy ? t.tabs.knowledge.amendApplying : t.tabs.knowledge.amendApply}
+                                </button>
+                            </div>
+                            {e.why && <p className="text-xs text-[var(--color-text-secondary)]">{e.why}</p>}
+                            {e.fields.map((f, i) => (
+                                <div key={i} className="space-y-1">
+                                    <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)]">{f.label} · {t.tabs.knowledge.amendNow}</p>
+                                    <p className="text-xs whitespace-pre-wrap rounded-md px-2.5 py-1.5 bg-red-500/10 text-[var(--color-text)] line-through decoration-red-500/50">{f.before}</p>
+                                    <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)]">{t.tabs.knowledge.amendInstead}</p>
+                                    <p className="text-xs whitespace-pre-wrap rounded-md px-2.5 py-1.5 bg-green-500/10 text-[var(--color-text)]">{f.after}</p>
+                                </div>
+                            ))}
+                        </div>
+                    ))}
+                </div>
+                <div className="flex items-center gap-3">
+                    <button className={BTN_PRIMARY} disabled={busy} onClick={() => onApply(edits.map(e => e.key))}>
+                        {busy ? t.tabs.knowledge.amendApplying : t.tabs.knowledge.amendApplyAll}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 /// Edit a stored document. Body text round-trips through the chunk table, so
 /// changing it re-ingests (chunks and embeddings are derived); leaving it
 /// alone updates only the row, which is the common case (a typo in a title,
@@ -1275,6 +1371,12 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
     const [extracting, setExtracting]         = useState(false)
     const [extracted, setExtracted]           = useState<ExtractedObjection[]>([])
     const [selected, setSelected]             = useState<Set<number>>(new Set())
+    // D-624 describe-a-change state.
+    const [objAmendBusy, setObjAmendBusy]         = useState(false)
+    const [objAmendMsg, setObjAmendMsg]           = useState<string | null>(null)
+    const [objAmendErr, setObjAmendErr]           = useState(false)
+    const [objAmendProps, setObjAmendProps]       = useState<ObjectionAmendProposal[] | null>(null)
+    const [objAmendApplying, setObjAmendApplying] = useState(false)
     const [unindexed, setUnindexed]           = useState(0)
     const [reindexing, setReindexing]         = useState(false)
     const [importing, setImporting]           = useState(false)
@@ -1415,6 +1517,43 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
         }
     }
 
+    /// D-624: one sentence of plain language → proposed corrections to the
+    /// library, applied only after review, through the same update + re-embed
+    /// path every manual edit uses.
+    async function findObjAmend(instruction: string) {
+        setObjAmendBusy(true); setObjAmendMsg(null); setObjAmendErr(false)
+        const r = await amendBrain(orgId, "objections", instruction)
+        setObjAmendBusy(false)
+        if (r.error) { setObjAmendMsg(r.error); setObjAmendErr(true); return }
+        const props = r.proposals as ObjectionAmendProposal[]
+        if (props.length === 0) { setObjAmendMsg(t.tabs.brainAmend.none); setObjAmendErr(false); return }
+        setObjAmendProps(props)
+    }
+
+    async function applyObjAmend(keys: string[]) {
+        if (!objAmendProps) return
+        setObjAmendApplying(true)
+        const picked = objAmendProps.filter(p => keys.includes(p.objection_id))
+        let ok = 0
+        for (const p of picked) {
+            const patch: Record<string, unknown> = {}
+            if (p.set_objection) patch.objection = p.set_objection
+            if (p.set_guidance) {
+                patch.response_guidance = p.set_guidance
+                patch.approved_responses = approvedResponsesFrom(p.set_guidance)
+            }
+            const { error } = await supabase.from("org_objections").update(patch).eq("id", p.objection_id)
+            if (!error) ok++
+        }
+        // Text changed → the embedding is stale; re-embed what was touched.
+        await embedObjections(orgId, picked.map(p => p.objection_id))
+        const rest = objAmendProps.filter(p => !keys.includes(p.objection_id))
+        setObjAmendProps(rest.length ? rest : null)
+        setObjAmendApplying(false)
+        setObjAmendMsg(t.tabs.brainAmend.applied(ok)); setObjAmendErr(false)
+        await load()
+    }
+
     async function addObjection() {
         if (!objText.trim()) return
         setSaving(true); setMsg(null)
@@ -1466,6 +1605,13 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
 
     return (
         <div className="space-y-6">
+            {/* What this tab IS (D-624): the first e2e found all three brain
+                tabs unclear about what to expect — each now opens with one
+                plain statement of what lives here and what it does on calls. */}
+            <div>
+                <h3 className="font-display text-[15px] font-bold text-[var(--color-text)]">{t.tabs.objections.pageTitle}</h3>
+                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 leading-relaxed max-w-xl">{t.tabs.objections.pageSub}</p>
+            </div>
             {unindexed > 0 && (
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3">
                     <p className="text-xs text-amber-900">
@@ -1531,6 +1677,15 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
             )}
 
             {/* Manual add */}
+            {/* D-624: correct the library by describing the change — same card
+                the Knowledge tab has, writing through the same row + re-embed
+                path every objection edit uses. */}
+            {objs.length > 0 && (
+                <BrainAmendCard sub={t.tabs.brainAmend.subObjections}
+                    busy={objAmendBusy} msg={objAmendMsg} isErr={objAmendErr}
+                    onFind={findObjAmend} />
+            )}
+
             <ManualSection label={t.tabs.objections.addManually}>
             <div className={CARD + " space-y-4"}>
                 <div>
@@ -1632,6 +1787,21 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
                 tab (D-416) — same layer of the live prompt as an objection's
                 approved answer, so they belong on the same page. */}
             <PhrasesSection org={org} onSaved={onSaved} />
+
+            {objAmendProps && (
+                <BrainAmendReview busy={objAmendApplying}
+                    edits={objAmendProps.map(p => ({
+                        key: p.objection_id,
+                        heading: p.objection,
+                        why: p.why,
+                        fields: [
+                            ...(p.set_objection ? [{ label: t.tabs.brainAmend.fieldObjection, before: p.objection, after: p.set_objection }] : []),
+                            ...(p.set_guidance ? [{ label: t.tabs.brainAmend.fieldGuidance, before: p.guidance ?? "—", after: p.set_guidance }] : []),
+                        ],
+                    }))}
+                    onCancel={() => setObjAmendProps(null)}
+                    onApply={applyObjAmend} />
+            )}
         </div>
     )
 }
@@ -1666,6 +1836,49 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
     // Which industry's presets to offer (D-192). Stored on the org, so the
     // choice survives a reload and other surfaces can read it later.
     const [vertical, setVertical] = useState<Vertical>("sales")
+    // D-624 describe-a-change state.
+    const [pbAmendBusy, setPbAmendBusy]         = useState(false)
+    const [pbAmendMsg, setPbAmendMsg]           = useState<string | null>(null)
+    const [pbAmendErr, setPbAmendErr]           = useState(false)
+    const [pbAmendProps, setPbAmendProps]       = useState<StageAmendProposal[] | null>(null)
+    const [pbAmendApplying, setPbAmendApplying] = useState(false)
+
+    /// D-624: one sentence → proposed stage corrections, applied only after
+    /// review by patching org_playbooks.stages — the same JSON the editor saves.
+    async function findPbAmend(instruction: string) {
+        setPbAmendBusy(true); setPbAmendMsg(null); setPbAmendErr(false)
+        const r = await amendBrain(orgId, "playbooks", instruction)
+        setPbAmendBusy(false)
+        if (r.error) { setPbAmendMsg(r.error); setPbAmendErr(true); return }
+        const props = r.proposals as StageAmendProposal[]
+        if (props.length === 0) { setPbAmendMsg(t.tabs.brainAmend.none); setPbAmendErr(false); return }
+        setPbAmendProps(props)
+    }
+
+    async function applyPbAmend(keys: string[]) {
+        if (!pbAmendProps) return
+        setPbAmendApplying(true)
+        const picked = pbAmendProps.filter(p => keys.includes(`${p.playbook_id}:${p.stage_index}`))
+        let ok = 0
+        const byPb = new Map<string, StageAmendProposal[]>()
+        for (const p of picked) byPb.set(p.playbook_id, [...(byPb.get(p.playbook_id) ?? []), p])
+        for (const [pbId, edits] of byPb) {
+            const pb = playbooks.find(x => x.id === pbId)
+            if (!pb) continue
+            const stages = (pb.stages ?? []).map((st, i) => {
+                const e = edits.find(x => x.stage_index === i)
+                if (!e) return st
+                return { ...st, ...(e.set_name ? { name: e.set_name } : {}), ...(e.set_description ? { description: e.set_description } : {}) }
+            })
+            const { error } = await supabase.from("org_playbooks").update({ stages }).eq("id", pbId)
+            if (!error) ok += edits.length
+        }
+        const rest = pbAmendProps.filter(p => !keys.includes(`${p.playbook_id}:${p.stage_index}`))
+        setPbAmendProps(rest.length ? rest : null)
+        setPbAmendApplying(false)
+        setPbAmendMsg(t.tabs.brainAmend.applied(ok)); setPbAmendErr(false)
+        await load()
+    }
 
     const load = useCallback(async () => {
         const [{ data }, { data: teamRows }, { data: memberRows }, { data: orgRow }] = await Promise.all([
@@ -1980,6 +2193,14 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                 )}
             </div>
 
+            {/* D-624: correct stages by describing the change, same card as
+                Knowledge and Objections. */}
+            {playbooks.length > 0 && (
+                <BrainAmendCard sub={t.tabs.brainAmend.subPlaybooks}
+                    busy={pbAmendBusy} msg={pbAmendMsg} isErr={pbAmendErr}
+                    onFind={findPbAmend} />
+            )}
+
             <StarterKitPicker orgId={orgId} vertical={vertical} onVerticalChange={setVertical} onApplied={load} />
 
             {loading && <p className="text-sm text-[var(--color-text-secondary)]">{t.common.loading}</p>}
@@ -2021,6 +2242,21 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                     <p className="text-sm text-[var(--color-text-secondary)]">{t.tabs.playbooks.noPlaybooks}</p>
                 )}
             </div>
+
+            {pbAmendProps && (
+                <BrainAmendReview busy={pbAmendApplying}
+                    edits={pbAmendProps.map(p => ({
+                        key: `${p.playbook_id}:${p.stage_index}`,
+                        heading: t.tabs.brainAmend.stageOf(p.playbook_name, p.stage_name),
+                        why: p.why,
+                        fields: [
+                            ...(p.set_name ? [{ label: t.tabs.brainAmend.fieldStageName, before: p.stage_name, after: p.set_name }] : []),
+                            ...(p.set_description ? [{ label: t.tabs.brainAmend.fieldStageDesc, before: p.current_description || "—", after: p.set_description }] : []),
+                        ],
+                    }))}
+                    onCancel={() => setPbAmendProps(null)}
+                    onApply={applyPbAmend} />
+            )}
         </div>
     )
 }

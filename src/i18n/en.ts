@@ -244,6 +244,22 @@ export const en = {
         checkoutCanceledNote: "Checkout was canceled — your workspace is saved. Add billing whenever you're ready.",
         questionsBookDemo: "Rather talk first? Book a demo →",
         showcaseTag: "PREVIEW · WHAT YOUR TEAM GETS",
+        // Per-screen showcase slides (D-615 follow-up): the right column
+        // answers the question being asked, not a generic carousel.
+        toolsSlide: {
+            caption: "Plugged into where work already happens",
+            sub: "Calls get logged to your CRM and recaps land in Slack — reps stop doing data entry.",
+            inLabel: "YOUR TOOLS",
+            outLabel: "AFTER EVERY CALL",
+            outputs: ["Call logged to the CRM", "Recap posted in Slack", "Next step on the calendar"],
+        },
+        knowledgeSlide: {
+            caption: "Your coach studies your material",
+            sub: "Answers come from your pricing and your docs — not generic AI advice.",
+            chips: ["pricing.pdf", "objection-answers.docx", "battlecards.pptx"],
+            brainLabel: "YOUR COACH",
+            brainLine: "Reads it all. Answers from it on every call.",
+        },
         creating: "Creating…",
         startFreeTrial: "Create workspace",
         personalEmailError: "Workspaces need a work email. Sign up with your company address — your reps' invites and billing all hang off it.",
@@ -320,18 +336,20 @@ export const en = {
         // Knowledge screen (D-610): what the coach should learn. Selections are
         // stored on the profile; uploads happen in Playbook → Knowledge after
         // setup, and the done checklist carries them forward.
+        // Real uploads since D-615 follow-up: files are read in the browser
+        // and ingested into the org brain the moment the workspace exists.
         knowledge: {
-            title: "What should TalkPilot's coach know?",
-            sub: "Teams that feed TalkPilot their own material get coached answers from it on the very first call.",
-            options: {
-                pricing: "Our pricing and plans",
-                objections: "Objection answers that work",
-                product: "Product docs and battlecards",
-                company: "Company knowledge — how we work, policies, FAQs",
-                transcripts: "Transcripts of our best calls",
-                nothing: "Nothing yet — we'll add it later",
-            },
-            note: "You'll upload these right after setup — PDF, Word, PowerPoint or text, up to 25 MB each.",
+            title: "Help your coach get to know you",
+            sub: "Drop in what explains your business — pricing, objection answers, product docs, how you work. Your coach studies it and answers from it on the very first call.",
+            dropTitle: "Add documents",
+            dropSub: "PDF, Word, PowerPoint or text · up to 25 MB each",
+            reading: "Reading…",
+            examples: ["Pricing", "Objection answers", "Product docs", "How we work", "Call transcripts"],
+            stagedNote: (n: number) => `${n} document${n === 1 ? "" : "s"} ready — your coach starts reading the moment your workspace is created.`,
+            removeDoc: "Remove",
+            extractFailed: (f: string) => `Couldn't read ${f} — try a PDF, Word, PowerPoint or text file under 25 MB.`,
+            uploading: (n: number) => `Your coach is reading ${n} document${n === 1 ? "" : "s"}…`,
+            uploaded: (n: number) => `${n} document${n === 1 ? "" : "s"} studied — your coach answers from them now.`,
         },
         // Seat-dependent pilot copy (D-609): the free pilot covers up to 5 seats.
         pilotBoxSmall: "30-day pilot: $0 today, first charge on day 30, cancel anytime before.",
@@ -361,7 +379,7 @@ export const en = {
         inviteTitle: "Invite your first reps",
         inviteSubWithKit1: "The ",
         inviteSubWithKit2: " playbook is live — anyone who joins gets coached from it on their very first call.",
-        inviteSubNoKit: "They install TalkPilot on Mac, iPhone or Android and get coached live on their calls.",
+        inviteSubNoKit: "They install TalkPilot on Mac, Windows, iPhone or Android and get coached live on their calls.",
         invitePlaceholder: (n: number) => `teammate${n}@company.com`,
         addAnother: "+ Add another",
         sending: "Sending…",
@@ -376,7 +394,7 @@ export const en = {
         doneFallbackOrg: "Your workspace",
         doneSteps: [
             { title: "Add your playbook and knowledge", sub: "Pick your starter playbook, write your approved answers and upload the docs your team sells with (pricing, objection handling) — under Playbook." },
-            { title: "Reps install TalkPilot", sub: "Mac, iPhone or Android — they sign in with their invite and they're in your workspace." },
+            { title: "Reps install TalkPilot", sub: "Mac, Windows, iPhone or Android — they sign in with their invite and they're in your workspace." },
             { title: "Their next call gets coached live", sub: "" },
             { title: "The scorecard lands here", sub: "Stage adherence, objection grades and coaching moments — in your Command Center minutes after the call ends." },
         ],
@@ -515,7 +533,7 @@ export const en = {
         // Post-accept
         onTheTeam: "✓ You're on the team!",
         getTheApp: "Now get the TalkPilot app",
-        getTheAppSub: "TalkPilot runs on your Mac, iPhone or Android during your conversations — that's where the magic happens.",
+        getTheAppSub: "TalkPilot runs on your Mac, Windows, iPhone or Android during your conversations — that's where the magic happens.",
         androidSub: "Download the Android app (.apk)",
         sameCredentials: "Sign in to the app with the same email and password you just used.",
         managerLink: "Manager or admin? Open the Command Center instead",
@@ -595,7 +613,7 @@ export const en = {
         checks: {
             playbook: { label: "Activate a playbook", hint: "Reps are guided through its stages live and scored against it after." },
             objections: { label: "Add at least 3 objections", hint: "So the AI can hand reps your approved answer while the pushback is still in the air." },
-            knowledge: { label: "Upload a knowledge document", hint: "Grounds answers in your real pricing, battlecards and case studies." },
+        knowledge: { label: "Upload a knowledge document", hint: "Grounds answers in your real pricing, battlecards and case studies." },
             invite: { label: "Invite your first rep", hint: "Coaching only starts existing once somebody is on the other end of a call." },
         },
         required: "Required",
@@ -642,7 +660,8 @@ export const en = {
         title: "Calls",
         sub: "Every scored call across the org, last 90 days — each one opens a full scorecard.",
         searchPlaceholder: "Search calls or reps…",
-        filters: { all: "All", breach: "Guardrail breaches", low: "Adherence < 60", top: "Top calls" },
+        filters: { all: "All", review: "Needs review", breach: "Guardrail breaches", low: "Adherence < 60", top: "Top calls" },
+        reviewExplainer: "Calls from the last 30 days with a guardrail breach or adherence under 60 — the ones worth your eyes first.",
         colCall: "Call",
         colDate: "Date",
         colLength: "Length",
@@ -912,6 +931,23 @@ export const en = {
 
         settings: {
             orgTitle: "Organization",
+            // D-615: Settings split into one card per concern — the single
+            // card with border-t dividers read as "text everywhere".
+            sections: {
+                workspace: "Workspace",
+                workspaceSub: "The name your team sees, and what your plan covers.",
+                privacy: "What managers see",
+                privacySub: "How much of a rep's call is visible in the Command Center.",
+                reps: "What reps see",
+                repsSub: "What a rep can read in their own app. Reps always see their own scorecards.",
+                policy: "Call policy",
+                policySub: "The rules every coached call runs under.",
+                disclosure: "Recording disclosure",
+                disclosureSub: "How the other side is told TalkPilot is assisting.",
+                integrations: "CRM & integrations",
+                integrationsSub: "Connections are per-rep, made in their app. Org-wide policy lives here.",
+                ai: "AI connector",
+            },
             name: "Name",
             transcriptVisibility: "Transcript visibility for managers",
             visScores: "Scores only — no transcript access",
@@ -945,7 +981,23 @@ export const en = {
         },
 
 
+            // D-624: "something changed? just say it" for objections and
+        // playbooks — shares the knowledge card's title/placeholder strings.
+        brainAmend: {
+            subObjections: "Write what is true now. We find every objection answer that says otherwise and show you the fix before anything is saved.",
+            subPlaybooks: "Write what is true now. We find every playbook stage that says otherwise and show you the fix before anything is saved.",
+            foundN: (n: number) => `${n} proposed change${n === 1 ? "" : "s"} — nothing is saved until you apply.`,
+            none: "Nothing here contradicts that. If it's in a document, use the same card under Knowledge.",
+            applied: (n: number) => `${n} change${n === 1 ? "" : "s"} applied.`,
+            stageOf: (pb: string, stage: string) => `${pb} — stage “${stage}”`,
+            fieldObjection: "Objection",
+            fieldGuidance: "Approved guidance",
+            fieldStageName: "Stage name",
+            fieldStageDesc: "Stage description",
+        },
         knowledge: {
+            pageTitle: "Knowledge",
+            pageSub: "The documents your coach studies — pricing, battlecards, FAQs, policies. Live answers and the post-call truth audit are grounded in these, not in generic AI knowledge.",
             intakeHeading: "What we understood",
             uploadTitle: "Upload a document",
             uploadSub: "Drop your pricing sheets, case studies, product docs, or battle cards. PDF, Word, PowerPoint, text or captions — we read the file and let you review it before saving. No video: upload its captions instead.",
@@ -1019,6 +1071,8 @@ export const en = {
         },
 
         objections: {
+            pageTitle: "Objection library",
+            pageSub: "The pushback your team hears, each with your approved answer. The AI hands the right one to the rep the moment it comes up on a live call, and the scorecard grades how it was handled.",
             // The company's phrases moved here when the Company voice tab was
             // retired (D-416): same layer of the live prompt as an objection's
             // approved answer, so they belong on the same page.
