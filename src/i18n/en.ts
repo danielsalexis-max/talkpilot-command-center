@@ -339,7 +339,7 @@ export const en = {
         // Real uploads since D-615 follow-up: files are read in the browser
         // and ingested into the org brain the moment the workspace exists.
         knowledge: {
-            title: "Help your coach get to know you",
+            title: "Help your coach get to know your business",
             sub: "Drop in what explains your business — pricing, objection answers, product docs, how you work. Your coach studies it and answers from it on the very first call.",
             dropTitle: "Add documents",
             dropSub: "PDF, Word, PowerPoint or text · up to 25 MB each",

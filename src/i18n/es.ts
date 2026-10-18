@@ -318,7 +318,7 @@ export const es: Dict = {
             note: "TalkPilot registra las llamadas con coaching en tu CRM y deja los resúmenes en Slack — tus reps dejan de capturar datos a mano.",
         },
         knowledge: {
-            title: "Ayuda a tu coach a conocerte",
+            title: "Ayuda a tu coach a conocer tu negocio",
             sub: "Sube lo que explica tu negocio — precios, respuestas a objeciones, documentos de producto, cómo trabajan. Tu coach lo estudia y responde con eso desde la primera llamada.",
             dropTitle: "Agregar documentos",
             dropSub: "PDF, Word, PowerPoint o texto · hasta 25 MB cada uno",
