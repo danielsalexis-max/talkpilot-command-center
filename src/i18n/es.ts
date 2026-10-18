@@ -104,6 +104,7 @@ export const es: Dict = {
         review: "Revisión",
         practice: "Práctica",
         playbook: "Playbook",
+        teamDna: "Team DNA",
         settings: "Configuración",
         lightMode: "Modo claro",
         darkMode: "Modo oscuro",
@@ -235,7 +236,7 @@ export const es: Dict = {
         checkoutFailed: "No se pudo abrir el checkout. Inténtalo de nuevo, o agenda una demo y lo configuramos contigo.",
         checkoutCanceledNote: "El pago se canceló — tu espacio de trabajo quedó guardado. Agrega la facturación cuando estés listo.",
         questionsBookDemo: "¿Prefieres platicar primero? Agenda una demo →",
-        trialBoxSub: "Cada espacio de trabajo empieza con un piloto de 30 días: agregas una tarjeta al final, hoy pagas $0 y puedes cancelar cuando quieras antes del día 30. Mínimo 3 asientos, sin máximo.",
+        showcaseTag: "VISTA PREVIA · LO QUE RECIBE TU EQUIPO",
         creating: "Creando…",
         startFreeTrial: "Crear espacio de trabajo",
         personalEmailError: "Los espacios de trabajo necesitan un email de trabajo. Regístrate con la dirección de tu empresa — de ella dependen las invitaciones de tus reps y la facturación.",
@@ -261,7 +262,7 @@ export const es: Dict = {
                 other: "Empezarás con un playbook flexible",
             },
             painQ: "¿Dónde se caen las llamadas hoy?",
-            painSub: "Elige la que más te cuesta.",
+            painSub: "Elige todas las que apliquen — casi ningún equipo tiene solo una.",
             pains: {
                 objections: "Las objeciones se improvisan",
                 discovery: "El discovery se queda corto",
@@ -271,8 +272,8 @@ export const es: Dict = {
                 inconsistent: "Cada quien lo presenta a su manera",
                 unknown: "La verdad, todavía no lo sabemos",
             },
-            methodologyQ: "¿Siguen alguna metodología de ventas?",
-            methodologySub: "Armamos tus etapas a partir de ella.",
+            methodologyQ: "¿Siguen alguna metodología?",
+            methodologySub: "Un framework conocido o tu propia forma de llevar las llamadas — armamos tus etapas a partir de ella.",
             methodologies: {
                 none: "Todavía no", spiced: "SPICED", bant: "BANT", sandler: "Sandler",
                 meddic: "MEDDIC", challenger: "Challenger", spin: "SPIN",
@@ -303,18 +304,19 @@ export const es: Dict = {
             note: "TalkPilot registra las llamadas con coaching en tu CRM y deja los resúmenes en Slack — tus reps dejan de capturar datos a mano.",
         },
         knowledge: {
-            title: "¿Qué debería saber tu coach?",
+            title: "¿Qué debería saber el coach de TalkPilot?",
             sub: "Los equipos que alimentan a TalkPilot con su propio material reciben respuestas basadas en él desde la primera llamada.",
             options: {
                 pricing: "Nuestros precios y planes",
                 objections: "Respuestas a objeciones que funcionan",
                 product: "Documentos de producto y battlecards",
+                company: "Conocimiento de la empresa — cómo trabajamos, políticas, FAQs",
                 transcripts: "Transcripciones de nuestras mejores llamadas",
                 nothing: "Nada todavía — lo agregamos después",
             },
             note: "Los subes justo después de la configuración — PDF, Word, PowerPoint o texto, de hasta 25 MB cada uno.",
         },
-        pilotBoxSmall: "Tu piloto de 30 días: agregas una tarjeta al final, hoy pagas $0 y puedes cancelar cuando quieras antes del día 30.",
+        pilotBoxSmall: "Piloto de 30 días: $0 hoy, primer cobro el día 30, cancela cuando quieras antes.",
         pilotBoxBig: (seats: number, monthly: number) => `El piloto gratis cubre hasta 5 asientos. Con ${seats} asientos, la facturación empieza hoy (~$${monthly}/mes). Consejo: empieza tu piloto con hasta 5 personas — puedes sumar asientos cuando quieras.`,
         stepOfN: (n: number, total: number) => `${n} de ${total}`,
         back: "Atrás",
@@ -673,6 +675,11 @@ export const es: Dict = {
         nBreaches: (n: number) => `${n} ${n > 1 ? "infracciones" : "infracción"}`,
         adherenceN: (n: number) => `adherencia ${n}`,
         practice: "Práctica",
+    },
+
+    dnaPage: {
+        title: "Team DNA",
+        sub: "Clona a tu mejor rep: sube sus transcripciones y su tono, frases y respuestas a objeciones se vuelven un playbook para todos.",
     },
 
     playbookPage: {

@@ -1,25 +1,18 @@
 "use client"
 
 import { Suspense, useEffect } from "react"
+import type { Route } from "next"
 import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useOrg, OrgBanners } from "@/lib/useOrg"
 import { PageSkeleton } from "@/components/homeStates"
-import { PlaybooksTab, ObjectionsTab, KnowledgeTab, TeamDNATab } from "@/components/orgTabs"
+import { PlaybooksTab, ObjectionsTab, KnowledgeTab } from "@/components/orgTabs"
 import { useT } from "@/i18n/LocaleProvider"
 
-type Tab = "playbooks" | "objections" | "knowledge" | "dna"
-// `featured` marks Team DNA. It generates a whole playbook from your best rep —
-// the highest-leverage thing on this page — so it leads the row and wears a
-// dotted outline instead of sitting among four identical siblings. The outline
-// is doing what a leading dot used to: marking it as the odd one out. A box
-// survives at a glance where a 6px dot did not.
-//
-// Leading the row does NOT make it the landing tab: `tab` falls back to the
-// literal "playbooks" below, not to TAB_KEYS[0]. That split is deliberate —
-// DNA is a setup action you do once, so it earns the eye but not the default.
+type Tab = "playbooks" | "objections" | "knowledge"
+// Team DNA moved to its own page, /dna (D-615) — it used to be the featured
+// fourth tab here; ?tab=dna redirects there below so old links keep working.
 const TAB_KEYS: { key: Tab; featured?: boolean }[] = [
-    { key: "dna", featured: true },
     { key: "playbooks"  },
     { key: "objections" },
     { key: "knowledge"  },
@@ -35,6 +28,9 @@ function PlaybookPageInner() {
     const raw = params.get("tab")
     const tab: Tab = TAB_KEYS.some(x => x.key === raw) ? (raw as Tab) : "playbooks"
     const setTab = (next: Tab) => router.replace(`/playbook?tab=${next}`, { scroll: false })
+
+    // Team DNA lives at /dna now (D-615); keep old deep links working.
+    useEffect(() => { if (raw === "dna") router.replace("/dna" as Route) }, [raw, router])
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => { if (!data.user) router.replace("/login") })
@@ -95,7 +91,6 @@ function PlaybookPageInner() {
             {tab === "playbooks"  && <PlaybooksTab orgId={orgId} />}
             {tab === "objections" && <ObjectionsTab orgId={orgId} org={org} onSaved={reload} />}
             {tab === "knowledge"  && <KnowledgeTab orgId={orgId} />}
-            {tab === "dna"        && <TeamDNATab orgId={orgId} org={org} onApplied={reload} />}
         </div>
     )
 }

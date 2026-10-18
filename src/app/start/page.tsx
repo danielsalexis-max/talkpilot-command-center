@@ -7,8 +7,8 @@ import { supabase } from "@/lib/supabase"
 import { isPersonalEmail } from "@/lib/workEmail"
 import { starterKitsFor, type Vertical } from "@/lib/starterKit"
 import { loadGoogleAdsTag, trackWorkspaceCreated } from "@/lib/googleAds"
-import { GetTheApp } from "@/components/GetTheApp"
 import { EmailLink } from "@/components/EmailLink"
+import { ToolIcon } from "@/components/toolIcons"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
 import type { Dict } from "@/i18n"
 
@@ -45,6 +45,14 @@ const settingsVertical = (v: ProfileVertical): Vertical =>
 /// Which methodology question applies: only team types that sell.
 const asksMethodology = (v: ProfileVertical | null) =>
     v === "sales" || v === "consultants" || v === "other"
+
+/// The methodology options, ordered per team type: sales people scan for the
+/// framework they already run; consultants, coaches and "something else" most
+/// often follow their own way (or none), so those lead for them.
+const METHOD_ORDER_SALES: ProfileMethodology[] =
+    ["spiced", "bant", "sandler", "meddic", "challenger", "spin", "solution", "gap", "own", "none"]
+const METHOD_ORDER_GENERIC: ProfileMethodology[] =
+    ["own", "none", "spiced", "bant", "sandler", "meddic", "challenger", "spin", "solution", "gap"]
 
 /// Which starter kit the profile answers point at (keys from lib/starterKit).
 /// Methodologies without a kit of their own (Challenger, SPIN, Solution, Gap)
@@ -220,8 +228,12 @@ function Showcase() {
     }, [])
     const slide = slides[idx]
     return (
-        <div className="hidden lg:flex flex-col items-center justify-center flex-1 bg-[#0A1220] px-10 py-12 relative overflow-hidden">
+        <div className="hidden lg:flex flex-col items-center justify-center flex-1 bg-[#0A1220] border-l border-white/10 px-10 py-12 relative overflow-hidden">
             <div className="absolute inset-0 opacity-40" style={{ background: "radial-gradient(ellipse 60% 50% at 50% 40%, rgba(12,148,130,0.25), transparent)" }} />
+            {/* Says out loud what this column is — in dark mode both halves are
+                dark, and without the tag the showcase read as more questions
+                (D-615). */}
+            <p className="absolute top-6 left-10 font-mono text-[9.5px] tracking-[0.16em] text-[#5A6B7D]">{t.start.showcaseTag}</p>
             <div className="relative flex flex-col items-center text-center max-w-md">
                 {slide.node}
                 <h2 className="font-display text-[22px] font-bold text-[#EDF2F1] mt-8 leading-tight" style={{ textWrap: "balance" }}>{slide.caption}</h2>
@@ -245,8 +257,8 @@ function Showcase() {
 
 /// One large option card: title, optional sub, selected ring. The B2C
 /// onboarding's card, translated into the Boardroom tokens.
-function OptionCard({ title, sub, selected, onClick }: {
-    title: string; sub?: string; selected: boolean; onClick: () => void
+function OptionCard({ title, sub, selected, onClick, icon }: {
+    title: string; sub?: string; selected: boolean; onClick: () => void; icon?: React.ReactNode
 }) {
     return (
         <button type="button" onClick={onClick} aria-pressed={selected}
@@ -255,8 +267,13 @@ function OptionCard({ title, sub, selected, onClick }: {
                     ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)] ring-1 ring-[var(--color-accent)]"
                     : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-muted)] hover:-translate-y-px"
             }`}>
-            <span className={`block text-[15px] font-semibold ${selected ? "text-[var(--color-accent-deep)]" : "text-[var(--color-text)]"}`}>{title}</span>
-            {sub && <span className="block text-xs text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">{sub}</span>}
+            <span className="flex items-center gap-2.5">
+                {icon}
+                <span className="min-w-0">
+                    <span className={`block text-[15px] font-semibold ${selected ? "text-[var(--color-accent-deep)]" : "text-[var(--color-text)]"}`}>{title}</span>
+                    {sub && <span className="block text-xs text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">{sub}</span>}
+                </span>
+            </span>
         </button>
     )
 }
@@ -289,9 +306,12 @@ export default function StartPage() {
     const [email, setEmail]       = useState("")
     const [password, setPassword] = useState("")
 
-    // Profile answers (D-607/D-610). null = not answered.
+    // Profile answers (D-607/D-610). Pains are multi-select since D-615 —
+    // "where do calls go wrong" is rarely one thing; lastPain drives the
+    // preview card (the most recent pick is the one on their mind).
     const [pVertical, setPVertical]       = useState<ProfileVertical | null>(null)
-    const [pPain, setPPain]               = useState<ProfilePain | null>(null)
+    const [pPains, setPPains]             = useState<ProfilePain[]>([])
+    const [lastPain, setLastPain]         = useState<ProfilePain | null>(null)
     const [pMethodology, setPMethodology] = useState<ProfileMethodology | null>(null)
     const [pTools, setPTools]             = useState<string[]>([])
     const [pKnow, setPKnow]               = useState<string[]>([])
@@ -312,10 +332,13 @@ export default function StartPage() {
     const advanceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     /// The flow, in order. Methodology only shows for team types that sell;
-    /// the progress counter stays honest either way.
+    /// the progress counter stays honest either way. Tools and knowledge come
+    /// BEFORE the workspace is created (D-615): by the time the owner names
+    /// the workspace they've already invested answers — and everything saves
+    /// in one write at creation.
     const flow: Screen[] = asksMethodology(pVertical)
-        ? ["account", "team", "pain", "methodology", "workspace", "tools", "knowledge", "invite", "done"]
-        : ["account", "team", "pain", "workspace", "tools", "knowledge", "invite", "done"]
+        ? ["account", "team", "pain", "methodology", "tools", "knowledge", "workspace", "invite", "done"]
+        : ["account", "team", "pain", "tools", "knowledge", "workspace", "invite", "done"]
     const screenIdx = Math.max(0, flow.indexOf(screen))
     const progress = (screenIdx + 1) / flow.length
 
@@ -459,7 +482,7 @@ export default function StartPage() {
                     vertical: settingsVertical(pVertical),
                     onboarding_profile: {
                         vertical: pVertical,
-                        pain: pPain,
+                        pains: pPains,
                         methodology: asksMethodology(pVertical) ? pMethodology : null,
                         recommended_kit: recommendedKitKey(pVertical, pMethodology ?? "none"),
                         tools: pTools,
@@ -485,7 +508,7 @@ export default function StartPage() {
             // audit trail (D-606/D-607); create-org sanitizes and stores them.
             const profile = pVertical ? {
                 vertical: pVertical,
-                pain: pPain,
+                pain: pPains.join(",") || null,
                 methodology: asksMethodology(pVertical) ? pMethodology : null,
             } : null
             const source = captureSource()
@@ -499,7 +522,7 @@ export default function StartPage() {
             await saveProfileSettings(res.org_id)
             setHasTrial(!!res.trial_ends_at)
             setCardTrialDays(typeof res.card_trial_days === "number" ? res.card_trial_days : null)
-            setScreen("tools")
+            setScreen("invite")
         } catch (e) {
             const msg = (e as Error).message
             if (msg.includes("already part")) { router.replace("/"); return }
@@ -663,20 +686,34 @@ export default function StartPage() {
                             <div className="grid gap-2.5">
                                 {(Object.keys(t.start.profile.pains) as ProfilePain[]).map(p => (
                                     <OptionCard key={p} title={t.start.profile.pains[p]}
-                                        selected={pPain === p}
-                                        onClick={() => pickAndAdvance(() => setPPain(p), asksMethodology(pVertical) ? "methodology" : "workspace")} />
+                                        selected={pPains.includes(p)}
+                                        onClick={() => {
+                                            // "we don't know" stands alone; anything else clears it.
+                                            const next = p === "unknown"
+                                                ? (pPains.includes("unknown") ? [] : ["unknown" as ProfilePain])
+                                                : pPains.includes(p)
+                                                    ? pPains.filter(x => x !== p)
+                                                    : [...pPains.filter(x => x !== "unknown"), p]
+                                            setPPains(next)
+                                            setLastPain(next.includes(p) ? p : next[next.length - 1] ?? null)
+                                        }} />
                                 ))}
                             </div>
-                            {pPain && <div className="mt-5"><ProfilePreview t={t} pain={pPain} /></div>}
+                            {lastPain && <div className="mt-5"><ProfilePreview t={t} pain={lastPain} /></div>}
+                            <button disabled={pPains.length === 0}
+                                onClick={() => setScreen(asksMethodology(pVertical) ? "methodology" : "tools")}
+                                className={BTN + " mt-5"}>
+                                {t.start.profile.continueBtn}
+                            </button>
                         </ScreenShell>
                     )}
 
                     {screen === "methodology" && (
                         <ScreenShell title={t.start.profile.methodologyQ} sub={t.start.profile.methodologySub}>
                             <div className="flex flex-wrap gap-2.5">
-                                {(Object.keys(t.start.profile.methodologies) as ProfileMethodology[]).map(m => (
+                                {(pVertical === "sales" ? METHOD_ORDER_SALES : METHOD_ORDER_GENERIC).map(m => (
                                     <button key={m} type="button" aria-pressed={pMethodology === m}
-                                        onClick={() => pickAndAdvance(() => setPMethodology(m), "workspace")}
+                                        onClick={() => pickAndAdvance(() => setPMethodology(m), "tools")}
                                         className={`px-4 py-2.5 rounded-xl border text-[14px] font-semibold transition-all duration-150 ${
                                             pMethodology === m
                                                 ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] ring-1 ring-[var(--color-accent)]"
@@ -732,9 +769,9 @@ export default function StartPage() {
                                     </div>
                                     <p className="text-xs text-[var(--color-text-secondary)] mt-2">
                                         {t.start.enterpriseNote}{" "}
-                                        <EmailLink email="hello@talkpilot.co" subject="TalkPilot Enterprise" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
+                                        <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
                                             {t.start.enterpriseCta}
-                                        </EmailLink>
+                                        </a>
                                     </p>
                                 </div>
                                 {/* The pilot promise flips with the count (D-609): up to 5
@@ -748,7 +785,7 @@ export default function StartPage() {
                                 ) : (
                                     <div className="bg-[var(--color-accent-subtle)] rounded-xl px-4 py-3 text-xs text-[var(--color-accent-deep)] leading-relaxed">
                                         <strong>{t.start.pricingBoxTitle}</strong><br />
-                                        {t.start.pilotBoxSmall} {t.start.trialBoxSub}
+                                        {t.start.pilotBoxSmall}
                                     </div>
                                 )}
                                 {error && <p className="text-xs text-red-600">{error}</p>}
@@ -762,15 +799,16 @@ export default function StartPage() {
                             <div className="grid sm:grid-cols-2 gap-2.5">
                                 {(Object.keys(t.start.tools.options) as (keyof Dict["start"]["tools"]["options"])[]).map(k => (
                                     <OptionCard key={k} title={t.start.tools.options[k]}
+                                        icon={<ToolIcon tool={k} />}
                                         selected={pTools.includes(k)}
                                         onClick={() => toggleMulti(pTools, setPTools, k, "none")} />
                                 ))}
                             </div>
                             <p className="text-xs text-[var(--color-muted)] mt-4 leading-relaxed">{t.start.tools.note}</p>
-                            <button onClick={() => { if (orgId) saveProfileSettings(orgId); setScreen("knowledge") }} className={BTN + " mt-5"}>
+                            <button onClick={() => setScreen("knowledge")} className={BTN + " mt-5"}>
                                 {t.start.profile.continueBtn}
                             </button>
-                            <button onClick={() => setScreen("knowledge")} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
+                            <button onClick={() => { setPTools([]); setScreen("knowledge") }} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
                                 {t.start.profile.skip}
                             </button>
                         </ScreenShell>
@@ -786,10 +824,10 @@ export default function StartPage() {
                                 ))}
                             </div>
                             <p className="text-xs text-[var(--color-muted)] mt-4 leading-relaxed">{t.start.knowledge.note}</p>
-                            <button onClick={() => { if (orgId) saveProfileSettings(orgId); setScreen("invite") }} className={BTN + " mt-5"}>
+                            <button onClick={() => setScreen("workspace")} className={BTN + " mt-5"}>
                                 {t.start.profile.continueBtn}
                             </button>
-                            <button onClick={() => setScreen("invite")} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
+                            <button onClick={() => { setPKnow([]); setScreen("workspace") }} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
                                 {t.start.profile.skip}
                             </button>
                         </ScreenShell>
@@ -865,28 +903,17 @@ export default function StartPage() {
                                 shell is one big billing gate, so the primary
                                 CTA above (checkout / demo) must stay the only
                                 primary action. */}
+                            {/* One primary action: into the Command Center. The app
+                                download lives there ("Get the app" in the sidebar,
+                                D-230) — a second CTA here just competed with it
+                                (D-615). */}
                             {hasTrial && (
-                                <>
-                                    <div className="flex flex-col sm:flex-row gap-3 mt-8">
-                                        <button onClick={() => { window.location.href = "/" }} className={BTN + " sm:flex-1"}>
-                                            {t.start.openCommandCenter}
-                                        </button>
-                                    </div>
-                                    {/* The owner gets the same download screen an
-                                        invited rep gets (D-230). Only shown once the
-                                        workspace is actually usable — for an unpaid
-                                        org the checkout CTA above has to stay the
-                                        single primary action, and /apps carries this
-                                        for them after they pay. */}
-                                    <div className="mt-8 pt-7 border-t border-[var(--color-border)]">
-                                        <GetTheApp title={t.getApp.wizardTitle} sub={t.getApp.wizardSub} />
-                                    </div>
-                                </>
+                                <div className="flex flex-col sm:flex-row gap-3 mt-8">
+                                    <button onClick={() => { window.location.href = "/" }} className={BTN + " sm:flex-1"}>
+                                        {t.start.openCommandCenter}
+                                    </button>
+                                </div>
                             )}
-                            <p className="text-[11px] text-[var(--color-muted)] mt-5">
-                                {t.start.doneFooter1}{" "}
-                                <a className="underline" href="https://apps.apple.com/app/id6763953639" target="_blank" rel="noreferrer">{t.start.iphone}</a> · <a className="underline" href="https://github.com/danielsalexis-max/talkpilot-releases/releases/latest" target="_blank" rel="noreferrer">{t.start.mac}</a>
-                            </p>
                         </div>
                     )}
                 </div>

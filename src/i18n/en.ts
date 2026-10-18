@@ -108,6 +108,7 @@ export const en = {
         review: "Review",
         practice: "Practice",
         playbook: "Playbook",
+        teamDna: "Team DNA",
         settings: "Settings",
         lightMode: "Light mode",
         darkMode: "Dark mode",
@@ -242,7 +243,7 @@ export const en = {
         checkoutFailed: "Couldn't open checkout. Try again, or book a demo and we'll set it up with you.",
         checkoutCanceledNote: "Checkout was canceled — your workspace is saved. Add billing whenever you're ready.",
         questionsBookDemo: "Rather talk first? Book a demo →",
-        trialBoxSub: "Every workspace starts with a 30-day pilot: add a card at the end, pay $0 today, cancel anytime before day 30. Minimum 3 seats, no maximum.",
+        showcaseTag: "PREVIEW · WHAT YOUR TEAM GETS",
         creating: "Creating…",
         startFreeTrial: "Create workspace",
         personalEmailError: "Workspaces need a work email. Sign up with your company address — your reps' invites and billing all hang off it.",
@@ -272,7 +273,7 @@ export const en = {
                 other: "We'll start you from a flexible playbook",
             },
             painQ: "Where do calls go wrong today?",
-            painSub: "Pick the one that costs you the most.",
+            painSub: "Pick all that apply — most teams have more than one.",
             pains: {
                 objections: "Objections get improvised",
                 discovery: "Discovery stays shallow",
@@ -282,8 +283,8 @@ export const en = {
                 inconsistent: "Everyone pitches it differently",
                 unknown: "Honestly, we don't know yet",
             },
-            methodologyQ: "Do you follow a sales methodology?",
-            methodologySub: "We'll pre-build your stages from it.",
+            methodologyQ: "Do you follow a methodology?",
+            methodologySub: "A known framework or your own way of running calls — we'll pre-build your stages from it.",
             methodologies: {
                 none: "Not yet", spiced: "SPICED", bant: "BANT", sandler: "Sandler",
                 meddic: "MEDDIC", challenger: "Challenger", spin: "SPIN",
@@ -320,19 +321,20 @@ export const en = {
         // stored on the profile; uploads happen in Playbook → Knowledge after
         // setup, and the done checklist carries them forward.
         knowledge: {
-            title: "What should your coach know?",
+            title: "What should TalkPilot's coach know?",
             sub: "Teams that feed TalkPilot their own material get coached answers from it on the very first call.",
             options: {
                 pricing: "Our pricing and plans",
                 objections: "Objection answers that work",
                 product: "Product docs and battlecards",
+                company: "Company knowledge — how we work, policies, FAQs",
                 transcripts: "Transcripts of our best calls",
                 nothing: "Nothing yet — we'll add it later",
             },
             note: "You'll upload these right after setup — PDF, Word, PowerPoint or text, up to 25 MB each.",
         },
         // Seat-dependent pilot copy (D-609): the free pilot covers up to 5 seats.
-        pilotBoxSmall: "Your 30-day pilot: add a card at the end, pay $0 today, cancel anytime before day 30.",
+        pilotBoxSmall: "30-day pilot: $0 today, first charge on day 30, cancel anytime before.",
         pilotBoxBig: (seats: number, monthly: number) => `The free pilot covers up to 5 seats. With ${seats} seats, billing starts today (~$${monthly}/month). Tip: start your pilot with up to 5 people — you can add seats anytime.`,
         stepOfN: (n: number, total: number) => `${n} of ${total}`,
         back: "Back",
@@ -708,6 +710,11 @@ export const en = {
         title: "Playbook",
         sub: "Your org brain: what reps are coached from live, and scored against after.",
         tabs: { playbooks: "Playbooks", objections: "Objections", knowledge: "Knowledge", dna: "Team DNA" },
+    },
+
+    dnaPage: {
+        title: "Team DNA",
+        sub: "Clone your best rep: upload their transcripts, and their tone, phrases and objection responses become a playbook for everyone.",
     },
 
     security: {

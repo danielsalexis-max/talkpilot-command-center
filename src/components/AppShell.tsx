@@ -42,6 +42,13 @@ const ICONS = {
         </>
     ),
     playbook: <path strokeLinecap="round" strokeLinejoin="round" d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5v-15zM4 18.5A2.5 2.5 0 0 1 6.5 16H20" />,
+    // A double helix, simplified to two crossing strands and their rungs.
+    dna: (
+        <>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7 3c0 6 10 6 10 9s-10 3-10 9M17 3c0 6-10 6-10 9s10 3 10 9" />
+            <path strokeLinecap="round" d="M8.2 6h7.6M8.2 18h7.6" />
+        </>
+    ),
     apps: (
         <>
             <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
@@ -198,6 +205,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         { href: "/",          label: t.nav.home,     icon: ICONS.home,     match: p => p === "/" },
         { href: "/playbook",  label: t.nav.playbook, icon: ICONS.playbook, match: p => p.startsWith("/playbook"),
           attention: needsSetup },
+        // Team DNA is its own destination (D-615): generating a playbook from
+        // your best rep is the highest-leverage setup action, and buried as a
+        // fourth tab inside Playbook it read as a detail of it.
+        { href: "/dna" as Route, label: t.nav.teamDna, icon: ICONS.dna, match: p => p.startsWith("/dna") },
         { href: "/calls",     label: t.nav.calls,    icon: ICONS.calls,    match: p => p.startsWith("/calls") || p.startsWith("/scorecard") },
         // "Coaching" next to "Playbook" read as two names for one thing; the page
         // is a review queue, so it's called Review (D-175). Insights folded into
