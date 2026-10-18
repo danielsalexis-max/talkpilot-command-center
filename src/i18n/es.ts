@@ -583,7 +583,7 @@ export const es: Dict = {
         checks: {
             playbook: { label: "Activa un playbook", hint: "Los reps son guiados por sus etapas en vivo y evaluados contra él después." },
             objections: { label: "Agrega al menos 3 objeciones", hint: "Escribe las tuyas o elige de las sugerencias de tu kit y haz tuyas las respuestas — la IA entrega a los reps la respuesta aprobada mientras la objeción sigue en el aire." },
-        knowledge: { label: "Sube un documento de conocimiento", hint: "Fundamenta las respuestas en tus precios, battlecards y casos de éxito reales." },
+        knowledge: { label: "Dale a tu coach algo que estudiar", hint: "Precios, respuestas a objeciones, docs de producto — las respuestas en vivo y la auditoría de datos se basan en lo que subas aquí." },
             invite: { label: "Invita a tu primer rep", hint: "El coaching solo empieza a existir cuando alguien está del otro lado de una llamada." },
         },
         required: "Requerido",

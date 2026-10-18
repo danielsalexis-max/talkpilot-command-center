@@ -615,7 +615,7 @@ export const en = {
         checks: {
             playbook: { label: "Activate a playbook", hint: "Reps are guided through its stages live and scored against it after." },
             objections: { label: "Add at least 3 objections", hint: "Write your own or pick from your kit's suggestions, then make the answers yours — the AI hands reps the approved answer while the pushback is still in the air." },
-        knowledge: { label: "Upload a knowledge document", hint: "Grounds answers in your real pricing, battlecards and case studies." },
+        knowledge: { label: "Give your coach something to study", hint: "Pricing, objection answers, product docs — live answers and the truth audit are grounded in what you upload here." },
             invite: { label: "Invite your first rep", hint: "Coaching only starts existing once somebody is on the other end of a call." },
         },
         required: "Required",

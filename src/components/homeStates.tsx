@@ -73,7 +73,10 @@ export function setupChecks(r: SetupState): SetupCheck[] {
     return [
         { key: "playbook",   done: r.activePlaybooks >= 1, required: true,  href: "/playbook?tab=playbooks" as Route },
         { key: "objections", done: r.objections >= 3,      required: true,  href: "/playbook?tab=objections" as Route },
-        { key: "knowledge",  done: r.knowledge >= 1,       required: false, href: "/playbook?tab=knowledge" as Route },
+        // Required since D-628: onboarding treats knowledge as core ("help
+        // your coach get to know you"), so the checklist can't call it a
+        // nice-to-have. Done already if they dropped files in the wizard.
+        { key: "knowledge",  done: r.knowledge >= 1,       required: true,  href: "/playbook?tab=knowledge" as Route },
         // A sent invite counts: the owner did their part, and the rest is the
         // invitee's move.
         { key: "invite",     done: r.members > 1 || r.pendingInvites > 0, required: true, href: "/team?tab=members" as Route },
