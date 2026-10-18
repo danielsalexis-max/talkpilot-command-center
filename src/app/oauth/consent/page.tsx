@@ -26,6 +26,26 @@ function hostOf(uri: string): string {
     try { return new URL(uri).host } catch { return uri }
 }
 
+/// All three GoTrue OAuth-server calls go through the `oauth-consent` relay
+/// (D-625): called from this page's origin they die on GoTrue's Origin check
+/// ("unauthorized request origin" — the Auth URL configuration doesn't carry
+/// teams.talkpilot.co), and the relay forwards the same Bearer-authenticated
+/// request server-side, where no browser Origin exists. GoTrue still decides
+/// everything.
+async function consentCall(action: "details" | "approve" | "deny", id: string):
+    Promise<{ data: Record<string, unknown> | null; error: { message: string } | null }> {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return { data: null, error: { message: "Session expired — sign in again." } }
+    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/oauth-consent`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action, authorization_id: id }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { data: null, error: { message: json?.error?.message ?? json?.msg ?? `Request failed (${res.status})` } }
+    return { data: json, error: null }
+}
+
 export default function ConsentPage() {
     return (
         <Suspense fallback={null}>
@@ -55,7 +75,7 @@ function Consent() {
         if (!authorizationId) { setPhase("error"); setError(t.missingRequest); return }
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { setPhase("signin"); return }
-        const { data, error: e } = await supabase.auth.oauth.getAuthorizationDetails(authorizationId)
+        const { data, error: e } = await consentCall("details", authorizationId)
         if (e || !data) { setPhase("error"); setError(e?.message ?? t.expired); return }
         if ("redirect_url" in data && !("client" in data)) {
             // Already approved earlier: go straight back to the AI app.
@@ -124,12 +144,11 @@ function Consent() {
     async function decide(allow: boolean) {
         if (!authorizationId) return
         setBusy(true); setError(null)
-        const { data, error: err } = allow
-            ? await supabase.auth.oauth.approveAuthorization(authorizationId, { skipBrowserRedirect: true })
-            : await supabase.auth.oauth.denyAuthorization(authorizationId, { skipBrowserRedirect: true })
-        if (err || !data?.redirect_url) { setBusy(false); setError(err?.message ?? t.expired); return }
+        const { data, error: err } = await consentCall(allow ? "approve" : "deny", authorizationId)
+        const redirectUrl = data?.redirect_url as string | undefined
+        if (err || !redirectUrl) { setBusy(false); setError(err?.message ?? t.expired); return }
         setPhase("redirecting")
-        window.location.assign(data.redirect_url)
+        window.location.assign(redirectUrl)
     }
 
     async function switchAccount() {
