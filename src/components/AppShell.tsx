@@ -169,8 +169,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             Promise.all([
                 supabase.from("org_playbooks").select("id", { count: "exact", head: true })
                     .eq("org_id", data.org_id).eq("status", "active"),
+                // D-626: own objections only (starter-kit rows excluded), same
+                // rule as the Home checklist so the dot and the list agree.
                 supabase.from("org_objections").select("id", { count: "exact", head: true })
-                    .eq("org_id", data.org_id).eq("active", true),
+                    .eq("org_id", data.org_id).eq("active", true)
+                    .or("source.is.null,source.neq.starter_kit"),
                 supabase.from("org_members").select("user_id", { count: "exact", head: true })
                     .eq("org_id", data.org_id).eq("status", "active"),
                 supabase.from("org_invites").select("id", { count: "exact", head: true })

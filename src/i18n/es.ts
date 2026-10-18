@@ -334,6 +334,7 @@ export const es: Dict = {
         pilotBoxBig: (seats: number, monthly: number) => `El piloto gratis cubre hasta 5 asientos. Con ${seats} asientos, la facturación empieza hoy (~$${monthly}/mes). Consejo: empieza tu piloto con hasta 5 personas — puedes sumar asientos cuando quieras.`,
         stepOfN: (n: number, total: number) => `${n} de ${total}`,
         back: "Atrás",
+        kitLive: (kit: string) => `El playbook “${kit}” ya está activo, con su biblioteca de objeciones — tus reps reciben coaching con él desde su primera llamada. Edita lo que quieras en Playbook.`,
         brainTitle: "Dale un playbook a tus reps",
         brainSub1: "Esto es lo que hace que el coaching sea ",
         brainSubEm: "tuyo",
@@ -581,7 +582,7 @@ export const es: Dict = {
         loadingAria: "Cargando",
         checks: {
             playbook: { label: "Activa un playbook", hint: "Los reps son guiados por sus etapas en vivo y evaluados contra él después." },
-            objections: { label: "Agrega al menos 3 objeciones", hint: "Para que la IA entregue a los reps tu respuesta aprobada mientras la objeción sigue en el aire." },
+            objections: { label: "Agrega 3 objeciones propias", hint: "Tu kit inicial sembró objeciones genéricas — el coaching se vuelve afilado cuando las respuestas son tuyas. La IA entrega a los reps tu respuesta aprobada mientras la objeción sigue en el aire." },
         knowledge: { label: "Sube un documento de conocimiento", hint: "Fundamenta las respuestas en tus precios, battlecards y casos de éxito reales." },
             invite: { label: "Invita a tu primer rep", hint: "El coaching solo empieza a existir cuando alguien está del otro lado de una llamada." },
         },

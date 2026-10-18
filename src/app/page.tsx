@@ -93,8 +93,13 @@ export default function HomePage() {
                 // active-only, matching the AppShell nav dot (D-175) — the two
                 // counts disagreed and an org with only deactivated objections
                 // got a permanent amber dot but no checklist.
+                // D-626: starter-kit rows don't count toward "add objections" —
+                // the kit seeds generic ones at creation now, and the coaching
+                // only gets sharp when the answers are the org's own. NULL
+                // source (old manual rows) counts; .neq alone would drop it.
                 supabase.from("org_objections").select("id", { count: "exact", head: true })
-                    .eq("org_id", orgId).eq("active", true),
+                    .eq("org_id", orgId).eq("active", true)
+                    .or("source.is.null,source.neq.starter_kit"),
                 supabase.from("org_knowledge").select("id", { count: "exact", head: true })
                     .eq("org_id", orgId),
                 supabase.from("org_invites").select("id", { count: "exact", head: true })

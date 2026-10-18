@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { isPersonalEmail } from "@/lib/workEmail"
-import { starterKitsFor, type Vertical } from "@/lib/starterKit"
+import { starterKitsFor, applyStarterKit, type Vertical } from "@/lib/starterKit"
 import { loadGoogleAdsTag, trackWorkspaceCreated } from "@/lib/googleAds"
 import { EmailLink } from "@/components/EmailLink"
 import { ToolIcon } from "@/components/toolIcons"
@@ -446,6 +446,10 @@ export default function StartPage() {
     const [knowStatus, setKnowStatus]     = useState<"uploading" | "done" | null>(null)
     const [knowCount, setKnowCount]       = useState(0)
     const knowFileRef = useRef<HTMLInputElement | null>(null)
+    // D-626: the recommended starter kit is APPLIED at creation, not just
+    // recommended — the org is born with an active playbook and a seeded
+    // objection library, so the dashboard checklist starts truthfully done.
+    const [kitStatus, setKitStatus]       = useState<"applying" | "done" | null>(null)
 
     const [orgName, setOrgName]   = useState("")
     const [seats, setSeats]       = useState(3)
@@ -688,6 +692,20 @@ export default function StartPage() {
             trackWorkspaceCreated()
             await saveProfileSettings(res.org_id)
             void uploadStaged(res.org_id)
+            // Apply the recommended kit now (D-626) — the answers already
+            // picked it; making the owner re-pick it in the dashboard was the
+            // half-configured gap the old checklist papered over. Non-fatal:
+            // a failure leaves the Playbook tab's picker as the fallback.
+            const kit = pVertical
+                ? starterKitsFor(locale).find(k => k.key === recommendedKitKey(pVertical, pMethodology ?? "none"))
+                : null
+            if (kit) {
+                setKitStatus("applying")
+                void applyStarterKit(res.org_id, kit).then(err => {
+                    if (err) { console.error("wizard kit apply failed:", err); setKitStatus(null) }
+                    else setKitStatus("done")
+                })
+            }
             setHasTrial(!!res.trial_ends_at)
             setCardTrialDays(typeof res.card_trial_days === "number" ? res.card_trial_days : null)
             setScreen("invite")
@@ -1027,7 +1045,10 @@ export default function StartPage() {
                     )}
 
                     {screen === "invite" && (
-                        <ScreenShell title={t.start.inviteTitle} sub={t.start.inviteSubNoKit}>
+                        <ScreenShell title={t.start.inviteTitle}
+                            sub={kitStatus === "done" && kitTitle
+                                ? `${t.start.inviteSubWithKit1}“${kitTitle}”${t.start.inviteSubWithKit2}`
+                                : t.start.inviteSubNoKit}>
                             {knowStatus && (
                                 <p className="text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-xl px-4 py-2.5 mb-4">
                                     {knowStatus === "uploading" ? t.start.knowledge.uploading(staged.length) : t.start.knowledge.uploaded(knowCount)}
@@ -1060,6 +1081,9 @@ export default function StartPage() {
                             </div>
                             <h1 className="font-display text-[28px] font-extrabold text-[var(--color-text)] leading-tight mt-4">{t.start.doneTitle(orgName || t.start.doneFallbackOrg)}</h1>
                             {inviteNote && <p className="text-xs text-[var(--color-accent-deep)] font-medium mt-1">{inviteNote}</p>}
+                            {kitStatus === "done" && kitTitle && (
+                                <p className="text-xs text-[var(--color-accent-deep)] font-medium mt-1">{t.start.kitLive(kitTitle)}</p>
+                            )}
                             {knowStatus && (
                                 <p className="text-xs text-[var(--color-accent-deep)] font-medium mt-1">
                                     {knowStatus === "uploading" ? t.start.knowledge.uploading(staged.length) : t.start.knowledge.uploaded(knowCount)}

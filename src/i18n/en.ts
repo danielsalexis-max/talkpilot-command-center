@@ -356,6 +356,8 @@ export const en = {
         pilotBoxBig: (seats: number, monthly: number) => `The free pilot covers up to 5 seats. With ${seats} seats, billing starts today (~$${monthly}/month). Tip: start your pilot with up to 5 people — you can add seats anytime.`,
         stepOfN: (n: number, total: number) => `${n} of ${total}`,
         back: "Back",
+        // D-626: the recommended kit is applied at creation.
+        kitLive: (kit: string) => `The “${kit}” playbook is live, with its objection library — your reps get coached from it on their very first call. Edit anything under Playbook.`,
         // Brain step
         brainTitle: "Give your reps a playbook",
         brainSub1: "This is what makes coaching ",
@@ -612,7 +614,7 @@ export const en = {
         loadingAria: "Loading",
         checks: {
             playbook: { label: "Activate a playbook", hint: "Reps are guided through its stages live and scored against it after." },
-            objections: { label: "Add at least 3 objections", hint: "So the AI can hand reps your approved answer while the pushback is still in the air." },
+            objections: { label: "Add 3 objections of your own", hint: "Your starter kit seeded generic ones — the coaching gets sharp when the answers are yours. The AI hands reps your approved answer while the pushback is still in the air." },
         knowledge: { label: "Upload a knowledge document", hint: "Grounds answers in your real pricing, battlecards and case studies." },
             invite: { label: "Invite your first rep", hint: "Coaching only starts existing once somebody is on the other end of a call." },
         },
