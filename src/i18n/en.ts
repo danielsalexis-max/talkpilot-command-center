@@ -357,7 +357,7 @@ export const en = {
         stepOfN: (n: number, total: number) => `${n} of ${total}`,
         back: "Back",
         // D-626: the recommended kit is applied at creation.
-        kitLive: (kit: string) => `The “${kit}” playbook is live, with its objection library — your reps get coached from it on their very first call. Edit anything under Playbook.`,
+        kitLive: (kit: string) => `The “${kit}” playbook is live — your reps get coached from it on their very first call. Its objection suggestions are waiting under Playbook → Objections.`,
         // Brain step
         brainTitle: "Give your reps a playbook",
         brainSub1: "This is what makes coaching ",
@@ -366,7 +366,7 @@ export const en = {
         teamSales: "Sales",
         teamSupport: "Support & success",
         useThis: "Use this →",
-        kitMeta: (stages: number, objections: number) => `${stages} stages · ${objections} objections with approved responses · edit anything later`,
+        kitMeta: (stages: number, objections: number) => `${stages} stages · ${objections} objection suggestions for your library · edit anything later`,
         kits: {
             "discovery-led": { title: "Discovery-led sales", tagline: "Consultative flow for SaaS and services — understand first, pitch second." },
             "meddic-lite": { title: "MEDDIC essentials", tagline: "Qualification-first flow for bigger deals and longer cycles." },
@@ -614,7 +614,7 @@ export const en = {
         loadingAria: "Loading",
         checks: {
             playbook: { label: "Activate a playbook", hint: "Reps are guided through its stages live and scored against it after." },
-            objections: { label: "Add 3 objections of your own", hint: "Your starter kit seeded generic ones — the coaching gets sharp when the answers are yours. The AI hands reps your approved answer while the pushback is still in the air." },
+            objections: { label: "Add at least 3 objections", hint: "Write your own or pick from your kit's suggestions, then make the answers yours — the AI hands reps the approved answer while the pushback is still in the air." },
         knowledge: { label: "Upload a knowledge document", hint: "Grounds answers in your real pricing, battlecards and case studies." },
             invite: { label: "Invite your first rep", hint: "Coaching only starts existing once somebody is on the other end of a call." },
         },
@@ -1107,6 +1107,14 @@ export const en = {
             sourceTeamDna: "Team DNA",
             sourceDocument: "Imported",
             starterKitNote: "Rows marked “Starter kit” came with the coaching kit you picked at setup — edit or delete them freely.",
+            // D-627: kit objections are offered, never auto-seeded.
+            sugTitle: "Need a starting point?",
+            sugSub: (kit: string) => `Proven objections from the “${kit}” kit — add the ones that sound like your calls, then edit the answers into your own voice.`,
+            sugShow: (n: number) => `Show ${n} suggestions`,
+            sugHide: "Hide",
+            sugAll: "Select all",
+            sugAddN: (n: number) => `Add ${n === 0 ? "" : n + " "}to my library`,
+            sugAdded: (n: number) => `${n} added — now edit the answers so they sound like you.`,
             selectAll: "Select all",
             none: "None",
             importing: "Importing…",

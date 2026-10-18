@@ -562,11 +562,16 @@ export function starterKitsFor(locale: Locale): StarterKit[] {
     return STARTER_KITS_BY_LOCALE[locale] ?? STARTER_KITS_EN
 }
 
-/// Applies a kit: inserts the playbook and seeds the objection library.
-/// A brand-new org gets it ACTIVE immediately; if an active playbook already
-/// exists (the owner went back and picked a second kit), it lands as a DRAFT
-/// so two playbooks are never active at once. Objections are deduplicated by
-/// text so re-applying can't double the library. Returns an error or null.
+/// Applies a kit: inserts the PLAYBOOK only. A brand-new org gets it ACTIVE
+/// immediately; if an active playbook already exists (the owner went back and
+/// picked a second kit), it lands as a DRAFT so two playbooks are never
+/// active at once. Returns an error or null.
+///
+/// The kit's objections are deliberately NOT seeded here (D-627 — they used
+/// to be): a playbook is structure, but objection answers are the org's
+/// voice, and pre-loading generic ones assumed that's how the team wants to
+/// handle objections. They surface instead as pick-what-you-want suggestions
+/// in the Objections tab (`addStarterObjections` below).
 export async function applyStarterKit(orgId: string, kit: StarterKit): Promise<string | null> {
     const { data: activeExisting } = await supabase.from("org_playbooks")
         .select("id").eq("org_id", orgId).eq("status", "active").limit(1)
@@ -583,40 +588,37 @@ export async function applyStarterKit(orgId: string, kit: StarterKit): Promise<s
         status,
         version: 1,
     })
-    if (pbErr) return pbErr.message
+    return pbErr ? pbErr.message : null
+}
 
+/// Insert the kit objections the admin PICKED (D-627). Dedupes by text so
+/// accepting twice can't double the library, keeps the `starter_kit` source
+/// badge for provenance, and embeds — an unembedded objection is invisible to
+/// mid-call lookup. Returns an error or null.
+export async function addStarterObjections(orgId: string, picked: StarterObjection[]): Promise<string | null> {
+    if (picked.length === 0) return null
     const { data: existing } = await supabase.from("org_objections")
         .select("objection").eq("org_id", orgId)
     const have = new Set((existing ?? []).map(r => (r.objection as string).toLowerCase()))
-    const fresh = kit.objections.filter(o => !have.has(o.objection.toLowerCase()))
+    const fresh = picked.filter(o => !have.has(o.objection.toLowerCase()))
+    if (fresh.length === 0) return null
 
-    if (fresh.length > 0) {
-        const { data: inserted, error: objErr } = await supabase.from("org_objections").insert(
-            fresh.map(o => ({
-                org_id: orgId,
-                objection: o.objection,
-                response_guidance: o.response_guidance,
-                // The live coach reads approved_responses; the admin UI edits
-                // response_guidance. Write both or the objection matches and then
-                // hands the rep nothing.
-                approved_responses: approvedResponsesFrom(o.response_guidance),
-                severity: o.severity,
-                active: true,
-                variants: null,
-                // A brand-new owner reading "we're already using a competitor"
-                // in their library assumes a data leak unless the row says
-                // where it came from.
-                source: "starter_kit",
-            }))
-        ).select("id")
-        if (objErr) return objErr.message
-
-        // Embed them, or the whole starter library is invisible to objection-lookup
-        // and the first call a new team makes coaches nothing. Deliberately NOT
-        // awaited: it is the wizard's long pole (cold edge function + N
-        // embeddings) and it is already non-fatal — the Objections tab shows an
-        // un-indexed count and offers a re-index if this loses the race.
-        void embedObjections(orgId, (inserted ?? []).map(r => r.id as string))
-    }
+    const { data: inserted, error: objErr } = await supabase.from("org_objections").insert(
+        fresh.map(o => ({
+            org_id: orgId,
+            objection: o.objection,
+            response_guidance: o.response_guidance,
+            // The live coach reads approved_responses; the admin UI edits
+            // response_guidance. Write both or the objection matches and then
+            // hands the rep nothing.
+            approved_responses: approvedResponsesFrom(o.response_guidance),
+            severity: o.severity,
+            active: true,
+            variants: null,
+            source: "starter_kit",
+        }))
+    ).select("id")
+    if (objErr) return objErr.message
+    void embedObjections(orgId, (inserted ?? []).map(r => r.id as string))
     return null
 }

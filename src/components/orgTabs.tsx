@@ -16,7 +16,7 @@ import { rollUpGuardrails } from "@/lib/guardrails"
 import { PlaybookAssignment, type AssignTarget } from "@/components/playbookAssignment"
 import { TeamsSection } from "@/components/teamsSection"
 import { StarterKitPicker } from "@/components/starterKitPicker"
-import { VERTICALS, type Vertical } from "@/lib/starterKit"
+import { VERTICALS, starterKitsFor, addStarterObjections, type Vertical, type StarterObjection } from "@/lib/starterKit"
 import { extractTextFromFile, isExtractError, MAX_FILE_BYTES, MAX_TEXT_CHARS, EXTRACT_ACCEPT } from "@/lib/extractText"
 import { EmailLink } from "@/components/EmailLink"
 import { AIConnectorCard } from "@/components/aiConnector"
@@ -1355,7 +1355,7 @@ function KnowledgeEditor({ doc, body, busy, onCancel, onSave }: {
 // ─── Objections Tab ───────────────────────────────────────────────────────────
 
 export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: OrgInfo; onSaved: () => void }) {
-    const t = useT()
+    const { t, locale } = useLocale()
     const [objs, setObjs]                     = useState<ObjRow[]>([])
     const [query, setQuery]                   = useState("")
     const [loading, setLoading]               = useState(true)
@@ -1371,6 +1371,12 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
     const [extracting, setExtracting]         = useState(false)
     const [extracted, setExtracted]           = useState<ExtractedObjection[]>([])
     const [selected, setSelected]             = useState<Set<number>>(new Set())
+    // D-627: the starter kit's objections are SUGGESTIONS here, never
+    // auto-seeded — a playbook is structure, but objection answers are the
+    // org's voice. Open by default only while the library is empty.
+    const [sugSel, setSugSel]   = useState<Set<number>>(new Set())
+    const [sugBusy, setSugBusy] = useState(false)
+    const [sugOpen, setSugOpen] = useState<boolean | null>(null)
     // D-624 describe-a-change state.
     const [objAmendBusy, setObjAmendBusy]         = useState(false)
     const [objAmendMsg, setObjAmendMsg]           = useState<string | null>(null)
@@ -1515,6 +1521,28 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
         } finally {
             setSuggestingVariants(false)
         }
+    }
+
+    /// D-627: which kit's objections to offer. The wizard's recommendation if
+    /// one is stored, else the first kit for the org's vertical.
+    const kits = starterKitsFor(locale)
+    const profileKit = (org.settings?.onboarding_profile as { recommended_kit?: string } | undefined)?.recommended_kit
+    const sugKit = kits.find(k => k.key === profileKit)
+        ?? kits.find(k => k.vertical === ((org.settings?.vertical as Vertical | undefined) ?? "sales"))
+    const suggestions: StarterObjection[] = (sugKit?.objections ?? [])
+        .filter(o => !objs.some(x => x.objection.toLowerCase() === o.objection.toLowerCase()))
+
+    async function addSuggestions() {
+        if (!sugKit || sugSel.size === 0) return
+        setSugBusy(true); setMsg(null)
+        const picked = suggestions.filter((_, i) => sugSel.has(i))
+        const err = await addStarterObjections(orgId, picked)
+        setSugBusy(false)
+        if (err) { setMsg(humanError(err, t.tabs.doingSavePlaybook, t)); setIsErr(true); return }
+        setSugSel(new Set()); setSugOpen(false)
+        setMsg(t.tabs.objections.sugAdded(picked.length)); setIsErr(false)
+        await load()
+        onSaved()
     }
 
     /// D-624: one sentence of plain language → proposed corrections to the
@@ -1677,6 +1705,53 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
             )}
 
             {/* Manual add */}
+            {/* D-627: the starter kit's objections, offered — never assumed.
+                Pick the ones that sound like your calls; provenance keeps the
+                starter_kit badge; embedding happens on add. */}
+            {suggestions.length > 0 && (
+                <div className={CARD + " space-y-3"}>
+                    <button type="button" className="w-full flex items-center justify-between gap-3 text-left"
+                        onClick={() => setSugOpen(!(sugOpen ?? objs.length === 0))}>
+                        <div>
+                            <p className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.objections.sugTitle}</p>
+                            <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.tabs.objections.sugSub(sugKit?.title ?? "")}</p>
+                        </div>
+                        <span className="text-xs text-[var(--color-accent-deep)] font-medium shrink-0">
+                            {(sugOpen ?? objs.length === 0) ? t.tabs.objections.sugHide : t.tabs.objections.sugShow(suggestions.length)}
+                        </span>
+                    </button>
+                    {(sugOpen ?? objs.length === 0) && (
+                        <>
+                            <div className="divide-y divide-[var(--color-line-soft)] rounded-lg border border-[var(--color-border)]">
+                                {suggestions.map((o, i) => (
+                                    <label key={o.objection} className="flex items-start gap-3 px-3.5 py-2.5 cursor-pointer hover:bg-[var(--color-hover)]">
+                                        <input type="checkbox" className="accent-[var(--color-accent)] w-4 h-4 mt-0.5"
+                                            checked={sugSel.has(i)}
+                                            onChange={() => setSugSel(prev => {
+                                                const next = new Set(prev)
+                                                if (next.has(i)) next.delete(i); else next.add(i)
+                                                return next
+                                            })} />
+                                        <span className="min-w-0">
+                                            <span className="block text-[13.5px] font-medium text-[var(--color-text)]">{o.objection}</span>
+                                            <span className="block text-xs text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">{o.response_guidance}</span>
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button className={BTN_PRIMARY} disabled={sugBusy || sugSel.size === 0} onClick={addSuggestions}>
+                                    {sugBusy ? t.common.saving : t.tabs.objections.sugAddN(sugSel.size)}
+                                </button>
+                                <button className={BTN_GHOST} onClick={() => setSugSel(new Set(suggestions.map((_, i) => i)))}>
+                                    {t.tabs.objections.sugAll}
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
+
             {/* D-624: correct the library by describing the change — same card
                 the Knowledge tab has, writing through the same row + re-embed
                 path every objection edit uses. */}
