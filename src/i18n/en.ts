@@ -256,9 +256,9 @@ export const en = {
             sub: "Pick one — we'll keep score against it during your 30 days.",
             options: {
                 close: "Close rate up 10%+",
-                usage: "Reps using it on half their calls",
-                ramp: "New reps ramping in half the time",
-                consistency: "Every call following our playbook",
+                usage: "Reps using it on 50%+ of their calls",
+                ramp: "New-rep ramp time cut by 50%",
+                consistency: "Playbook adherence above 80 on every call",
             },
             ownPlaceholder: "Or write your own…",
         },

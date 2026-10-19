@@ -247,9 +247,9 @@ export const es: Dict = {
             sub: "Elige uno — llevaremos la cuenta contra eso durante tus 30 días.",
             options: {
                 close: "Subir el cierre 10%+",
-                usage: "Que los reps lo usen en la mitad de sus llamadas",
-                ramp: "Que los nuevos arranquen en la mitad del tiempo",
-                consistency: "Que cada llamada siga nuestro playbook",
+                usage: "Que los reps lo usen en el 50%+ de sus llamadas",
+                ramp: "Ramp de los nuevos 50% más corto",
+                consistency: "Adherencia al playbook arriba de 80 en cada llamada",
             },
             ownPlaceholder: "O escribe el tuyo…",
         },
