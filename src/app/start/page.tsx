@@ -39,7 +39,22 @@ const SIZE_SEATS: Record<string, number> = { justme: 3, s2_5: 4, s6_20: 10, s21p
 type ProfileVertical =
     | "sales" | "customer_care" | "contact_center"
     | "consultants" | "recruiting" | "advisors" | "agency" | "other"
-type ProfilePain = "objections" | "discovery" | "process" | "closing" | "ramp" | "inconsistent" | "unknown"
+type ProfilePain =
+    | "objections" | "discovery" | "process" | "closing" | "ramp" | "inconsistent" | "unknown"
+    | "policy" | "escalation" | "handle_time" | "compliance"
+    | "screening" | "ghosting" | "intake" | "oversell"
+
+/// D-635: which pains a team type sees — its own failure modes first, then
+/// the three that apply to every team. A care team was being asked about
+/// shallow discovery and next steps; a recruiter never saw candidates.
+const PAINS_UNIVERSAL: ProfilePain[] = ["ramp", "inconsistent", "unknown"]
+function painsFor(v: ProfileVertical | null): ProfilePain[] {
+    const specific: ProfilePain[] =
+        v === "customer_care" || v === "contact_center" ? ["policy", "escalation", "handle_time", "compliance"]
+        : v === "recruiting" ? ["screening", "ghosting", "intake", "oversell"]
+        : ["objections", "discovery", "closing", "process"]
+    return [...specific, ...PAINS_UNIVERSAL]
+}
 type ProfileMethodology =
     | "none" | "spiced" | "bant" | "sandler" | "meddic"
     | "challenger" | "spin" | "solution" | "gap" | "own"
@@ -918,7 +933,10 @@ export default function StartPage() {
                                 {(Object.keys(t.start.profile.teams) as ProfileVertical[]).map(v => (
                                     <OptionCard key={v} title={t.start.profile.teams[v]} sub={t.start.profile.teamSubs[v]}
                                         selected={pVertical === v}
-                                        onClick={() => pickAndAdvance(() => setPVertical(v), "size")} />
+                                        onClick={() => pickAndAdvance(() => {
+                                            if (v !== pVertical) { setPPains([]); setLastPain(null) }
+                                            setPVertical(v)
+                                        }, "size")} />
                                 ))}
                             </div>
                         </ScreenShell>
@@ -945,7 +963,7 @@ export default function StartPage() {
                                 and the checkbox square says "pick several" at a glance.
                                 The live preview reacts in the showcase column. */}
                             <div className="grid gap-2">
-                                {(Object.keys(t.start.profile.pains) as ProfilePain[]).map(p => (
+                                {painsFor(pVertical).map(p => (
                                     <CheckRow key={p} label={t.start.profile.pains[p]}
                                         checked={pPains.includes(p)}
                                         onClick={() => {
