@@ -104,6 +104,16 @@ function recommendedKitKey(vertical: ProfileVertical, methodology: ProfileMethod
 /// D-606). Stashed in sessionStorage because the OAuth round-trip comes back
 /// to /start without the query string.
 const SOURCE_KEY = "tp.start.source"
+/// True when this signup was already counted on this browser; marks it
+/// counted either way. Storage failing (private mode) counts as "not yet".
+function signupCounted(key: string): boolean {
+    try {
+        if (localStorage.getItem(key)) return true
+        localStorage.setItem(key, "1")
+    } catch { /* private mode */ }
+    return false
+}
+
 function captureSource(): { src: string; variant: string } | null {
     try {
         const params = new URLSearchParams(window.location.search)
@@ -579,12 +589,14 @@ export default function StartPage() {
         }
         setEmail(user.email ?? "")
         // OAuth arrivals never pass through handleAccount: a brand-new account
-        // (created in the last 10 minutes) landing here IS the signup (D-636).
+        // landing here IS the signup (D-636). So is an email signup coming back
+        // from its confirmation link, hence a day rather than minutes. The
+        // "already counted" mark is in localStorage so a second tab or the
+        // confirmation link's new tab doesn't count (and ping Slack) twice.
         identifyTeamsUser(user.id, user.email)
-        const fresh = user.created_at && Date.now() - new Date(user.created_at).getTime() < 10 * 60_000
+        const fresh = user.created_at && Date.now() - new Date(user.created_at).getTime() < 24 * 3600_000
         const signupKey = `tp.start.signup_sent.${user.id}`
-        if (fresh && !sessionStorage.getItem(signupKey)) {
-            sessionStorage.setItem(signupKey, "1")
+        if (fresh && !signupCounted(signupKey)) {
             const provider = (user.app_metadata?.provider as string | undefined) ?? "oauth"
             track("account_created", { method: provider })
             void callFn("teams-funnel-event", { event: "signup" }).catch(() => {})
@@ -619,7 +631,7 @@ export default function StartPage() {
         const source = captureSource()
         track("start_viewed", { src: source?.src ?? null, variant: source?.variant ?? null })
         if (q.get("checkout") === "success") {
-            track("checkout_completed")
+            track("checkout_completed", { from: "onboarding" })
             trackAdConversion("StartTrial")
         } else if (q.get("checkout") === "canceled") {
             track("checkout_canceled")
@@ -649,7 +661,7 @@ export default function StartPage() {
             identifyTeamsUser(user.id, user.email)
             track(mode === "signup" ? "account_created" : "signed_in", { method: "email" })
             if (mode === "signup") {
-                try { sessionStorage.setItem(`tp.start.signup_sent.${user.id}`, "1") } catch { /* private mode */ }
+                signupCounted(`tp.start.signup_sent.${user.id}`)
                 void callFn("teams-funnel-event", { event: "signup" }).catch(() => {})
             }
             const { data: member } = await supabase.from("org_members")
@@ -839,8 +851,10 @@ export default function StartPage() {
         if (!orgId) return
         setCheckoutBusy(true); setError(null)
         try {
-            track("checkout_started", { seats, pilot: !!cardTrialDays })
-            void callFn("teams-funnel-event", { event: "checkout_started", org_id: orgId }).catch(() => {})
+            // Slack hears about it from org-watcher's billing.checkout_started
+            // line, which also covers checkouts from Settings → Billing; a
+            // second real-time ping here made every checkout post twice.
+            track("checkout_started", { seats, pilot: !!cardTrialDays, from: "onboarding" })
             const res = await callFn("org-billing", { org_id: orgId, action: "checkout", interval: "month", context: "onboarding" })
             if (res?.url) { window.location.href = res.url as string; return }
             setError(t.start.checkoutFailed)

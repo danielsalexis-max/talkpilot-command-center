@@ -74,8 +74,15 @@ export function initTeamsAnalytics() {
             defaults: "2025-05-24",
             capture_pageview: "history_change",
             capture_pageleave: true,
+            // `surface` is read per event, not registered once: a super
+            // property set at boot kept saying "onboarding" on every pageview
+            // after /start's client-side navigation into the app.
+            before_send: (e: { properties?: Props } | null) => {
+                if (e) e.properties = { ...e.properties, surface: surfaceOf(window.location.pathname) }
+                return e
+            },
         })
-        window.posthog?.register({ product: "teams", surface: surfaceOf(window.location.pathname) })
+        window.posthog?.register({ product: "teams" })
     } catch { /* never break the page */ }
 
     try {

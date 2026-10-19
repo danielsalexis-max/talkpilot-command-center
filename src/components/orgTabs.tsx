@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useState, useCallback, useRef } from "react"
 import { embedObjections, reindexObjections, ingestKnowledgeInline, ingestKnowledgeInlineVerbose, reindexKnowledgeVerbose, replaceKnowledgeText, amendKnowledge, applyProposal, type AmendProposal, approvedResponsesFrom, guidanceOf, normalizeSeverity, amendBrain, type ObjectionAmendProposal, type StageAmendProposal } from "@/lib/orgBrain"
 import { supabase, askClaude, type ChatTurn } from "@/lib/supabase"
+import { track } from "@/lib/teamsAnalytics"
 import { AskPanel } from "@/components/AskPanel"
 import {
     DnaLab, DnaDropZone, DnaCallPicker, DnaPreRead, DnaReading, DnaProfileHead, DnaStatTile, DnaStrand,
@@ -4516,10 +4517,13 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
     // within the window, say exactly that instead of leaving a success message
     // over a workspace that is still unpaid.
     const [confirming, setConfirming] = useState(false)
+    const checkoutTrackedRef = useRef(false)
     useEffect(() => {
         const q = new URLSearchParams(window.location.search)
         if (q.get("checkout") === "canceled") { setMsg(t.tabs.billing.checkoutCanceled); setIsErr(false); return }
         if (q.get("checkout") !== "success") return
+        // Once per return from Stripe, however often this effect re-runs.
+        if (!checkoutTrackedRef.current) { checkoutTrackedRef.current = true; track("checkout_completed", { from: "billing" }) }
 
         let cancelled = false
         setConfirming(true); setMsg(t.tabs.billing.checkoutSuccess); setIsErr(false)
@@ -4587,6 +4591,7 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
 
     async function startCheckout() {
         setCheckoutBusy(true); setMsg(null)
+        track("checkout_started", { from: "billing", interval: interval_ })
         try {
             const { url } = await call("checkout", { interval: interval_ }) as { url: string }
             window.location.href = url
