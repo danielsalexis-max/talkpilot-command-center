@@ -218,8 +218,10 @@ export const en = {
         newHere: "New here? ",
         confirmEmailFirst: "Check your email to confirm your account, then come back here.",
         // Workspace step
-        workspaceTitle: "Name your workspace",
-        workspaceSub: "This is what your team sees when they join.",
+        workspaceTitle: "What’s your company called?",
+        workspaceSub: "We filled it in from your work email — change anything that’s off.",
+        seatsTitle: "How many seats to start with?",
+        seatsSub: "One per person whose calls get coached. You can change it anytime.",
         companyName: "Company or team name",
         companyPlaceholder: "Acme Sales",
         seatsLabel: "Seats (you can change this anytime)",

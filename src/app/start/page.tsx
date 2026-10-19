@@ -31,7 +31,7 @@ import type { Dict } from "@/i18n"
 
 type Screen =
     | "account" | "team" | "size" | "pain" | "methodology"
-    | "workspace" | "tools" | "knowledge" | "win" | "invite" | "done"
+    | "workspace" | "seats" | "tools" | "knowledge" | "win" | "invite" | "done"
 
 /// D-630: the size band pre-fills the seat count (still editable).
 const SIZE_SEATS: Record<string, number> = { justme: 3, s2_5: 4, s6_20: 10, s21p: 25 }
@@ -314,7 +314,7 @@ function KnowledgeSlide({ t }: { t: Dict }) {
 function Showcase({ screen, lastPain }: { screen: Screen; lastPain: ProfilePain | null }) {
     const t = useT()
     const [idx, setIdx] = useState(0)
-    const rotating = screen === "account" || screen === "workspace" || screen === "invite" || screen === "done"
+    const rotating = screen === "account" || screen === "workspace" || screen === "seats" || screen === "invite" || screen === "done"
     const slides = [
         { ...t.start.slides[0], node: <HudSlide t={t} /> },
         { ...t.start.slides[1], node: <ScorecardSlide t={t} /> },
@@ -496,9 +496,12 @@ export default function StartPage() {
     /// BEFORE the workspace is created (D-615): by the time the owner names
     /// the workspace they've already invested answers — and everything saves
     /// in one write at creation.
+    // Workspace creation sits BEFORE knowledge since D-633: the org then
+    // exists while they drop documents, so uploads and the website read run
+    // live in front of them instead of after the fact.
     const flow: Screen[] = asksMethodology(pVertical)
-        ? ["account", "team", "size", "pain", "methodology", "tools", "knowledge", "win", "workspace", "invite", "done"]
-        : ["account", "team", "size", "pain", "tools", "knowledge", "win", "workspace", "invite", "done"]
+        ? ["account", "team", "size", "pain", "methodology", "tools", "workspace", "seats", "knowledge", "win", "invite", "done"]
+        : ["account", "team", "size", "pain", "tools", "workspace", "seats", "knowledge", "win", "invite", "done"]
     const screenIdx = Math.max(0, flow.indexOf(screen))
     const progress = (screenIdx + 1) / flow.length
 
@@ -557,6 +560,18 @@ export default function StartPage() {
     }, [router, t])
 
     useEffect(() => { routeForUser() }, [routeForUser])
+
+    // D-633: they had to sign up with a company address, so the company name
+    // and website are usually sitting in the email domain. Pre-fill, never
+    // overwrite something they typed.
+    useEffect(() => {
+        if (screen !== "workspace") return
+        const domain = (email.split("@")[1] ?? "").trim().toLowerCase()
+        if (!domain || isPersonalEmail(email)) return
+        setOrgWebsite(w => w || domain)
+        const label = domain.split(".")[0]
+        if (label.length >= 2) setOrgName(n => n || label.charAt(0).toUpperCase() + label.slice(1))
+    }, [screen, email])
 
     // Stash ?src&v (the /teams CTA experiment, D-606) before any OAuth
     // round-trip strips the query string.
@@ -743,7 +758,7 @@ export default function StartPage() {
             }
             setHasTrial(!!res.trial_ends_at)
             setCardTrialDays(typeof res.card_trial_days === "number" ? res.card_trial_days : null)
-            setScreen("invite")
+            setScreen("knowledge")
         } catch (e) {
             const msg = (e as Error).message
             if (msg.includes("already part")) { router.replace("/"); return }
@@ -997,10 +1012,10 @@ export default function StartPage() {
                             <input className={INPUT + " mt-3"} placeholder={t.start.win.ownPlaceholder}
                                 value={pWinOther} onChange={e => setPWinOther(e.target.value)} />
                             <button disabled={pWins.length === 0 && !pWinOther.trim()}
-                                onClick={() => setScreen("workspace")} className={BTN + " mt-4"}>
+                                onClick={() => { if (orgId) void saveProfileSettings(orgId); setScreen("invite") }} className={BTN + " mt-4"}>
                                 {t.start.profile.continueBtn}
                             </button>
-                            <button onClick={() => { setPWins([]); setPWinOther(""); setScreen("workspace") }} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
+                            <button onClick={() => { setPWins([]); setPWinOther(""); setScreen("invite") }} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
                                 {t.start.profile.skip}
                             </button>
                         </ScreenShell>
@@ -1019,7 +1034,7 @@ export default function StartPage() {
                                     </button>
                                 </div>
                             )}
-                            <form onSubmit={handleWorkspace} className="space-y-5">
+                            <form onSubmit={e => { e.preventDefault(); setError(null); setScreen("seats") }} className="space-y-5">
                                 <div>
                                     <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.companyName}</label>
                                     <input required minLength={2} maxLength={80} placeholder={t.start.companyPlaceholder} className={INPUT + " mt-1.5"}
@@ -1042,6 +1057,17 @@ export default function StartPage() {
                                         <p className="text-xs text-[var(--color-muted)] mt-1.5">{t.start.websiteHelp}</p>
                                     )}
                                 </div>
+                                <button type="submit" disabled={orgName.trim().length < 2} className={BTN}>{t.start.profile.continueBtn}</button>
+                            </form>
+                        </ScreenShell>
+                    )}
+
+                    {/* Seats get their own screen (D-633): who the company is and how
+                        many people it pays for are different questions, and the
+                        pricing box belongs next to the count, not the name. */}
+                    {screen === "seats" && (
+                        <ScreenShell title={t.start.seatsTitle} sub={t.start.seatsSub}>
+                            <form onSubmit={handleWorkspace} className="space-y-5">
                                 <div>
                                     <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.seatsLabel}</label>
                                     <div className="flex items-center gap-3 mt-1.5">
@@ -1104,10 +1130,10 @@ export default function StartPage() {
                                     autoFocus value={toolOther} onChange={e => setToolOther(e.target.value)} />
                             )}
                             <p className="text-xs text-[var(--color-muted)] mt-4 leading-relaxed">{t.start.tools.note}</p>
-                            <button onClick={() => setScreen("knowledge")} className={BTN + " mt-5"}>
+                            <button onClick={() => setScreen("workspace")} className={BTN + " mt-5"}>
                                 {t.start.profile.continueBtn}
                             </button>
-                            <button onClick={() => { setPTools([]); setScreen("knowledge") }} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
+                            <button onClick={() => { setPTools([]); setScreen("workspace") }} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
                                 {t.start.profile.skip}
                             </button>
                         </ScreenShell>
@@ -1146,7 +1172,8 @@ export default function StartPage() {
                                 <p className="text-xs text-[var(--color-accent-deep)] mt-2.5">{t.start.knowledge.stagedNote(staged.length)}</p>
                             )}
                             {knowErr && <p className="text-xs text-amber-700 mt-2.5">{knowErr}</p>}
-                            <button onClick={() => setScreen("win")} disabled={extracting} className={BTN + " mt-5"}>
+                            <button disabled={extracting} className={BTN + " mt-5"}
+                                onClick={() => { if (orgId) { void uploadStaged(orgId); void saveProfileSettings(orgId) } setScreen("win") }}>
                                 {t.start.profile.continueBtn}
                             </button>
                             <button onClick={() => { setStaged([]); setScreen("win") }} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
