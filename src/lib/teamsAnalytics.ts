@@ -118,6 +118,10 @@ function surfaceOf(path: string): string {
 export function track(event: string, props: Props = {}) {
     try {
         if (!onProdHost()) return
+        // A page's mount effect runs before AppShell's, so /start's
+        // start_viewed and checkout_completed fired before init and were
+        // dropped. Booting here (idempotent) queues them on the stub instead.
+        initTeamsAnalytics()
         window.posthog?.capture(`teams_${event}`, {
             surface: surfaceOf(window.location.pathname),
             ...props,
@@ -130,7 +134,9 @@ export function track(event: string, props: Props = {}) {
 /// addresses are tagged so insights can exclude them.
 export function identifyTeamsUser(userId: string, email: string | null | undefined, props: Props = {}) {
     try {
-        if (!onProdHost() || !window.posthog) return
+        if (!onProdHost()) return
+        initTeamsAnalytics()
+        if (!window.posthog) return
         const e = (email ?? "").toLowerCase()
         if (e === E2E_EMAIL) { window.posthog.opt_out_capturing(); return }
         window.posthog.identify(userId, {
@@ -147,6 +153,7 @@ export function identifyTeamsUser(userId: string, email: string | null | undefin
 export function groupOrg(orgId: string, props: Props = {}) {
     try {
         if (!onProdHost()) return
+        initTeamsAnalytics()
         window.posthog?.group("organization", orgId, props)
     } catch { /* never break the page */ }
 }
