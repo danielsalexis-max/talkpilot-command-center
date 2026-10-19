@@ -36,7 +36,9 @@ type Screen =
 /// D-630: the size band pre-fills the seat count (still editable).
 const SIZE_SEATS: Record<string, number> = { justme: 3, s2_5: 4, s6_20: 10, s21p: 25 }
 
-type ProfileVertical = "sales" | "customer_care" | "contact_center" | "real_estate" | "consultants" | "other"
+type ProfileVertical =
+    | "sales" | "customer_care" | "contact_center" | "real_estate"
+    | "consultants" | "recruiting" | "advisors" | "agency" | "other"
 type ProfilePain = "objections" | "discovery" | "process" | "closing" | "ramp" | "inconsistent" | "unknown"
 type ProfileMethodology =
     | "none" | "spiced" | "bant" | "sandler" | "meddic"
@@ -47,9 +49,11 @@ type ProfileMethodology =
 const settingsVertical = (v: ProfileVertical): Vertical =>
     v === "customer_care" || v === "contact_center" || v === "real_estate" ? v : "sales"
 
-/// Which methodology question applies: only team types that sell.
+/// Which methodology question applies: team types whose calls are a revenue
+/// motion. Recruiting, advisors and agencies (D-631) run discovery/pitch
+/// conversations, so they qualify too.
 const asksMethodology = (v: ProfileVertical | null) =>
-    v === "sales" || v === "consultants" || v === "other"
+    v === "sales" || v === "consultants" || v === "recruiting" || v === "advisors" || v === "agency" || v === "other"
 
 /// The methodology options, ordered per team type: sales people scan for the
 /// framework they already run; consultants, coaches and "something else" most
