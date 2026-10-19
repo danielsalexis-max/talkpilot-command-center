@@ -8,6 +8,7 @@ import { useEffect, useState } from "react"
 import { applySkin, getSkinPref, setSkinPref, watchSystemSkin } from "@/lib/skin"
 import { useT } from "@/i18n/LocaleProvider"
 import { LocaleSwitcher } from "@/components/LocaleSwitcher"
+import { initTeamsAnalytics, identifyTeamsUser, groupOrg, resetTeamsAnalytics } from "@/lib/teamsAnalytics"
 
 /// Client-side chrome — the Boardroom sidebar. Split out of the root layout so
 /// layout.tsx can stay a server component and export metadata.
@@ -109,6 +110,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         router.replace("/start")
     }, [isPublic, hasWorkspace, router])
 
+    // B2B analytics (D-636): PostHog + Hotjar on every page of the app.
+    useEffect(() => { initTeamsAnalytics() }, [])
+
     useEffect(() => {
         applySkin()
         setDark(document.documentElement.dataset.skin === "dark")
@@ -118,6 +122,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         supabase.auth.getUser().then(({ data }) => {
             setEmail(data.user?.email ?? null)
+            if (data.user) identifyTeamsUser(data.user.id, data.user.email)
             setSignedIn(!!data.user)
             if (!data.user) {
                 // Signed out. The page itself routes to /login; unblock the
@@ -155,6 +160,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 .then(({ data: o }) => {
                     if (!o) { setEntitled(false); return }
                     setOrgName(o.name); setVisibility(o.visibility)
+                    groupOrg(data.org_id, { name: o.name, plan: o.plan, on_trial: !!o.trial_ends_at, subscribed: !!o.stripe_subscription_id })
                     if (o.trial_ends_at && !o.stripe_subscription_id) setTrialEndsAt(o.trial_ends_at)
                     setEntitled(
                         !!o.stripe_subscription_id
@@ -274,7 +280,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     const SignOut = ({ className = "" }: { className?: string }) => (
         <button
-            onClick={() => supabase.auth.signOut({ scope: "local" }).then(() => { window.location.href = "/login" })}
+            onClick={() => supabase.auth.signOut({ scope: "local" }).then(resetTeamsAnalytics).then(() => { window.location.href = "/login" })}
             className={`text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors ${className}`}
         >
             {t.common.signOut}
@@ -358,7 +364,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                             </a>
                         </div>
                     )}
-                    <button onClick={() => supabase.auth.signOut({ scope: "local" }).then(() => location.assign("/login"))}
+                    <button onClick={() => supabase.auth.signOut({ scope: "local" }).then(resetTeamsAnalytics).then(() => location.assign("/login"))}
                         className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors">
                         {t.common.signOut}
                     </button>
@@ -400,7 +406,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <p className="text-xs text-[var(--color-muted)]">
                     {t.memberGate.askAdmin}
                 </p>
-                <button onClick={() => supabase.auth.signOut({ scope: "local" }).then(() => { window.location.href = "/login" })}
+                <button onClick={() => supabase.auth.signOut({ scope: "local" }).then(resetTeamsAnalytics).then(() => { window.location.href = "/login" })}
                     className="text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] underline">
                     {t.common.signOut}
                 </button>

@@ -5,6 +5,7 @@ import type { Route } from "next"
 import { useEffect, useState } from "react"
 import { useT } from "@/i18n/LocaleProvider"
 import { supabase } from "@/lib/supabase"
+import { track } from "@/lib/teamsAnalytics"
 
 /// The first-run life of the Home page (D-175, reshaped). A brand-new org
 /// spends its whole trial with an empty dashboard, which is exactly when the
@@ -108,9 +109,19 @@ export function HomeSetupCard({ state, orgId, hasCards }: { state: SetupState; o
     const requiredMet = setupRequiredMet(state)
     const showChecklist = !allDone && !dismissed
     const showStatus = !hasCards
+    // D-636: how far a workspace's setup has come each time the owner lands.
+    useEffect(() => {
+        track("checklist_viewed", Object.fromEntries([
+            ["done", done], ["total", checks.length], ["current", checks.find(c => !c.done)?.key ?? null],
+            ...checks.map(c => [`${c.key}_done`, c.done]),
+        ]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [done])
+
     if (!showChecklist && !showStatus) return null
 
     const current = checks.find(c => !c.done)
+
 
     const status: { ok: boolean; label: string; sub: string }[] = [
         { ok: true, label: t.homeStates.statusCoachingClear, sub: t.homeStates.statusCoachingClearSub },
@@ -153,7 +164,7 @@ export function HomeSetupCard({ state, orgId, hasCards }: { state: SetupState; o
                     </div>
 
                     <div className="flex items-center gap-3 mt-5">
-                        <Link href={current.href}
+                        <Link href={current.href} onClick={() => track("checklist_step_clicked", { step: current.key, done, total: checks.length })}
                             className="px-5 py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-xl transition-colors">
                             {t.homeStates.setUp}
                         </Link>

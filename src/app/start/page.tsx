@@ -11,6 +11,7 @@ import { EmailLink } from "@/components/EmailLink"
 import { ToolIcon } from "@/components/toolIcons"
 import { extractTextFromFile, EXTRACT_ACCEPT } from "@/lib/extractText"
 import { ingestKnowledgeInlineVerbose } from "@/lib/orgBrain"
+import { track, identifyTeamsUser, groupOrg, initAdPixels, trackAdConversion } from "@/lib/teamsAnalytics"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
 import type { Dict } from "@/i18n"
 
@@ -530,6 +531,13 @@ export default function StartPage() {
     }
     useEffect(() => () => { if (advanceRef.current) clearTimeout(advanceRef.current) }, [])
 
+    // One event per screen shown — the step-by-step drop-off funnel.
+    useEffect(() => {
+        if (checking) return
+        track("step_viewed", { step: screen, step_index: screenIdx + 1, step_total: flow.length })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [screen, checking])
+
     function goBack() {
         if (screenIdx > 1) setScreen(flow[screenIdx - 1])
     }
@@ -570,6 +578,17 @@ export default function StartPage() {
             return
         }
         setEmail(user.email ?? "")
+        // OAuth arrivals never pass through handleAccount: a brand-new account
+        // (created in the last 10 minutes) landing here IS the signup (D-636).
+        identifyTeamsUser(user.id, user.email)
+        const fresh = user.created_at && Date.now() - new Date(user.created_at).getTime() < 10 * 60_000
+        const signupKey = `tp.start.signup_sent.${user.id}`
+        if (fresh && !sessionStorage.getItem(signupKey)) {
+            sessionStorage.setItem(signupKey, "1")
+            const provider = (user.app_metadata?.provider as string | undefined) ?? "oauth"
+            track("account_created", { method: provider })
+            void callFn("teams-funnel-event", { event: "signup" }).catch(() => {})
+        }
         setScreen(s => (s === "account" ? "team" : s))
         setChecking(false)
     }, [router, t])
@@ -592,6 +611,21 @@ export default function StartPage() {
     // round-trip strips the query string.
     useEffect(() => { captureSource() }, [])
 
+    // D-636: funnel analytics. Ad pixels load on /start only (the conversion
+    // page); PostHog/Hotjar come from AppShell for every page.
+    useEffect(() => {
+        initAdPixels()
+        const q = new URLSearchParams(window.location.search)
+        const source = captureSource()
+        track("start_viewed", { src: source?.src ?? null, variant: source?.variant ?? null })
+        if (q.get("checkout") === "success") {
+            track("checkout_completed")
+            trackAdConversion("StartTrial")
+        } else if (q.get("checkout") === "canceled") {
+            track("checkout_canceled")
+        }
+    }, [])
+
     async function handleAccount(e: React.FormEvent) {
         e.preventDefault(); setError(null)
         // The account that will OWN the workspace must be a company address
@@ -611,7 +645,13 @@ export default function StartPage() {
                 if (err) throw err
             }
             const { data: { user } } = await supabase.auth.getUser()
-            if (!user) { setError(t.start.confirmEmailFirst); return }
+            if (!user) { track("account_needs_confirmation", { method: "email" }); setError(t.start.confirmEmailFirst); return }
+            identifyTeamsUser(user.id, user.email)
+            track(mode === "signup" ? "account_created" : "signed_in", { method: "email" })
+            if (mode === "signup") {
+                try { sessionStorage.setItem(`tp.start.signup_sent.${user.id}`, "1") } catch { /* private mode */ }
+                void callFn("teams-funnel-event", { event: "signup" }).catch(() => {})
+            }
             const { data: member } = await supabase.from("org_members")
                 .select("org_id").eq("user_id", user.id).eq("status", "active").maybeSingle()
             if (member) { router.replace("/"); return }
@@ -629,6 +669,7 @@ export default function StartPage() {
     /// account instead of switching to it.
     async function handleGoogle() {
         setError(null)
+        track("oauth_clicked", { provider: "google" })
         await supabase.auth.signOut({ scope: "local" })
         await supabase.auth.signInWithOAuth({
             provider: "google",
@@ -640,6 +681,7 @@ export default function StartPage() {
     // never reads a calendar; that scope belongs to the rep apps (D-187).
     async function handleMicrosoft() {
         setError(null)
+        track("oauth_clicked", { provider: "microsoft" })
         await supabase.auth.signOut({ scope: "local" })
         await supabase.auth.signInWithOAuth({
             provider: "azure",
@@ -720,6 +762,7 @@ export default function StartPage() {
         }
         setKnowCount(ok)
         setKnowStatus("done")
+        track("knowledge_uploaded", { attempted: staged.length, ok })
     }
 
     async function handleWorkspace(e: React.FormEvent) {
@@ -748,16 +791,23 @@ export default function StartPage() {
             })
             setOrgId(res.org_id)
             trackWorkspaceCreated()
+            groupOrg(res.org_id, { name: orgName, seats: seatCount, vertical: pVertical, team_size: pSize })
+            track("workspace_created", {
+                seats: seatCount, pilot: typeof res.card_trial_days === "number", over_pilot_cap: seatCount > MAX_PILOT_SEATS,
+                vertical: pVertical, team_size: pSize, pains: pPains, methodology: pMethods, tools: pTools,
+                has_website: !!orgWebsite.trim(), src: source?.src ?? null, variant: source?.variant ?? null,
+            })
+            trackAdConversion("CompleteRegistration", { value: seatCount * SEAT_PRICE_MONTHLY, currency: "USD" })
             await saveProfileSettings(res.org_id)
             void uploadStaged(res.org_id)
             // D-632: now — and only now — read their website into the brain.
             if (orgWebsite.trim()) {
                 setSiteStatus("reading")
                 void callFn("ingest-website", { org_id: res.org_id, url: orgWebsite.trim() })
-                    .then(() => setSiteStatus("done"))
+                    .then(() => { setSiteStatus("done"); track("website_read", { ok: true }) })
                     // Never silent (D-633): the first e2e saw nothing at all when
                     // a site couldn't be read, which read as "nothing happens".
-                    .catch(e => { console.error("website ingest failed:", e); setSiteStatus("failed") })
+                    .catch(e => { console.error("website ingest failed:", e); setSiteStatus("failed"); track("website_read", { ok: false }) })
             }
             // Apply the recommended kit now (D-626) — the answers already
             // picked it; making the owner re-pick it in the dashboard was the
@@ -789,6 +839,8 @@ export default function StartPage() {
         if (!orgId) return
         setCheckoutBusy(true); setError(null)
         try {
+            track("checkout_started", { seats, pilot: !!cardTrialDays })
+            void callFn("teams-funnel-event", { event: "checkout_started", org_id: orgId }).catch(() => {})
             const res = await callFn("org-billing", { org_id: orgId, action: "checkout", interval: "month", context: "onboarding" })
             if (res?.url) { window.location.href = res.url as string; return }
             setError(t.start.checkoutFailed)
@@ -814,6 +866,7 @@ export default function StartPage() {
         // Pre-billing, invites queue rather than send — say that, or
         // "1 invitación enviada" is false and the owner waits for an email
         // that will not arrive until they pay.
+        track("invites_sent", { sent, queued, failed, attempted: emails.length })
         setInviteNote(queued ? t.start.inviteQueuedNote(queued)
                     : sent   ? t.start.inviteNote(sent, failed)
                     : null)
@@ -875,7 +928,7 @@ export default function StartPage() {
                     self-serve is the default motion, not the only one. */}
                 {screen !== "done" && (
                     <p className="mb-7 text-[11px] pl-10">
-                        <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className="text-[var(--color-muted)] hover:text-[var(--color-accent-deep)]">
+                        <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" onClick={() => track("demo_clicked", { step: screen })} className="text-[var(--color-muted)] hover:text-[var(--color-accent-deep)]">
                             {t.start.questionsBookDemo}
                         </a>
                     </p>
@@ -1107,7 +1160,7 @@ export default function StartPage() {
                                     </div>
                                     <p className="text-xs text-[var(--color-text-secondary)] mt-2">
                                         {t.start.enterpriseNote}{" "}
-                                        <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--color-accent-deep)] hover:underline">
+                                        <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" onClick={() => track("demo_clicked", { step: screen })} className="font-semibold text-[var(--color-accent-deep)] hover:underline">
                                             {t.start.enterpriseCta}
                                         </a>
                                     </p>
@@ -1300,7 +1353,7 @@ export default function StartPage() {
                                         <button onClick={startCheckout} disabled={checkoutBusy} className={BTN + " sm:w-auto px-5"}>
                                             {checkoutBusy ? t.start.openingCheckout : cardTrialDays ? t.start.cardTrialCta : t.start.goToCheckout}
                                         </button>
-                                        <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" className={BTN_GHOST + " sm:w-auto px-5 text-center"}>{t.start.bookDemoInstead}</a>
+                                        <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" onClick={() => track("demo_clicked", { step: screen })} className={BTN_GHOST + " sm:w-auto px-5 text-center"}>{t.start.bookDemoInstead}</a>
                                     </div>
                                     {error && <p className="text-xs text-amber-700">{error}</p>}
                                 </div>
