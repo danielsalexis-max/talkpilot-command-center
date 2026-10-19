@@ -474,7 +474,7 @@ export default function StartPage() {
     const [kitStatus, setKitStatus]       = useState<"applying" | "done" | null>(null)
     // D-632: the website is read for real only AFTER the workspace exists —
     // someone who abandons onboarding at this field must cost nothing.
-    const [siteStatus, setSiteStatus]     = useState<"reading" | "done" | null>(null)
+    const [siteStatus, setSiteStatus]     = useState<"reading" | "done" | "failed" | null>(null)
 
     const [orgName, setOrgName]   = useState("")
     const [seats, setSeats]       = useState(3)
@@ -740,7 +740,9 @@ export default function StartPage() {
                 setSiteStatus("reading")
                 void callFn("ingest-website", { org_id: res.org_id, url: orgWebsite.trim() })
                     .then(() => setSiteStatus("done"))
-                    .catch(e => { console.error("website ingest failed:", e); setSiteStatus(null) })
+                    // Never silent (D-633): the first e2e saw nothing at all when
+                    // a site couldn't be read, which read as "nothing happens".
+                    .catch(e => { console.error("website ingest failed:", e); setSiteStatus("failed") })
             }
             // Apply the recommended kit now (D-626) — the answers already
             // picked it; making the owner re-pick it in the dashboard was the
@@ -1141,6 +1143,14 @@ export default function StartPage() {
 
                     {screen === "knowledge" && (
                         <ScreenShell title={t.start.knowledge.title} sub={t.start.knowledge.sub}>
+                            {siteStatus && websiteDomain && (
+                                <p className="flex items-center gap-2 text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-xl px-4 py-2.5 mb-4">
+                                    {siteStatus === "reading" && <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse" />}
+                                    {siteStatus === "reading" ? t.start.websiteReading(websiteDomain)
+                                        : siteStatus === "failed" ? t.start.websiteFailed(websiteDomain)
+                                        : t.start.websiteStudied(websiteDomain)}
+                                </p>
+                            )}
                             <input ref={knowFileRef} type="file" multiple accept={EXTRACT_ACCEPT}
                                 className="hidden" onChange={handleKnowledgeFiles} />
                             <button type="button" onClick={() => knowFileRef.current?.click()} disabled={extracting}
@@ -1190,7 +1200,9 @@ export default function StartPage() {
                             {siteStatus && websiteDomain && (
                                 <p className="flex items-center gap-2 text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-xl px-4 py-2.5 mb-3">
                                     {siteStatus === "reading" && <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse" />}
-                                    {siteStatus === "reading" ? t.start.websiteReading(websiteDomain) : t.start.websiteStudied(websiteDomain)}
+                                    {siteStatus === "reading" ? t.start.websiteReading(websiteDomain)
+                                        : siteStatus === "failed" ? t.start.websiteFailed(websiteDomain)
+                                        : t.start.websiteStudied(websiteDomain)}
                                 </p>
                             )}
                             {knowStatus && (
@@ -1235,7 +1247,9 @@ export default function StartPage() {
                             )}
                             {siteStatus && websiteDomain && (
                                 <p className="text-xs text-[var(--color-accent-deep)] font-medium mt-1">
-                                    {siteStatus === "reading" ? t.start.websiteReading(websiteDomain) : t.start.websiteStudied(websiteDomain)}
+                                    {siteStatus === "reading" ? t.start.websiteReading(websiteDomain)
+                                        : siteStatus === "failed" ? t.start.websiteFailed(websiteDomain)
+                                        : t.start.websiteStudied(websiteDomain)}
                                 </p>
                             )}
                             <div className="space-y-4 mt-6">

@@ -261,6 +261,7 @@ export const es: Dict = {
         websiteWillStudy: (d: string) => `${d} — tu coach lo estudia en cuanto se cree tu espacio de trabajo.`,
         websiteReading: (d: string) => `Leyendo ${d} — preparando tu espacio de trabajo…`,
         websiteStudied: (d: string) => `${d} estudiado — tu coach ya conoce el negocio.`,
+        websiteFailed: (d: string) => `No pudimos leer ${d} — un documento sobre el negocio funciona igual de bien.`,
         toolsSlide: {
             caption: "Conectado a donde ya trabaja tu equipo",
             sub: "Las llamadas se registran en tu CRM y los resúmenes llegan a Slack — tus reps dejan de capturar datos.",

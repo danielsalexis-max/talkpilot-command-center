@@ -270,6 +270,7 @@ export const en = {
         websiteWillStudy: (d: string) => `${d} — your coach studies it the moment your workspace is created.`,
         websiteReading: (d: string) => `Reading ${d} — preparing your workspace…`,
         websiteStudied: (d: string) => `${d} studied — your coach knows the business.`,
+        websiteFailed: (d: string) => `Couldn't read ${d} — a document about the business works just as well.`,
         // Per-screen showcase slides (D-615 follow-up): the right column
         // answers the question being asked, not a generic carousel.
         toolsSlide: {
