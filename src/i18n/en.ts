@@ -244,6 +244,26 @@ export const en = {
         checkoutCanceledNote: "Checkout was canceled — your workspace is saved. Add billing whenever you're ready.",
         questionsBookDemo: "Rather talk first? Book a demo →",
         showcaseTag: "PREVIEW · WHAT YOUR TEAM GETS",
+        // D-630: team size (pre-fills seats), pilot win (anchoring — they
+        // write the success criterion they'll want to see come true).
+        size: {
+            title: "How big is the team?",
+            sub: "Reps, agents, anyone whose calls get coached.",
+            options: { justme: "Just me, for now", s2_5: "2–5 people", s6_20: "6–20 people", s21p: "21 or more" },
+        },
+        win: {
+            title: "What would make this pilot a win?",
+            sub: "Pick one — we'll keep score against it during your 30 days.",
+            options: {
+                close: "Close rate up 10%+",
+                usage: "Reps using it on half their calls",
+                ramp: "New reps ramping in half the time",
+                consistency: "Every call following our playbook",
+            },
+            ownPlaceholder: "Or write your own…",
+        },
+        websiteLabel: "Company website (optional)",
+        websitePlaceholder: "acme.com",
         // Per-screen showcase slides (D-615 follow-up): the right column
         // answers the question being asked, not a generic carousel.
         toolsSlide: {
@@ -330,7 +350,9 @@ export const en = {
                 hubspot: "HubSpot", salesforce: "Salesforce", gcal: "Google Calendar",
                 outlook: "Outlook", slack: "Slack", meetings: "Zoom / Meet / Teams",
                 none: "None of these",
+                other: "Another one",
             },
+            otherPlaceholder: "Odoo, Pipedrive, your own CRM…",
             note: "TalkPilot logs coached calls to your CRM and drops recaps in Slack — your reps stop doing data entry.",
         },
         // Knowledge screen (D-610): what the coach should learn. Selections are

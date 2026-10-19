@@ -203,12 +203,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     // become useful.
     const nav: NavItem[] = [
         { href: "/",          label: t.nav.home,     icon: ICONS.home,     match: p => p === "/" },
+        // Team DNA is its own destination (D-615) and sits SECOND (D-630):
+        // generating a playbook from your best rep is the highest-leverage
+        // setup action in the product, so it outranks the library it feeds.
+        { href: "/dna" as Route, label: t.nav.teamDna, icon: ICONS.dna, match: p => p.startsWith("/dna") },
         { href: "/playbook",  label: t.nav.playbook, icon: ICONS.playbook, match: p => p.startsWith("/playbook"),
           attention: needsSetup },
-        // Team DNA is its own destination (D-615): generating a playbook from
-        // your best rep is the highest-leverage setup action, and buried as a
-        // fourth tab inside Playbook it read as a detail of it.
-        { href: "/dna" as Route, label: t.nav.teamDna, icon: ICONS.dna, match: p => p.startsWith("/dna") },
         // Review merged into Calls as its "Needs review" filter (D-615) — the
         // queue was a strict subset of this table, and a second nav item for a
         // subset read as a second product. /coaching redirects.

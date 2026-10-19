@@ -30,8 +30,11 @@ import type { Dict } from "@/i18n"
 /// workspaces are told, on the seats screen, that billing starts today.
 
 type Screen =
-    | "account" | "team" | "pain" | "methodology"
-    | "workspace" | "tools" | "knowledge" | "invite" | "done"
+    | "account" | "team" | "size" | "pain" | "methodology"
+    | "workspace" | "tools" | "knowledge" | "win" | "invite" | "done"
+
+/// D-630: the size band pre-fills the seat count (still editable).
+const SIZE_SEATS: Record<string, number> = { justme: 3, s2_5: 4, s6_20: 10, s21p: 25 }
 
 type ProfileVertical = "sales" | "customer_care" | "contact_center" | "real_estate" | "consultants" | "other"
 type ProfilePain = "objections" | "discovery" | "process" | "closing" | "ramp" | "inconsistent" | "unknown"
@@ -445,6 +448,13 @@ export default function StartPage() {
     // qualification, Challenger for the pitch). The kit recommendation uses
     // the first pick that has a kit of its own.
     const [pMethods, setPMethods] = useState<ProfileMethodology[]>([])
+    // D-630: size band, pilot-win anchor, website, free-text tool.
+    const [pSize, setPSize]       = useState<string | null>(null)
+    const [pWin, setPWin]         = useState<string | null>(null)
+    const [pWinOther, setPWinOther] = useState("")
+    const [toolOtherSel, setToolOtherSel] = useState(false)
+    const [toolOther, setToolOther]       = useState("")
+    const [orgWebsite, setOrgWebsite]     = useState("")
     const [pTools, setPTools]             = useState<string[]>([])
     // Knowledge screen: real documents, extracted client-side and held until
     // the workspace exists. knowStatus drives the "coach is reading" line on
@@ -481,8 +491,8 @@ export default function StartPage() {
     /// the workspace they've already invested answers — and everything saves
     /// in one write at creation.
     const flow: Screen[] = asksMethodology(pVertical)
-        ? ["account", "team", "pain", "methodology", "tools", "knowledge", "workspace", "invite", "done"]
-        : ["account", "team", "pain", "tools", "knowledge", "workspace", "invite", "done"]
+        ? ["account", "team", "size", "pain", "methodology", "tools", "knowledge", "win", "workspace", "invite", "done"]
+        : ["account", "team", "size", "pain", "tools", "knowledge", "win", "workspace", "invite", "done"]
     const screenIdx = Math.max(0, flow.indexOf(screen))
     const progress = (screenIdx + 1) / flow.length
 
@@ -629,7 +639,10 @@ export default function StartPage() {
                         pains: pPains,
                         methodology: asksMethodology(pVertical) ? pMethods : null,
                         recommended_kit: recommendedKitKey(pVertical, kitMethodOf(pMethods)),
-                        tools: pTools,
+                        team_size: pSize,
+                        pilot_win: pWinOther.trim() || pWin,
+                        website: orgWebsite.trim() || null,
+                        tools: [...pTools, ...(toolOtherSel && toolOther.trim() ? ["other:" + toolOther.trim()] : [])],
                         knowledge: staged.map(d => d.title),
                     },
                 },
@@ -870,7 +883,22 @@ export default function StartPage() {
                                 {(Object.keys(t.start.profile.teams) as ProfileVertical[]).map(v => (
                                     <OptionCard key={v} title={t.start.profile.teams[v]} sub={t.start.profile.teamSubs[v]}
                                         selected={pVertical === v}
-                                        onClick={() => pickAndAdvance(() => setPVertical(v), "pain")} />
+                                        onClick={() => pickAndAdvance(() => setPVertical(v), "size")} />
+                                ))}
+                            </div>
+                        </ScreenShell>
+                    )}
+
+                    {screen === "size" && (
+                        <ScreenShell title={t.start.size.title} sub={t.start.size.sub}>
+                            <div className="grid sm:grid-cols-2 gap-2.5">
+                                {(Object.keys(t.start.size.options) as (keyof Dict["start"]["size"]["options"])[]).map(k => (
+                                    <OptionCard key={k} title={t.start.size.options[k]}
+                                        selected={pSize === k}
+                                        onClick={() => pickAndAdvance(() => {
+                                            setPSize(k)
+                                            setSeats(SIZE_SEATS[k] ?? MIN_SEATS)
+                                        }, "pain")} />
                                 ))}
                             </div>
                         </ScreenShell>
@@ -936,6 +964,30 @@ export default function StartPage() {
                         </ScreenShell>
                     )}
 
+                    {screen === "win" && (
+                        <ScreenShell title={t.start.win.title} sub={t.start.win.sub}>
+                            {/* Anchoring on purpose (D-630): they pick the success
+                                criterion they'll want to see come true. */}
+                            <div className="grid gap-2.5">
+                                {(Object.keys(t.start.win.options) as (keyof Dict["start"]["win"]["options"])[]).map(k => (
+                                    <OptionCard key={k} title={t.start.win.options[k]}
+                                        selected={pWin === k && !pWinOther.trim()}
+                                        onClick={() => pickAndAdvance(() => { setPWin(k); setPWinOther("") }, "workspace")} />
+                                ))}
+                            </div>
+                            <input className={INPUT + " mt-3"} placeholder={t.start.win.ownPlaceholder}
+                                value={pWinOther} onChange={e => { setPWinOther(e.target.value); if (e.target.value.trim()) setPWin(null) }} />
+                            {pWinOther.trim() && (
+                                <button onClick={() => setScreen("workspace")} className={BTN + " mt-4"}>
+                                    {t.start.profile.continueBtn}
+                                </button>
+                            )}
+                            <button onClick={() => setScreen("workspace")} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
+                                {t.start.profile.skip}
+                            </button>
+                        </ScreenShell>
+                    )}
+
                     {screen === "workspace" && (
                         <ScreenShell title={t.start.workspaceTitle} sub={t.start.workspaceSub}>
                             {/* OAuth arrivals skip the account form, so a personal Google/
@@ -954,6 +1006,12 @@ export default function StartPage() {
                                     <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.companyName}</label>
                                     <input required minLength={2} maxLength={80} placeholder={t.start.companyPlaceholder} className={INPUT + " mt-1.5"}
                                         value={orgName} onChange={e => setOrgName(e.target.value)} />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.websiteLabel}</label>
+                                    <input maxLength={120} placeholder={t.start.websitePlaceholder} className={INPUT + " mt-1.5"}
+                                        inputMode="url" autoComplete="url"
+                                        value={orgWebsite} onChange={e => setOrgWebsite(e.target.value)} />
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.seatsLabel}</label>
@@ -1002,13 +1060,20 @@ export default function StartPage() {
                     {screen === "tools" && (
                         <ScreenShell title={t.start.tools.title} sub={t.start.tools.sub}>
                             <div className="grid sm:grid-cols-2 gap-2.5">
-                                {(Object.keys(t.start.tools.options) as (keyof Dict["start"]["tools"]["options"])[]).map(k => (
+                                {(Object.keys(t.start.tools.options) as (keyof Dict["start"]["tools"]["options"])[]).filter(k => k !== "other").map(k => (
                                     <OptionCard key={k} title={t.start.tools.options[k]}
                                         icon={<ToolIcon tool={k} />}
                                         selected={pTools.includes(k)}
                                         onClick={() => toggleMulti(pTools, setPTools, k, "none")} />
                                 ))}
+                                <OptionCard title={t.start.tools.options.other}
+                                    selected={toolOtherSel}
+                                    onClick={() => { setToolOtherSel(v => !v); setPTools(prev => prev.filter(x => x !== "none")) }} />
                             </div>
+                            {toolOtherSel && (
+                                <input className={INPUT + " mt-2.5"} placeholder={t.start.tools.otherPlaceholder}
+                                    autoFocus value={toolOther} onChange={e => setToolOther(e.target.value)} />
+                            )}
                             <p className="text-xs text-[var(--color-muted)] mt-4 leading-relaxed">{t.start.tools.note}</p>
                             <button onClick={() => setScreen("knowledge")} className={BTN + " mt-5"}>
                                 {t.start.profile.continueBtn}
@@ -1052,10 +1117,10 @@ export default function StartPage() {
                                 <p className="text-xs text-[var(--color-accent-deep)] mt-2.5">{t.start.knowledge.stagedNote(staged.length)}</p>
                             )}
                             {knowErr && <p className="text-xs text-amber-700 mt-2.5">{knowErr}</p>}
-                            <button onClick={() => setScreen("workspace")} disabled={extracting} className={BTN + " mt-5"}>
+                            <button onClick={() => setScreen("win")} disabled={extracting} className={BTN + " mt-5"}>
                                 {t.start.profile.continueBtn}
                             </button>
-                            <button onClick={() => { setStaged([]); setScreen("workspace") }} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
+                            <button onClick={() => { setStaged([]); setScreen("win") }} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
                                 {t.start.profile.skip}
                             </button>
                         </ScreenShell>

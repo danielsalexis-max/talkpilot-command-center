@@ -237,6 +237,24 @@ export const es: Dict = {
         checkoutCanceledNote: "El pago se canceló — tu espacio de trabajo quedó guardado. Agrega la facturación cuando estés listo.",
         questionsBookDemo: "¿Prefieres platicar primero? Agenda una demo →",
         showcaseTag: "VISTA PREVIA · LO QUE RECIBE TU EQUIPO",
+        size: {
+            title: "¿Qué tan grande es el equipo?",
+            sub: "Reps, agentes, cualquiera cuyas llamadas reciban coaching.",
+            options: { justme: "Solo yo, por ahora", s2_5: "2–5 personas", s6_20: "6–20 personas", s21p: "21 o más" },
+        },
+        win: {
+            title: "¿Qué haría de este piloto un éxito?",
+            sub: "Elige uno — llevaremos la cuenta contra eso durante tus 30 días.",
+            options: {
+                close: "Subir el cierre 10%+",
+                usage: "Que los reps lo usen en la mitad de sus llamadas",
+                ramp: "Que los nuevos arranquen en la mitad del tiempo",
+                consistency: "Que cada llamada siga nuestro playbook",
+            },
+            ownPlaceholder: "O escribe el tuyo…",
+        },
+        websiteLabel: "Sitio web de tu empresa (opcional)",
+        websitePlaceholder: "acme.com",
         toolsSlide: {
             caption: "Conectado a donde ya trabaja tu equipo",
             sub: "Las llamadas se registran en tu CRM y los resúmenes llegan a Slack — tus reps dejan de capturar datos.",
@@ -314,7 +332,9 @@ export const es: Dict = {
                 hubspot: "HubSpot", salesforce: "Salesforce", gcal: "Google Calendar",
                 outlook: "Outlook", slack: "Slack", meetings: "Zoom / Meet / Teams",
                 none: "Ninguna de estas",
+                other: "Otra",
             },
+            otherPlaceholder: "Odoo, Pipedrive, tu propio CRM…",
             note: "TalkPilot registra las llamadas con coaching en tu CRM y deja los resúmenes en Slack — tus reps dejan de capturar datos a mano.",
         },
         knowledge: {
