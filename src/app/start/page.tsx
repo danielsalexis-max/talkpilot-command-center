@@ -37,7 +37,7 @@ type Screen =
 const SIZE_SEATS: Record<string, number> = { justme: 3, s2_5: 4, s6_20: 10, s21p: 25 }
 
 type ProfileVertical =
-    | "sales" | "customer_care" | "contact_center" | "real_estate"
+    | "sales" | "customer_care" | "contact_center"
     | "consultants" | "recruiting" | "advisors" | "agency" | "other"
 type ProfilePain = "objections" | "discovery" | "process" | "closing" | "ramp" | "inconsistent" | "unknown"
 type ProfileMethodology =
@@ -47,7 +47,7 @@ type ProfileMethodology =
 /// Consultants/coaches and "something else" run on the sales kits — closest
 /// stages, and the flexible discovery-led kit is the recommendation anyway.
 const settingsVertical = (v: ProfileVertical): Vertical =>
-    v === "customer_care" || v === "contact_center" || v === "real_estate" ? v : "sales"
+    v === "customer_care" || v === "contact_center" ? v : "sales"
 
 /// Which methodology question applies: team types whose calls are a revenue
 /// motion. Recruiting, advisors and agencies (D-631) run discovery/pitch
@@ -75,7 +75,6 @@ const kitMethodOf = (picked: ProfileMethodology[]): ProfileMethodology =>
 function recommendedKitKey(vertical: ProfileVertical, methodology: ProfileMethodology): string {
     if (vertical === "customer_care") return "support-success"
     if (vertical === "contact_center") return "contact-center"
-    if (vertical === "real_estate") return "real-estate"
     switch (methodology) {
         case "spiced": return "spiced"
         case "bant": return "bant"
@@ -473,6 +472,9 @@ export default function StartPage() {
     // recommended — the org is born with an active playbook and a seeded
     // objection library, so the dashboard checklist starts truthfully done.
     const [kitStatus, setKitStatus]       = useState<"applying" | "done" | null>(null)
+    // D-632: the website is read for real only AFTER the workspace exists —
+    // someone who abandons onboarding at this field must cost nothing.
+    const [siteStatus, setSiteStatus]     = useState<"reading" | "done" | null>(null)
 
     const [orgName, setOrgName]   = useState("")
     const [seats, setSeats]       = useState(3)
@@ -718,6 +720,13 @@ export default function StartPage() {
             trackWorkspaceCreated()
             await saveProfileSettings(res.org_id)
             void uploadStaged(res.org_id)
+            // D-632: now — and only now — read their website into the brain.
+            if (orgWebsite.trim()) {
+                setSiteStatus("reading")
+                void callFn("ingest-website", { org_id: res.org_id, url: orgWebsite.trim() })
+                    .then(() => setSiteStatus("done"))
+                    .catch(e => { console.error("website ingest failed:", e); setSiteStatus(null) })
+            }
             // Apply the recommended kit now (D-626) — the answers already
             // picked it; making the owner re-pick it in the dashboard was the
             // half-configured gap the old checklist papered over. Non-fatal:
@@ -796,6 +805,11 @@ export default function StartPage() {
         ? starterKitsFor(locale).find(k => k.key === recommendedKitKey(pVertical, kitMethodOf(pMethods)))?.title
         : null
     const overPilotCap = seats > MAX_PILOT_SEATS
+    const websiteDomain = (() => {
+        const v = orgWebsite.trim()
+        if (!v) return null
+        try { return new URL(/^https?:\/\//i.test(v) ? v : `https://${v}`).hostname.replace(/^www\./, "") || null } catch { return null }
+    })()
 
     return (
         <div className="min-h-screen flex bg-[var(--color-bg)]">
@@ -1016,6 +1030,17 @@ export default function StartPage() {
                                     <input maxLength={120} placeholder={t.start.websitePlaceholder} className={INPUT + " mt-1.5"}
                                         inputMode="url" autoComplete="url"
                                         value={orgWebsite} onChange={e => setOrgWebsite(e.target.value)} />
+                                    {/* The "analyzing" beat while typing is UI only (D-632) —
+                                        the real read fires after create-org, so an abandoned
+                                        wizard costs nothing. */}
+                                    {websiteDomain ? (
+                                        <p key={websiteDomain} className="tp-screen flex items-center gap-1.5 text-xs text-[var(--color-accent-deep)] mt-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse" />
+                                            {t.start.websiteWillStudy(websiteDomain)}
+                                        </p>
+                                    ) : (
+                                        <p className="text-xs text-[var(--color-muted)] mt-1.5">{t.start.websiteHelp}</p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="text-xs font-medium text-[var(--color-text-secondary)]">{t.start.seatsLabel}</label>
@@ -1135,6 +1160,12 @@ export default function StartPage() {
                             sub={kitStatus === "done" && kitTitle
                                 ? `${t.start.inviteSubWithKit1}“${kitTitle}”${t.start.inviteSubWithKit2}`
                                 : t.start.inviteSubNoKit}>
+                            {siteStatus && websiteDomain && (
+                                <p className="flex items-center gap-2 text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-xl px-4 py-2.5 mb-3">
+                                    {siteStatus === "reading" && <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-pulse" />}
+                                    {siteStatus === "reading" ? t.start.websiteReading(websiteDomain) : t.start.websiteStudied(websiteDomain)}
+                                </p>
+                            )}
                             {knowStatus && (
                                 <p className="text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-xl px-4 py-2.5 mb-4">
                                     {knowStatus === "uploading" ? t.start.knowledge.uploading(staged.length) : t.start.knowledge.uploaded(knowCount)}
@@ -1173,6 +1204,11 @@ export default function StartPage() {
                             {knowStatus && (
                                 <p className="text-xs text-[var(--color-accent-deep)] font-medium mt-1">
                                     {knowStatus === "uploading" ? t.start.knowledge.uploading(staged.length) : t.start.knowledge.uploaded(knowCount)}
+                                </p>
+                            )}
+                            {siteStatus && websiteDomain && (
+                                <p className="text-xs text-[var(--color-accent-deep)] font-medium mt-1">
+                                    {siteStatus === "reading" ? t.start.websiteReading(websiteDomain) : t.start.websiteStudied(websiteDomain)}
                                 </p>
                             )}
                             <div className="space-y-4 mt-6">

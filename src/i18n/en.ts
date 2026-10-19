@@ -264,6 +264,10 @@ export const en = {
         },
         websiteLabel: "Company website (optional)",
         websitePlaceholder: "acme.com",
+        websiteHelp: "TalkPilot reads it and preps your workspace — your coach learns what you do before the first call.",
+        websiteWillStudy: (d: string) => `${d} — your coach studies it the moment your workspace is created.`,
+        websiteReading: (d: string) => `Reading ${d} — preparing your workspace…`,
+        websiteStudied: (d: string) => `${d} studied — your coach knows the business.`,
         // Per-screen showcase slides (D-615 follow-up): the right column
         // answers the question being asked, not a generic carousel.
         toolsSlide: {
@@ -296,7 +300,6 @@ export const en = {
                 sales: "Sales",
                 customer_care: "Customer care",
                 contact_center: "Contact center",
-                real_estate: "Real estate",
                 consultants: "Consultants & coaches",
                 recruiting: "Recruiting",
                 advisors: "Advisors",
@@ -307,7 +310,6 @@ export const en = {
                 sales: "Close more of the calls you already have",
                 customer_care: "Every answer on-policy, even on the hard calls",
                 contact_center: "The same rules on every agent's screen",
-                real_estate: "From first enquiry to offer",
                 consultants: "Client calls, discovery and renewals",
                 recruiting: "Client intake and candidate screens",
                 advisors: "Advice-driven client conversations",
