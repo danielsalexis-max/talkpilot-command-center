@@ -300,7 +300,7 @@ export const en = {
                 unknown: "Honestly, we don't know yet",
             },
             methodologyQ: "Do you follow a methodology?",
-            methodologySub: "A known framework or your own way of running calls — we'll pre-build your stages from it.",
+            methodologySub: "A known framework or your own way — pick every one you use; we'll pre-build your stages from them.",
             methodologies: {
                 none: "Not yet", spiced: "SPICED", bant: "BANT", sandler: "Sandler",
                 meddic: "MEDDIC", challenger: "Challenger", spin: "SPIN",

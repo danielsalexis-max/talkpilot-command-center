@@ -287,7 +287,7 @@ export const es: Dict = {
                 unknown: "La verdad, todavía no lo sabemos",
             },
             methodologyQ: "¿Siguen alguna metodología?",
-            methodologySub: "Un framework conocido o tu propia forma de llevar las llamadas — armamos tus etapas a partir de ella.",
+            methodologySub: "Un framework conocido o tu propia forma — elige todas las que usen; armamos tus etapas a partir de eso.",
             methodologies: {
                 none: "Todavía no", spiced: "SPICED", bant: "BANT", sandler: "Sandler",
                 meddic: "MEDDIC", challenger: "Challenger", spin: "SPIN",

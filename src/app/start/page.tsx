@@ -56,6 +56,12 @@ const METHOD_ORDER_SALES: ProfileMethodology[] =
 const METHOD_ORDER_GENERIC: ProfileMethodology[] =
     ["own", "none", "spiced", "bant", "sandler", "meddic", "challenger", "spin", "solution", "gap"]
 
+/// Which of the picked methodologies decides the starter kit: the first one
+/// with a kit of its own, else discovery-led (via "none").
+const KIT_METHODS: ProfileMethodology[] = ["spiced", "bant", "sandler", "meddic"]
+const kitMethodOf = (picked: ProfileMethodology[]): ProfileMethodology =>
+    KIT_METHODS.find(m => picked.includes(m)) ?? "none"
+
 /// Which starter kit the profile answers point at (keys from lib/starterKit).
 /// Methodologies without a kit of their own (Challenger, SPIN, Solution, Gap)
 /// start from discovery-led — the stages are edited after setup anyway.
@@ -435,7 +441,10 @@ export default function StartPage() {
     const [pVertical, setPVertical]       = useState<ProfileVertical | null>(null)
     const [pPains, setPPains]             = useState<ProfilePain[]>([])
     const [lastPain, setLastPain]         = useState<ProfilePain | null>(null)
-    const [pMethodology, setPMethodology] = useState<ProfileMethodology | null>(null)
+    // Multi-select since D-629: teams blend frameworks (MEDDIC for
+    // qualification, Challenger for the pitch). The kit recommendation uses
+    // the first pick that has a kit of its own.
+    const [pMethods, setPMethods] = useState<ProfileMethodology[]>([])
     const [pTools, setPTools]             = useState<string[]>([])
     // Knowledge screen: real documents, extracted client-side and held until
     // the workspace exists. knowStatus drives the "coach is reading" line on
@@ -618,8 +627,8 @@ export default function StartPage() {
                     onboarding_profile: {
                         vertical: pVertical,
                         pains: pPains,
-                        methodology: asksMethodology(pVertical) ? pMethodology : null,
-                        recommended_kit: recommendedKitKey(pVertical, pMethodology ?? "none"),
+                        methodology: asksMethodology(pVertical) ? pMethods : null,
+                        recommended_kit: recommendedKitKey(pVertical, kitMethodOf(pMethods)),
                         tools: pTools,
                         knowledge: staged.map(d => d.title),
                     },
@@ -680,7 +689,7 @@ export default function StartPage() {
             const profile = pVertical ? {
                 vertical: pVertical,
                 pain: pPains.join(",") || null,
-                methodology: asksMethodology(pVertical) ? pMethodology : null,
+                methodology: asksMethodology(pVertical) && pMethods.length ? pMethods.join(",") : null,
             } : null
             const source = captureSource()
             const res = await callFn("create-org", {
@@ -697,7 +706,7 @@ export default function StartPage() {
             // half-configured gap the old checklist papered over. Non-fatal:
             // a failure leaves the Playbook tab's picker as the fallback.
             const kit = pVertical
-                ? starterKitsFor(locale).find(k => k.key === recommendedKitKey(pVertical, pMethodology ?? "none"))
+                ? starterKitsFor(locale).find(k => k.key === recommendedKitKey(pVertical, kitMethodOf(pMethods)))
                 : null
             if (kit) {
                 setKitStatus("applying")
@@ -767,7 +776,7 @@ export default function StartPage() {
     )
 
     const kitTitle = pVertical
-        ? starterKitsFor(locale).find(k => k.key === recommendedKitKey(pVertical, pMethodology ?? "none"))?.title
+        ? starterKitsFor(locale).find(k => k.key === recommendedKitKey(pVertical, kitMethodOf(pMethods)))?.title
         : null
     const overPilotCap = seats > MAX_PILOT_SEATS
 
@@ -900,10 +909,14 @@ export default function StartPage() {
                         <ScreenShell title={t.start.profile.methodologyQ} sub={t.start.profile.methodologySub}>
                             <div className="flex flex-wrap gap-2.5">
                                 {(pVertical === "sales" ? METHOD_ORDER_SALES : METHOD_ORDER_GENERIC).map(m => (
-                                    <button key={m} type="button" aria-pressed={pMethodology === m}
-                                        onClick={() => pickAndAdvance(() => setPMethodology(m), "tools")}
+                                    <button key={m} type="button" aria-pressed={pMethods.includes(m)}
+                                        onClick={() => setPMethods(prev =>
+                                            // "Not yet" stands alone; anything else clears it.
+                                            m === "none" ? (prev.includes("none") ? [] : ["none"])
+                                            : prev.includes(m) ? prev.filter(x => x !== m)
+                                            : [...prev.filter(x => x !== "none"), m])}
                                         className={`px-4 py-2.5 rounded-xl border text-[14px] font-semibold transition-all duration-150 ${
-                                            pMethodology === m
+                                            pMethods.includes(m)
                                                 ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] ring-1 ring-[var(--color-accent)]"
                                                 : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)]"
                                         }`}>
@@ -911,7 +924,11 @@ export default function StartPage() {
                                     </button>
                                 ))}
                             </div>
-                            {kitTitle && pMethodology && (
+                            <button disabled={pMethods.length === 0}
+                                onClick={() => setScreen("tools")} className={BTN + " mt-5"}>
+                                {t.start.profile.continueBtn}
+                            </button>
+                            {kitTitle && pMethods.length > 0 && (
                                 <p className="text-xs text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-xl px-4 py-3 mt-5">
                                     {t.start.profile.recommendedKit(kitTitle)}
                                 </p>
