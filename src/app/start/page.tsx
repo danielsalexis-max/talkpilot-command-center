@@ -454,7 +454,7 @@ export default function StartPage() {
     const [pMethods, setPMethods] = useState<ProfileMethodology[]>([])
     // D-630: size band, pilot-win anchor, website, free-text tool.
     const [pSize, setPSize]       = useState<string | null>(null)
-    const [pWin, setPWin]         = useState<string | null>(null)
+    const [pWins, setPWins]       = useState<string[]>([])
     const [pWinOther, setPWinOther] = useState("")
     const [toolOtherSel, setToolOtherSel] = useState(false)
     const [toolOther, setToolOther]       = useState("")
@@ -644,7 +644,7 @@ export default function StartPage() {
                         methodology: asksMethodology(pVertical) ? pMethods : null,
                         recommended_kit: recommendedKitKey(pVertical, kitMethodOf(pMethods)),
                         team_size: pSize,
-                        pilot_win: pWinOther.trim() || pWin,
+                        pilot_win: [...pWins, ...(pWinOther.trim() ? [pWinOther.trim()] : [])],
                         website: orgWebsite.trim() || null,
                         tools: [...pTools, ...(toolOtherSel && toolOther.trim() ? ["other:" + toolOther.trim()] : [])],
                         knowledge: staged.map(d => d.title),
@@ -971,22 +971,22 @@ export default function StartPage() {
                     {screen === "win" && (
                         <ScreenShell title={t.start.win.title} sub={t.start.win.sub}>
                             {/* Anchoring on purpose (D-630): they pick the success
-                                criterion they'll want to see come true. */}
-                            <div className="grid gap-2.5">
+                                criteria they'll want to see come true. Multi-select —
+                                a pilot usually has a usage goal AND an outcome goal. */}
+                            <div className="grid gap-2">
                                 {(Object.keys(t.start.win.options) as (keyof Dict["start"]["win"]["options"])[]).map(k => (
-                                    <OptionCard key={k} title={t.start.win.options[k]}
-                                        selected={pWin === k && !pWinOther.trim()}
-                                        onClick={() => pickAndAdvance(() => { setPWin(k); setPWinOther("") }, "workspace")} />
+                                    <CheckRow key={k} label={t.start.win.options[k]}
+                                        checked={pWins.includes(k)}
+                                        onClick={() => setPWins(prev => prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k])} />
                                 ))}
                             </div>
                             <input className={INPUT + " mt-3"} placeholder={t.start.win.ownPlaceholder}
-                                value={pWinOther} onChange={e => { setPWinOther(e.target.value); if (e.target.value.trim()) setPWin(null) }} />
-                            {pWinOther.trim() && (
-                                <button onClick={() => setScreen("workspace")} className={BTN + " mt-4"}>
-                                    {t.start.profile.continueBtn}
-                                </button>
-                            )}
-                            <button onClick={() => setScreen("workspace")} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
+                                value={pWinOther} onChange={e => setPWinOther(e.target.value)} />
+                            <button disabled={pWins.length === 0 && !pWinOther.trim()}
+                                onClick={() => setScreen("workspace")} className={BTN + " mt-4"}>
+                                {t.start.profile.continueBtn}
+                            </button>
+                            <button onClick={() => { setPWins([]); setPWinOther(""); setScreen("workspace") }} className="block mx-auto text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] mt-3">
                                 {t.start.profile.skip}
                             </button>
                         </ScreenShell>

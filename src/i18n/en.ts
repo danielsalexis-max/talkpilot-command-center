@@ -253,7 +253,7 @@ export const en = {
         },
         win: {
             title: "What would make this pilot a win?",
-            sub: "Pick one — we'll keep score against it during your 30 days.",
+            sub: "Pick all that apply — we'll keep score against them during your 30 days.",
             options: {
                 close: "Close rate up 10%+",
                 usage: "Reps using it on 50%+ of their calls",

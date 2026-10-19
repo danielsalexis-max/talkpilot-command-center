@@ -244,7 +244,7 @@ export const es: Dict = {
         },
         win: {
             title: "¿Qué haría de este piloto un éxito?",
-            sub: "Elige uno — llevaremos la cuenta contra eso durante tus 30 días.",
+            sub: "Elige todos los que apliquen — llevaremos la cuenta contra eso durante tus 30 días.",
             options: {
                 close: "Subir el cierre 10%+",
                 usage: "Que los reps lo usen en el 50%+ de sus llamadas",
