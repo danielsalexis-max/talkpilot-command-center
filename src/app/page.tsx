@@ -7,7 +7,7 @@ import type { Route } from "next"
 import { supabase, type Scorecard } from "@/lib/supabase"
 import { ScoreRing } from "@/components/ScoreRing"
 import { InsightsSections } from "@/components/InsightsSections"
-import { PageSkeleton, HomeSetupCard, type SetupState } from "@/components/homeStates"
+import { PageSkeleton, HomeSetupCard, CoachReadingBanner, type SetupState } from "@/components/homeStates"
 import { useLocale } from "@/i18n/LocaleProvider"
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
@@ -261,6 +261,8 @@ export default function HomePage() {
                  half (owner-controllable steps only, auto-retires when all
                  done) beside a status half showing zero-state value ("no
                  coaching sessions to review") until the first scorecard lands. ── */}
+            {org && <CoachReadingBanner orgId={org.id} />}
+
             {setup && org && (
                 <HomeSetupCard state={setup} orgId={org.id} hasCards={cards.length > 0} />
             )}

@@ -623,6 +623,8 @@ export const es: Dict = {
         nextStep: "Siguiente paso",
         stepCount: (done: number, total: number) => `${done} de ${total} listos`,
         dismissChecklist: "Cerrar esta lista",
+        readingTitle: (n: number) => `Tu coach está leyendo ${n} documento${n === 1 ? "" : "s"}…`,
+        readingDone: (n: number) => `${n} documento${n === 1 ? "" : "s"} estudiado${n === 1 ? "" : "s"} — tu coach ya responde con ${n === 1 ? "él" : "ellos"}.`,
         readyTitle: "Todo listo — la primera llamada hace el resto",
         readySub: "Tus reps reciben coaching en vivo con tu playbook en su próxima llamada, y el scorecard llega aquí minutos después de que termina.",
         statusToday: "Mientras tanto, tu espacio hoy",

@@ -2,8 +2,9 @@
 
 import Link from "next/link"
 import type { Route } from "next"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useT } from "@/i18n/LocaleProvider"
+import { supabase } from "@/lib/supabase"
 
 /// The first-run life of the Home page (D-175, reshaped). A brand-new org
 /// spends its whole trial with an empty dashboard, which is exactly when the
@@ -237,4 +238,64 @@ export function HomeSetupCard({ state, orgId, hasCards }: { state: SetupState; o
             )}
         </div>
     )
+}
+
+// ── "Your coach is reading" banner (D-634) ──────────────────────────────────
+//
+// Wizard uploads and the website read finish in seconds, but an owner who
+// clicks straight through lands on Home while rows are still `processing` —
+// and saw nothing, which read as "nothing happened". This polls the org's
+// processing count and shows a live line until it reaches zero, then a short
+// "studied" confirmation that retires itself. Renders nothing otherwise.
+export function CoachReadingBanner({ orgId }: { orgId: string }) {
+    const t = useT()
+    const [processing, setProcessing] = useState<string[] | null>(null)
+    const [justFinished, setJustFinished] = useState(0)
+
+    useEffect(() => {
+        let cancelled = false
+        let seen = 0
+        let ticks = 0
+        async function poll() {
+            const { data } = await supabase.from("org_knowledge")
+                .select("title").eq("org_id", orgId).eq("status", "processing")
+            if (cancelled) return
+            const titles = (data ?? []).map(r => r.title as string)
+            seen = Math.max(seen, titles.length)
+            setProcessing(titles)
+            if (titles.length === 0) {
+                if (seen > 0) {
+                    setJustFinished(seen)
+                    setTimeout(() => { if (!cancelled) setJustFinished(0) }, 8000)
+                }
+                return
+            }
+            // ~3 minutes max — an ingest stuck longer is a failure the
+            // Knowledge tab surfaces, not something to spin forever on Home.
+            if (++ticks < 45) setTimeout(poll, 4000)
+        }
+        poll()
+        return () => { cancelled = true }
+    }, [orgId])
+
+    if (processing && processing.length > 0) {
+        return (
+            <div className="tp-screen flex items-center gap-3 rounded-xl border border-[var(--color-accent-light)] bg-[var(--color-accent-subtle)] px-4 py-3">
+                <span className="w-2 h-2 rounded-full bg-[var(--color-accent)] animate-pulse shrink-0" />
+                <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--color-accent-deep)]">{t.homeStates.readingTitle(processing.length)}</p>
+                    <p className="text-xs text-[var(--color-accent-deep)] opacity-80 truncate">{processing.join(" · ")}</p>
+                </div>
+            </div>
+        )
+    }
+    if (justFinished > 0) {
+        return (
+            <div className="tp-screen flex items-center gap-3 rounded-xl border border-[var(--color-accent-light)] bg-[var(--color-accent-subtle)] px-4 py-3">
+                <span className="w-5 h-5 rounded-full bg-emerald-500 text-white text-[11px] font-bold flex items-center justify-center shrink-0">✓</span>
+                <p className="text-sm font-semibold text-[var(--color-accent-deep)]">{t.homeStates.readingDone(justFinished)}</p>
+            </div>
+        )
+    }
+    return null
 }

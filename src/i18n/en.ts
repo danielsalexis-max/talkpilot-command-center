@@ -657,6 +657,8 @@ export const en = {
         nextStep: "Next step",
         stepCount: (done: number, total: number) => `${done} of ${total} done`,
         dismissChecklist: "Dismiss this checklist",
+        readingTitle: (n: number) => `Your coach is reading ${n} document${n === 1 ? "" : "s"}…`,
+        readingDone: (n: number) => `${n} document${n === 1 ? "" : "s"} studied — your coach answers from ${n === 1 ? "it" : "them"} now.`,
         readyTitle: "You're set up — the first call does the rest",
         readySub: "Reps get coached live through your playbook on their next call, and the scorecard lands here minutes after it ends.",
         statusToday: "Meanwhile, your workspace today",
