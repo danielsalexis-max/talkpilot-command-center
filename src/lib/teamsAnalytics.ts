@@ -58,6 +58,9 @@ function addScript(src: string) {
 
 let booted = false
 let adPixelsBooted = false
+// The signed-in user, so groupOrg() can add plan/org_id to Hotjar's identify
+// once the workspace is known.
+let hjUserId: string | null = null
 
 /// PostHog + Hotjar, on every Command Center page.
 export function initTeamsAnalytics() {
@@ -152,7 +155,10 @@ export function identifyTeamsUser(userId: string, email: string | null | undefin
             b2b_user: true,
             ...props,
         })
-        window.hj?.("identify", userId, { email: e, b2b: true })
+        // Hotjar gets NO PII (no email, no name): the user id plus B2B tags.
+        // plan/org_id are added by groupOrg() once the workspace is known.
+        hjUserId = userId
+        window.hj?.("identify", userId, { b2b: true })
     } catch { /* never break the page */ }
 }
 
@@ -162,6 +168,23 @@ export function groupOrg(orgId: string, props: Props = {}) {
         if (!onProdHost()) return
         initTeamsAnalytics()
         window.posthog?.group("organization", orgId, props)
+        if (hjUserId) {
+            window.hj?.("identify", hjUserId, {
+                b2b: true,
+                plan: typeof props.plan === "string" ? props.plan : "unknown",
+                org_id: orgId,
+            })
+        }
+    } catch { /* never break the page */ }
+}
+
+/// Hotjar sees a Next.js client-side navigation (and each /start wizard
+/// screen, which shares one URL) only if told: without this every recording
+/// and heatmap lumped the whole session onto the first page.
+export function hjStateChange(url: string) {
+    try {
+        if (!onProdHost()) return
+        window.hj?.("stateChange", url)
     } catch { /* never break the page */ }
 }
 
@@ -177,5 +200,6 @@ export function trackAdConversion(name: "CompleteRegistration" | "StartTrial" | 
 
 /// On sign-out, so the next person on a shared machine isn't merged in.
 export function resetTeamsAnalytics() {
+    hjUserId = null
     try { if (onProdHost()) window.posthog?.reset() } catch { /* never break */ }
 }

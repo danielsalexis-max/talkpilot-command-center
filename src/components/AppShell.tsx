@@ -4,11 +4,11 @@ import Link from "next/link"
 import type { Route } from "next"
 import { usePathname, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { applySkin, getSkinPref, setSkinPref, watchSystemSkin } from "@/lib/skin"
 import { useT } from "@/i18n/LocaleProvider"
 import { LocaleSwitcher } from "@/components/LocaleSwitcher"
-import { initTeamsAnalytics, identifyTeamsUser, groupOrg, resetTeamsAnalytics } from "@/lib/teamsAnalytics"
+import { initTeamsAnalytics, identifyTeamsUser, groupOrg, resetTeamsAnalytics, hjStateChange } from "@/lib/teamsAnalytics"
 
 /// Client-side chrome — the Boardroom sidebar. Split out of the root layout so
 /// layout.tsx can stay a server component and export metadata.
@@ -112,6 +112,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     // B2B analytics (D-636): PostHog + Hotjar on every page of the app.
     useEffect(() => { initTeamsAnalytics() }, [])
+
+    // Hotjar: each client-side route change is its own page. The first
+    // render is skipped, Hotjar already records the landing URL itself.
+    const firstPath = useRef(true)
+    useEffect(() => {
+        if (firstPath.current) { firstPath.current = false; return }
+        hjStateChange(window.location.pathname + window.location.search)
+    }, [pathname])
 
     useEffect(() => {
         applySkin()

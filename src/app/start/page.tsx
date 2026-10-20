@@ -11,7 +11,7 @@ import { EmailLink } from "@/components/EmailLink"
 import { ToolIcon } from "@/components/toolIcons"
 import { extractTextFromFile, EXTRACT_ACCEPT } from "@/lib/extractText"
 import { ingestKnowledgeInlineVerbose } from "@/lib/orgBrain"
-import { track, identifyTeamsUser, groupOrg, initAdPixels, trackAdConversion } from "@/lib/teamsAnalytics"
+import { track, identifyTeamsUser, groupOrg, initAdPixels, trackAdConversion, hjStateChange } from "@/lib/teamsAnalytics"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
 import type { Dict } from "@/i18n"
 
@@ -545,6 +545,8 @@ export default function StartPage() {
     useEffect(() => {
         if (checking) return
         track("step_viewed", { step: screen, step_index: screenIdx + 1, step_total: flow.length })
+        // Every wizard screen shares /start; give Hotjar a page per screen.
+        hjStateChange(`/start/${screen}`)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [screen, checking])
 
@@ -803,7 +805,7 @@ export default function StartPage() {
             })
             setOrgId(res.org_id)
             trackWorkspaceCreated()
-            groupOrg(res.org_id, { name: orgName, seats: seatCount, vertical: pVertical, team_size: pSize })
+            groupOrg(res.org_id, { name: orgName, plan: "team", seats: seatCount, vertical: pVertical, team_size: pSize })
             track("workspace_created", {
                 seats: seatCount, pilot: typeof res.card_trial_days === "number", over_pilot_cap: seatCount > MAX_PILOT_SEATS,
                 vertical: pVertical, team_size: pSize, pains: pPains, methodology: pMethods, tools: pTools,
