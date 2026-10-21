@@ -812,6 +812,10 @@ export default function StartPage() {
                 has_website: !!orgWebsite.trim(), src: source?.src ?? null, variant: source?.variant ?? null,
             })
             trackAdConversion("CompleteRegistration", { value: seatCount * SEAT_PRICE_MONTHLY, currency: "USD" })
+            // The Meta web cells (D-611) optimize for Lead, which talkpilot.co
+            // fires only on a demo-form submit. A pilot-first signup is a lead
+            // too (D-612 counts it for Google), so Meta has to see it as one.
+            trackAdConversion("Lead", { content_name: "Teams workspace created" })
             await saveProfileSettings(res.org_id)
             void uploadStaged(res.org_id)
             // D-632: now — and only now — read their website into the brain.

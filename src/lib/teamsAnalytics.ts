@@ -61,6 +61,8 @@ let adPixelsBooted = false
 // The signed-in user, so groupOrg() can add plan/org_id to Hotjar's identify
 // once the workspace is known.
 let hjUserId: string | null = null
+// The e2e identity's workspaces are not leads; Meta must never optimize on them.
+let adOptOut = false
 
 /// PostHog + Hotjar, on every Command Center page.
 export function initTeamsAnalytics() {
@@ -148,7 +150,7 @@ export function identifyTeamsUser(userId: string, email: string | null | undefin
         initTeamsAnalytics()
         if (!window.posthog) return
         const e = (email ?? "").toLowerCase()
-        if (e === E2E_EMAIL) { window.posthog.opt_out_capturing(); return }
+        if (e === E2E_EMAIL) { adOptOut = true; window.posthog.opt_out_capturing(); return }
         window.posthog.identify(userId, {
             email: e || undefined,
             is_internal: e.endsWith("@talkpilot.co"),
@@ -193,7 +195,7 @@ export function hjStateChange(url: string) {
 /// Manager, so only Meta needs explicit calls).
 export function trackAdConversion(name: "CompleteRegistration" | "StartTrial" | "Lead", props: Props = {}) {
     try {
-        if (!onProdHost()) return
+        if (!onProdHost() || adOptOut) return
         window.fbq?.("track", name, props)
     } catch { /* never break onboarding */ }
 }
