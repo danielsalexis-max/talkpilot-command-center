@@ -6,7 +6,8 @@ import { usePathname, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useEffect, useRef, useState } from "react"
 import { applySkin, getSkinPref, setSkinPref, watchSystemSkin } from "@/lib/skin"
-import { useT } from "@/i18n/LocaleProvider"
+import { useLocale, useT } from "@/i18n/LocaleProvider"
+import { demoBookingUrl } from "@/lib/demoBooking"
 import { LocaleSwitcher } from "@/components/LocaleSwitcher"
 import { initTeamsAnalytics, identifyTeamsUser, groupOrg, resetTeamsAnalytics, hjStateChange } from "@/lib/teamsAnalytics"
 
@@ -68,6 +69,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname()
     const router = useRouter()
     const t = useT()
+    const { locale } = useLocale()
     const [email, setEmail]           = useState<string | null>(null)
     const [orgName, setOrgName]       = useState<string | null>(null)
     const [visibility, setVisibility] = useState<string | null>(null)
@@ -366,7 +368,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                                 className="block w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-medium rounded-lg transition-colors">
                                 {t.billingGate.addBilling}
                             </Link>
-                            <a href="https://talkpilot.co/demo" target="_blank" rel="noopener noreferrer"
+                            <a href={demoBookingUrl(locale, "billing gate")} target="_blank" rel="noopener noreferrer"
                                 className="block w-full py-2.5 bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-muted)] text-sm font-medium text-[var(--color-text)] rounded-lg transition-colors">
                                 {t.billingGate.bookDemo}
                             </a>

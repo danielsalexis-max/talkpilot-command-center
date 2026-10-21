@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { demoBookingUrl } from "@/lib/demoBooking"
 import { supabase } from "@/lib/supabase"
 import { isPersonalEmail } from "@/lib/workEmail"
 import { starterKitsFor, applyStarterKit, type Vertical } from "@/lib/starterKit"
@@ -162,8 +163,6 @@ function guessKind(fileName: string): string {
     return "doc"
 }
 
-/// Where "talk to us first" goes — one click away on every screen.
-const DEMO_URL = "https://talkpilot.co/demo"
 
 async function callFn(name: string, body: unknown) {
     const { data: { session } } = await supabase.auth.getSession()
@@ -948,7 +947,7 @@ export default function StartPage() {
                     self-serve is the default motion, not the only one. */}
                 {screen !== "done" && (
                     <p className="mb-7 text-[11px] pl-10">
-                        <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" onClick={() => track("demo_clicked", { step: screen })} className="text-[var(--color-muted)] hover:text-[var(--color-accent-deep)]">
+                        <a href={demoBookingUrl(locale, `start ${screen}`)} target="_blank" rel="noopener noreferrer" onClick={() => track("demo_clicked", { step: screen })} className="text-[var(--color-muted)] hover:text-[var(--color-accent-deep)]">
                             {t.start.questionsBookDemo}
                         </a>
                     </p>
@@ -1180,7 +1179,7 @@ export default function StartPage() {
                                     </div>
                                     <p className="text-xs text-[var(--color-text-secondary)] mt-2">
                                         {t.start.enterpriseNote}{" "}
-                                        <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" onClick={() => track("demo_clicked", { step: screen })} className="font-semibold text-[var(--color-accent-deep)] hover:underline">
+                                        <a href={demoBookingUrl(locale, `start ${screen}`)} target="_blank" rel="noopener noreferrer" onClick={() => track("demo_clicked", { step: screen })} className="font-semibold text-[var(--color-accent-deep)] hover:underline">
                                             {t.start.enterpriseCta}
                                         </a>
                                     </p>
@@ -1373,7 +1372,7 @@ export default function StartPage() {
                                         <button onClick={startCheckout} disabled={checkoutBusy} className={BTN + " sm:w-auto px-5"}>
                                             {checkoutBusy ? t.start.openingCheckout : cardTrialDays ? t.start.cardTrialCta : t.start.goToCheckout}
                                         </button>
-                                        <a href={DEMO_URL} target="_blank" rel="noopener noreferrer" onClick={() => track("demo_clicked", { step: screen })} className={BTN_GHOST + " sm:w-auto px-5 text-center"}>{t.start.bookDemoInstead}</a>
+                                        <a href={demoBookingUrl(locale, `start ${screen}`)} target="_blank" rel="noopener noreferrer" onClick={() => track("demo_clicked", { step: screen })} className={BTN_GHOST + " sm:w-auto px-5 text-center"}>{t.start.bookDemoInstead}</a>
                                     </div>
                                     {error && <p className="text-xs text-amber-700">{error}</p>}
                                 </div>
