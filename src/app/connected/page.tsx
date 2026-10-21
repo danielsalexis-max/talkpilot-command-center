@@ -24,6 +24,12 @@ const PROVIDER_LABELS: Record<string, string> = {
     monday: "monday.com",
     google: "Google",
     microsoft: "Microsoft",
+    microsoft_teams: "Microsoft Teams",   // D-672
+    microsoft_files: "Microsoft",         // D-673 (SharePoint / OneDrive)
+    google_drive: "Google Drive",         // D-673
+    asana: "Asana",
+    jira: "Jira",
+    clickup: "ClickUp",
 }
 
 export default function ConnectedPage() {

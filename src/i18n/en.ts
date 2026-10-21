@@ -474,6 +474,51 @@ export const en = {
         backToApp: "Back to TalkPilot",
     },
 
+    // /connected/files (D-673): pick Google Drive or SharePoint/OneDrive
+    // files after connect. Nobody is signed in; a short-lived ticket in the
+    // URL stands in for the session.
+    connectedFiles: {
+        titleGoogle: "Pick files from Google Drive",
+        titleMicrosoft: "Pick files from SharePoint or OneDrive",
+        intro: "Pick the files your coach can read. We check them once a day and update them when they change.",
+        folderNote: "If you pick a folder, we add the files inside it (up to 20).",
+        openPicker: "Pick files",
+        loading: "Loading…",
+        recent: "Recent",
+        myFiles: "My files",
+        sites: "SharePoint sites",
+        searchPlaceholder: "Search your files",
+        search: "Search",
+        back: "Back",
+        empty: "Nothing here.",
+        noSites: "You don't follow any SharePoint sites yet.",
+        addSelected: (n: number) => n === 1 ? "Add 1 file" : `Add ${n} files`,
+        adding: "Adding your files…",
+        added: "Added",
+        updated: "Updated",
+        doneTitle: "Done. You can go back to TalkPilot.",
+        doneBody: (n: number) => n === 1 ? "1 file was added to your documents." : `${n} files were added to your documents.`,
+        done: "Done",
+        expired: "This link expired. Open TalkPilot and pick files again.",
+        notConnected: "We couldn't find your connection. Connect again from TalkPilot.",
+        reauth: "Your connection expired. Connect again from TalkPilot.",
+        notConfigured: "Picking files isn't ready yet. Try again later.",
+        proRequired: "Documents are part of Pro. Upgrade in TalkPilot to add files.",
+        genericError: "Something went wrong. Try again.",
+        reasons: {
+            format: "We can't read this file type. Save it as PDF, .docx or .pptx.",
+            media: "Audio, video and images can't be added.",
+            size: "This file is too big (25 MB max).",
+            too_long: "This file has too much text. Split it into smaller files.",
+            empty: "We found no text in it.",
+            unreadable: "We couldn't read this file.",
+            not_found: "We couldn't find this file.",
+            no_access: "TalkPilot can't open this file.",
+            too_many: "You have 50 documents. Delete one to add more.",
+            limit: "Too many files at once. Pick this one again.",
+        } as Record<string, string>,
+    },
+
     // D-538 — TalkPilot in Claude & ChatGPT, the admin card in Settings.
     aiConnector: {
         title: "Claude & ChatGPT",

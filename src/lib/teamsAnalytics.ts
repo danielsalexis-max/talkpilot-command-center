@@ -67,6 +67,10 @@ let adOptOut = false
 /// PostHog + Hotjar, on every Command Center page.
 export function initTeamsAnalytics() {
     if (booted || !onProdHost()) return
+    // D-673: /connected/files carries a sign-in ticket in its URL. PostHog's
+    // pageview and Hotjar's recording would both store it; that page runs
+    // without analytics.
+    if (window.location.pathname.startsWith("/connected/files")) return
     booted = true
     try {
         // Official PostHog loader stub, same as talkpilot.co's AnalyticsScripts.
