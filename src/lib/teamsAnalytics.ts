@@ -11,7 +11,7 @@
 ///   (`organization`), so funnels can be read per company, not just per person.
 /// - **Hotjar** (same site as talkpilot.co) for recordings/heatmaps of the
 ///   wizard and dashboard.
-/// - **PostHog error tracking + session replay** (D-698, 2026-10-23): every
+/// - **PostHog error tracking + session replay** (D-700, 2026-10-23): every
 ///   uncaught error and unhandled rejection becomes a `$exception` event, and
 ///   the Next.js error boundaries (src/app/error.tsx, global-error.tsx)
 ///   report through `reportError()`. Replay is OFF unless the PostHog feature
@@ -37,7 +37,7 @@ const LINKEDIN_PARTNER_ID = "8892300"
 const E2E_EMAIL = "e2e@talkpilot.co"
 /// PostHog feature flag that turns session replay on for a person. Create it
 /// in PostHog (same project as talkpilot.co) with a percentage rollout — that
-/// percentage is the recording sample rate (D-698: 20%). Nothing records
+/// percentage is the recording sample rate (D-700: 20%). Nothing records
 /// while the flag does not exist.
 const REPLAY_FLAG = "cc-session-replay"
 /// Text under these never leaves the browser in a recording. Tag the
@@ -113,10 +113,10 @@ export function initTeamsAnalytics() {
             defaults: "2025-05-24",
             capture_pageview: "history_change",
             capture_pageleave: true,
-            // Error tracking (D-698): window.onerror + unhandledrejection
+            // Error tracking (D-700): window.onerror + unhandledrejection
             // become `$exception` events, grouped as issues in PostHog.
             capture_exceptions: true,
-            // Session replay (D-698) is opt-in per person via the
+            // Session replay (D-700) is opt-in per person via the
             // `cc-session-replay` feature flag — its rollout % IS the sample
             // rate — and starts below once flags are known. Everything that
             // can hold a client's words is masked before it leaves the browser.

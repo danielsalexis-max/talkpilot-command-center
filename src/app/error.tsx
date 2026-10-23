@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { clientDict } from "@/i18n"
 import { reportError } from "@/lib/teamsAnalytics"
 
-/// Route-level error boundary (D-698): a page that throws during render lands
+/// Route-level error boundary (D-700): a page that throws during render lands
 /// here instead of on a blank screen. The error goes to PostHog as an
 /// `$exception` (source: error_boundary); the layout, nav and locale survive,
 /// so the person can retry the page or leave. Text comes from the dictionary
