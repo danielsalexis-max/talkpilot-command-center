@@ -463,6 +463,8 @@ export const es: Dict = {
         noSites: "Todavía no sigues ningún sitio de SharePoint.",
         addSelected: (n: number) => n === 1 ? "Agregar 1 archivo" : `Agregar ${n} archivos`,
         adding: "Agregando tus archivos…",
+        addingProgress: (done: number, total: number) => `Agregando tus archivos… ${done} de ${total}`,
+        addingOne: "Agregando…",
         added: "Agregado",
         updated: "Actualizado",
         doneTitle: "Listo. Ya puedes volver a TalkPilot.",

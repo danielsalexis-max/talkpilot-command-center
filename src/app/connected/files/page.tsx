@@ -114,6 +114,11 @@ function FilesContent() {
     useEffect(() => { if (!ticket) setFatal("invalid_ticket") }, [ticket])
     const [busy, setBusy] = useState(false)
     const [results, setResults] = useState<ImportResult[]>([])
+    // Everything picked shows at once with a spinner, and each row turns into
+    // its result as it lands: adding 5 files used to show nothing until each
+    // one finished, so it looked like some were missing.
+    const [pending, setPending] = useState<Picked[]>([])
+    const [progress, setProgress] = useState({ done: 0, total: 0 })
 
     const fatalMessage = (code: string) => {
         switch (code) {
@@ -131,6 +136,8 @@ function FilesContent() {
     const importPicked = useCallback(async (picked: Picked[]) => {
         if (!picked.length) return
         setBusy(true)
+        setPending(picked)
+        setProgress({ done: 0, total: picked.length })
         try {
             for (const p of picked) {
                 try {
@@ -145,9 +152,13 @@ function FilesContent() {
                         return
                     }
                     setResults((prev) => [...prev, { id: p.id, name: p.name, ok: false, error: code }])
+                } finally {
+                    setPending((prev) => prev.filter((x) => x.id !== p.id))
+                    setProgress((prev) => ({ ...prev, done: prev.done + 1 }))
                 }
             }
         } finally {
+            setPending([])
             setBusy(false)
         }
     }, [ticket])
@@ -171,15 +182,29 @@ function FilesContent() {
                     <MicrosoftBrowser ticket={ticket} disabled={busy} onPicked={importPicked} onFatal={setFatal} />
                 )}
 
-                {busy && <p className="text-sm text-[var(--color-muted)] mt-5">{t.adding}</p>}
+                {busy && (
+                    <p className="text-sm text-[var(--color-muted)] mt-5 flex items-center gap-2">
+                        <Spinner />
+                        {progress.total > 1 ? t.addingProgress(progress.done, progress.total) : t.adding}
+                    </p>
+                )}
 
-                {results.length > 0 && (
+                {(results.length > 0 || pending.length > 0) && (
                     <ul className="mt-6 divide-y divide-[var(--color-border)] border border-[var(--color-border)] rounded-xl">
                         {results.map((r) => (
                             <li key={r.id} className="px-4 py-2.5 flex items-start justify-between gap-3 text-sm">
                                 <span className="text-[var(--color-text)] break-all">{r.name}</span>
                                 <span className={`shrink-0 text-right ${r.ok ? "text-[var(--color-accent)]" : "text-[#C4534A]"}`}>
                                     {r.ok ? (r.replaced ? t.updated : t.added) : (t.reasons[r.error] ?? t.genericError)}
+                                </span>
+                            </li>
+                        ))}
+                        {pending.map((p) => (
+                            <li key={`pending-${p.id}`} className="px-4 py-2.5 flex items-start justify-between gap-3 text-sm">
+                                <span className="text-[var(--color-muted)] break-all">{p.name}</span>
+                                <span className="shrink-0 flex items-center gap-1.5 text-[var(--color-muted)]">
+                                    <Spinner />
+                                    {t.addingOne}
                                 </span>
                             </li>
                         ))}
@@ -206,6 +231,15 @@ function FilesContent() {
                 </div>
             </div>
         </div>
+    )
+}
+
+function Spinner() {
+    return (
+        <span
+            aria-hidden
+            className="inline-block h-3.5 w-3.5 rounded-full border-2 border-[var(--color-border)] border-t-[var(--color-accent)] animate-spin"
+        />
     )
 }
 

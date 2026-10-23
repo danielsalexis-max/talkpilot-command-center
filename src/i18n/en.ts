@@ -494,6 +494,8 @@ export const en = {
         noSites: "You don't follow any SharePoint sites yet.",
         addSelected: (n: number) => n === 1 ? "Add 1 file" : `Add ${n} files`,
         adding: "Adding your files…",
+        addingProgress: (done: number, total: number) => `Adding your files… ${done} of ${total}`,
+        addingOne: "Adding…",
         added: "Added",
         updated: "Updated",
         doneTitle: "Done. You can go back to TalkPilot.",
