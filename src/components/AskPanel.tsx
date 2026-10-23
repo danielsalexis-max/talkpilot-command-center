@@ -41,7 +41,7 @@ export function AskPanel({
     }
 
     return (
-        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 space-y-3">
+        <div data-ph-mask className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 space-y-3">
             <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-[var(--color-text)]">{heading}</span>
                 <span className="text-[11px] px-1.5 py-0.5 rounded bg-[var(--color-accent-subtle)] text-[var(--color-accent)]">AI</span>

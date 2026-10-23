@@ -44,7 +44,7 @@ function PlaybookPageInner() {
     )
 
     return (
-        <div className="space-y-6">
+        <div data-ph-mask className="space-y-6">
             <div>
                 <h1 className="text-2xl font-bold text-[var(--color-text)]">{t.playbookPage.title}</h1>
                 <p className="text-sm text-[var(--color-text-secondary)] mt-1">

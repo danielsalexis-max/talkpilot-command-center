@@ -113,7 +113,7 @@ export default function ScorecardPage() {
     const highlights = card.highlights ?? []
 
     return (
-        <div className="space-y-6">
+        <div data-ph-mask className="space-y-6">
             {/* Breadcrumb */}
             <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
                 <Link href="/"    className="hover:text-[var(--color-text)] transition-colors">{t.scorecard.crumbOverview}</Link>

@@ -1611,4 +1611,11 @@ export const es: Dict = {
             portalNote: "El método de pago, las facturas y la cancelación se manejan en el portal seguro de Stripe.",
         },
     },
+
+    errorPage: {
+        title: "Algo salió mal",
+        body: "Esta página tuvo un error. Ya nos enteramos. Puedes intentar de nuevo o volver al inicio.",
+        retry: "Intentar de nuevo",
+        home: "Ir al inicio",
+    },
 }

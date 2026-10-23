@@ -1665,6 +1665,16 @@ export const en = {
             portalNote: "Payment method, invoices, and cancellation are handled in the secure Stripe portal.",
         },
     },
+
+    // Recovery screen the Next.js error boundaries render (src/app/error.tsx,
+    // global-error.tsx) when a page crashes. Kept minimal: the error is
+    // already reported, the person needs a way out.
+    errorPage: {
+        title: "Something went wrong",
+        body: "This page hit an error. We've been notified. You can try again, or go back to the home page.",
+        retry: "Try again",
+        home: "Go to home",
+    },
 }
 
 export type Dict = typeof en

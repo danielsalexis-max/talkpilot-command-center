@@ -168,7 +168,7 @@ export default function CallsPage() {
                             <tr key={c.id} onClick={() => router.push(`/scorecard/${c.id}`)}
                                 className={`cursor-pointer hover:bg-[var(--color-hover)] transition-colors ${c.excluded_at ? "opacity-55" : ""}`}>
                                 <td className="px-4 py-3">
-                                    <span className="font-medium text-[var(--color-text)] block truncate max-w-[320px]">
+                                    <span data-ph-mask className="font-medium text-[var(--color-text)] block truncate max-w-[320px]">
                                         {c.session_title || (c.started_at ? new Date(c.started_at).toLocaleString(intl, { dateStyle: "medium", timeStyle: "short" }) : t.common.scoredCall)}
                                     </span>
                                     <span className="text-xs text-[var(--color-muted)] sm:hidden">{label(c.user_id)}</span>

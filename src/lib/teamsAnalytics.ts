@@ -11,6 +11,16 @@
 ///   (`organization`), so funnels can be read per company, not just per person.
 /// - **Hotjar** (same site as talkpilot.co) for recordings/heatmaps of the
 ///   wizard and dashboard.
+/// - **PostHog error tracking + session replay** (D-698, 2026-10-23): every
+///   uncaught error and unhandled rejection becomes a `$exception` event, and
+///   the Next.js error boundaries (src/app/error.tsx, global-error.tsx)
+///   report through `reportError()`. Replay is OFF unless the PostHog feature
+///   flag `cc-session-replay` is on for the person (rollout = sample rate,
+///   20% intended). Recordings mask every input, every element under
+///   `[data-ph-mask]` (transcripts, recaps, coaching notes, playbook and DNA
+///   text — anything that can hold a client's words) and any text node that
+///   looks like an email address; `maskTextFn` is the backstop for emails
+///   that render outside a tagged container (member lists, the sidebar).
 /// - **Meta pixel + LinkedIn Insight** on /start only — the ad platforms
 ///   need the conversion on the page where it happens (D-611 flagged that
 ///   pilot-first signups were invisible to Meta).
@@ -25,6 +35,22 @@ const HOTJAR_ID = 6516956
 const META_PIXEL_ID = "651514427512173"
 const LINKEDIN_PARTNER_ID = "8892300"
 const E2E_EMAIL = "e2e@talkpilot.co"
+/// PostHog feature flag that turns session replay on for a person. Create it
+/// in PostHog (same project as talkpilot.co) with a percentage rollout — that
+/// percentage is the recording sample rate (D-698: 20%). Nothing records
+/// while the flag does not exist.
+const REPLAY_FLAG = "cc-session-replay"
+/// Text under these never leaves the browser in a recording. Tag the
+/// container of anything that can hold a client's words — transcripts, recaps,
+/// coaching comments, playbook/objection/knowledge text, Team DNA sources and
+/// findings — with `data-ph-mask`. Inputs are masked separately (maskAllInputs).
+const PH_MASK_SELECTOR = "[data-ph-mask], [data-ph-mask] *, .ph-mask, .ph-mask *"
+const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi
+/// Backstop for emails rendered as plain text outside a tagged container
+/// (member and invite lists, the signed-in address in the sidebar).
+function maskEmailsInText(text: string): string {
+    return text.replace(EMAIL_RE, "***@***")
+}
 
 type Props = Record<string, unknown>
 type PH = {
@@ -34,6 +60,10 @@ type PH = {
     register: (p: Props) => void
     opt_out_capturing: () => void
     reset: () => void
+    captureException?: (e: unknown, p?: Props) => void
+    isFeatureEnabled?: (flag: string) => boolean | undefined
+    onFeatureFlags?: (cb: () => void) => void
+    startSessionRecording?: () => void
     __loaded?: boolean
 }
 declare global {
@@ -76,13 +106,26 @@ export function initTeamsAnalytics() {
         // Official PostHog loader stub, same as talkpilot.co's AnalyticsScripts.
         /* eslint-disable */
         // @ts-ignore
-        !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload group identify setPersonProperties setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys onSessionId".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+        !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled onFeatureFlags getFeatureFlag getFeatureFlagPayload group identify setPersonProperties setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures getActiveMatchingSurveys getSurveys onSessionId captureException startSessionRecording stopSessionRecording".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
         /* eslint-enable */
         ;(window.posthog as unknown as { init: (k: string, o: Props) => void }).init(POSTHOG_KEY, {
             api_host: "https://us.i.posthog.com",
             defaults: "2025-05-24",
             capture_pageview: "history_change",
             capture_pageleave: true,
+            // Error tracking (D-698): window.onerror + unhandledrejection
+            // become `$exception` events, grouped as issues in PostHog.
+            capture_exceptions: true,
+            // Session replay (D-698) is opt-in per person via the
+            // `cc-session-replay` feature flag — its rollout % IS the sample
+            // rate — and starts below once flags are known. Everything that
+            // can hold a client's words is masked before it leaves the browser.
+            disable_session_recording: true,
+            session_recording: {
+                maskAllInputs: true,
+                maskTextSelector: PH_MASK_SELECTOR,
+                maskTextFn: maskEmailsInText,
+            },
             // `surface` is read per event, not registered once: a super
             // property set at boot kept saying "onboarding" on every pageview
             // after /start's client-side navigation into the app.
@@ -92,6 +135,15 @@ export function initTeamsAnalytics() {
             },
         })
         window.posthog?.register({ product: "teams" })
+        // Flags arrive with the first /flags response (and again after
+        // identify). Start recording the moment the flag says yes; a person
+        // outside the rollout never records. The e2e identity's
+        // opt_out_capturing() (identifyTeamsUser) stops any recording too.
+        window.posthog?.onFeatureFlags?.(() => {
+            try {
+                if (window.posthog?.isFeatureEnabled?.(REPLAY_FLAG)) window.posthog?.startSessionRecording?.()
+            } catch { /* never break the page */ }
+        })
     } catch { /* never break the page */ }
 
     try {
@@ -202,6 +254,18 @@ export function trackAdConversion(name: "CompleteRegistration" | "StartTrial" | 
         if (!onProdHost() || adOptOut) return
         window.fbq?.("track", name, props)
     } catch { /* never break onboarding */ }
+}
+
+/// An error the Next.js error boundaries caught (src/app/error.tsx and
+/// global-error.tsx). Autocapture already sees window errors; this adds the
+/// ones React swallowed on the way to the recovery screen, tagged so the two
+/// can be told apart in PostHog's issue list.
+export function reportError(err: unknown, props: Props = {}) {
+    try {
+        if (!onProdHost()) return
+        initTeamsAnalytics()
+        window.posthog?.captureException?.(err, { source: "error_boundary", surface: surfaceOf(window.location.pathname), ...props })
+    } catch { /* never break the recovery screen */ }
 }
 
 /// On sign-out, so the next person on a shared machine isn't merged in.

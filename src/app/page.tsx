@@ -424,7 +424,9 @@ export default function HomePage() {
             </div>
 
             {/* Deeper cuts — folded in from the old Insights page (D-175) */}
-            <InsightsSections />
+            <div data-ph-mask>
+                <InsightsSections />
+            </div>
             </>)}
         </div>
     )
