@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { clientDict, clientLocale } from "@/i18n"
 import { reportError } from "@/lib/teamsAnalytics"
 
-/// Root error boundary (D-700): catches what the root layout itself throws,
+/// Root error boundary (D-701): catches what the root layout itself throws,
 /// where error.tsx cannot help. It replaces <html> and <body>, so nothing
 /// from globals.css or the fonts is guaranteed — styles are inline on purpose.
 /// The error is reported to PostHog the same way as the route boundary.
