@@ -927,7 +927,7 @@ export default function StartPage() {
                 </div>
 
                 {/* Progress: back chevron, one thin bar, n of N. Not on the sign-up step:
-                    that screen is only the form (D-722). */}
+                    that screen is only the form (D-723). */}
                 {screen !== "done" && screen !== "account" && (
                     <div className="flex items-center gap-3 mb-2">
                         <button type="button" onClick={goBack} aria-label={t.start.back}
@@ -1407,7 +1407,7 @@ export default function StartPage() {
                 </div>
             </div>
 
-            {/* The sign-up step is only the form, no showcase column (D-722). */}
+            {/* The sign-up step is only the form, no showcase column (D-723). */}
             {screen !== "account" && <Showcase screen={screen} lastPain={lastPain} />}
         </div>
     )
