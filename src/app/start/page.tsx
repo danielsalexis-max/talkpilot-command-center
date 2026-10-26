@@ -926,8 +926,9 @@ export default function StartPage() {
                     <span className="font-display font-bold text-[15px] text-[var(--color-text)]">TalkPilot <span className="text-[var(--color-accent)]">Teams</span></span>
                 </div>
 
-                {/* Progress: back chevron, one thin bar, n of N. */}
-                {screen !== "done" && (
+                {/* Progress: back chevron, one thin bar, n of N. Not on the sign-up step:
+                    that screen is only the form (D-722). */}
+                {screen !== "done" && screen !== "account" && (
                     <div className="flex items-center gap-3 mb-2">
                         <button type="button" onClick={goBack} aria-label={t.start.back}
                             disabled={screenIdx <= 1}
@@ -946,7 +947,7 @@ export default function StartPage() {
                 {/* The demo escape hatch stays one click away on every screen —
                     self-serve is the default motion, not the only one. */}
                 {screen !== "done" && (
-                    <p className="mb-7 text-[11px] pl-10">
+                    <p className={`mb-7 text-[11px] ${screen === "account" ? "" : "pl-10"}`}>
                         <a href={demoBookingUrl(locale, `start ${screen}`)} target="_blank" rel="noopener noreferrer" onClick={() => track("demo_clicked", { step: screen })} className="text-[var(--color-muted)] hover:text-[var(--color-accent-deep)]">
                             {t.start.questionsBookDemo}
                         </a>
@@ -1406,7 +1407,8 @@ export default function StartPage() {
                 </div>
             </div>
 
-            <Showcase screen={screen} lastPain={lastPain} />
+            {/* The sign-up step is only the form, no showcase column (D-722). */}
+            {screen !== "account" && <Showcase screen={screen} lastPain={lastPain} />}
         </div>
     )
 }
