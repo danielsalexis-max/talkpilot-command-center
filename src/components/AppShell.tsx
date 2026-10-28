@@ -9,6 +9,7 @@ import { applySkin, getSkinPref, setSkinPref, watchSystemSkin } from "@/lib/skin
 import { useLocale, useT } from "@/i18n/LocaleProvider"
 import { demoBookingUrl } from "@/lib/demoBooking"
 import { LocaleSwitcher } from "@/components/LocaleSwitcher"
+import { teamTemplatesDict } from "@/i18n/teamTemplates"
 import { initTeamsAnalytics, identifyTeamsUser, groupOrg, resetTeamsAnalytics, hjStateChange } from "@/lib/teamsAnalytics"
 
 /// Client-side chrome — the Boardroom sidebar. Split out of the root layout so
@@ -55,6 +56,12 @@ const ICONS = {
         <>
             <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
             <path strokeLinecap="round" d="M10.8 5.6h2.4" />
+        </>
+    ),
+    templates: (
+        <>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 3h9l4 4v14H6z" />
+            <path strokeLinecap="round" d="M9 11h7M9 15h7M9 7h4" />
         </>
     ),
     settings: (
@@ -234,6 +241,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         // Practice is its own page (D-192): Review is about calls that already
         // happened, practice is about the next one.
         { href: "/practice",  label: t.nav.practice, icon: ICONS.practice, match: p => p.startsWith("/practice") },
+        // Team wording templates (D-770): how the team's CRM note, task and
+        // follow-up email look. Managers set these too, so it is not inside
+        // Settings, which they don't see.
+        { href: "/templates" as Route, label: teamTemplatesDict[locale].nav, icon: ICONS.templates, match: (p: string) => p.startsWith("/templates") },
         // Managers can't edit org settings or billing (RLS would silently
         // refuse) — don't show them doors they can't open.
         ...(role === "manager" ? [] : [
