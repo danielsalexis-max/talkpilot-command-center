@@ -21,7 +21,7 @@ function useCopy(): [string | null, (key: string, text: string) => void] {
     }]
 }
 
-export function AISetupCard({ surface }: { surface: "home" }) {
+export function AISetupCard({ surface }: { surface: "home" | "playbook" }) {
     const { locale } = useLocale()
     const c = aiSetupCopy(locale)
     const [copied, copy] = useCopy()

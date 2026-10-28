@@ -34,7 +34,7 @@ export interface StageRow { stage: string; enabled: boolean; tone: string | null
 
 /// Where the Playbook page is: the overview (null), one stage, or one of the
 /// shared views. The page turns this into the URL.
-export type PlaybookView = { stage: SalesStage } | { tab: "objections" | "knowledge"; focus?: "phrases" } | null
+export type PlaybookView = { stage: SalesStage } | { tab: "objections" | "knowledge"; focus?: "phrases" | "website" } | null
 
 const CARD = "bg-[var(--color-surface)] rounded-[14px] border border-[var(--color-border)] shadow-sm"
 const BTN_PRIMARY = "inline-flex items-center justify-center min-h-11 px-4 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] disabled:opacity-40 text-[var(--btn-ink)] text-sm font-semibold rounded-[10px] transition-colors"
@@ -48,7 +48,10 @@ const COPY = {
     en: {
         processTitle: "Your sales process",
         processSub: (on: number) => `${on} of 9 stages on · open one to set it up`,
+        processHint: "Turn on the stages your team uses. The coach only uses stages that are on.",
         off: "Off",
+        onShort: "On",
+        toggleStage: (stage: string) => `Use ${stage} on calls`,
         noPlaybook: "No playbook yet",
         pbCount: (n: number) => n === 1 ? "1 playbook" : `${n} playbooks`,
         alertUnassigned: (n: number) => n === 1 ? "1 playbook has no stage" : `${n} playbooks have no stage`,
@@ -78,17 +81,35 @@ const COPY = {
         moreActions: "More actions",
         confirmDelete: (name: string) => `Delete "${name}"? This can't be undone.`,
         back: "← Your sales process",
-        stageActive: "Stage on",
+        stageActive: "Your team uses this stage",
         stageOffNote: "This stage is off. Turn it on so the coach uses it on calls.",
         callTitle: "How the call goes",
         callSub: (pb: string) => `Playbook: ${pb} · the coach follows these steps in order`,
-        callEmpty: "No playbook for this stage yet. Upload one, write one, or pick one you already have.",
+        callEmpty: "No playbook for this stage yet. Pick how you want to make one.",
         upload: "Upload a playbook",
-        write: "Write one",
-        useExisting: "Add one you already have…",
+        uploadCall: "Upload a call transcript",
+        writeAI: "Write it with AI",
+        write: "Write it yourself",
+        useExisting: "Or use a playbook you already have",
+        useExistingPick: "Pick one",
         editSteps: "Edit steps",
         editorNew: "New playbook",
         editorEdit: "Edit playbook",
+        aiTitle: "Write it with AI",
+        aiSub: "Tell us about these calls: who you talk to, what you want from the call, what usually works. AI writes the steps, and you can change them.",
+        aiPlaceholder: "We call small clinics that asked for a demo. We want to understand how they book patients today and get a second meeting with the owner.",
+        aiButton: "Write my steps",
+        aiWriting: "Writing your steps…",
+        aiReplace: "Replace the steps you have with new ones?",
+        aiDone: (n: number) => n === 1 ? "AI wrote 1 step. Check it and change anything you want, then save." : `AI wrote ${n} steps. Check them and change anything you want, then save.`,
+        aiEmpty: "AI couldn't write steps from that. Tell us a bit more and try again.",
+        aiError: "Couldn't write your steps. Try again.",
+        callReading: "Reading the call and writing the steps…",
+        stepsTitle: "Steps",
+        stepsSub: "What the rep does on the call, in order. A name and a short description are enough.",
+        moreDetail: "More detail (optional)",
+        frameDescribe: (stage: string | null) => `${stage ? `This is a sales playbook for the "${stage}" stage of our sales process. ` : "This is a sales playbook for one kind of sales call. "}Here is what our team does and wants from these calls:`,
+        frameCall: (stage: string | null) => `Below is the transcript of a real ${stage ? `"${stage}" ` : ""}sales call that went well. Write the steps any rep should follow on calls like this one, based on what worked in it. Write them as instructions for a rep, not as a summary of this call.\n\nTranscript:`,
         moreHere: (n: number) => `${n - 1} more playbook${n - 1 === 1 ? "" : "s"} in this stage`,
         toneTitle: "Tone",
         toneSub: "How the coach wants the rep to sound in this stage.",
@@ -112,8 +133,20 @@ const COPY = {
         addNew: "New playbook",
         addImport: "Playbook from a document",
         addPreset: "Start from a preset",
+        addTranscript: "Playbook from a call transcript",
+        addAI: "Set it all up with Claude or ChatGPT",
         addObjections: "Objections",
         addKnowledge: "A knowledge document",
+        addWebsite: "Your website",
+        amendShortHint: "Write what is true now. We find the steps that say otherwise and show you the change before saving.",
+        amendShortPlaceholder: "Example: we don't offer a free trial anymore, it's a 30-day pilot now.",
+        websiteTitle: "Add your website",
+        websiteSub: "We read your home page so the coach knows what you sell. One page, text only.",
+        websitePlaceholder: "yourcompany.com",
+        websiteButton: "Read my website",
+        websiteReading: "Reading…",
+        websiteDone: "Added. The coach is reading it now.",
+        websiteError: "Couldn't read that page. Check the address and try again.",
         blurb: {
             prospecting: "First contact: spark interest and get the meeting.",
             discovery: "Understand the customer's problem before talking about the product.",
@@ -129,7 +162,10 @@ const COPY = {
     es: {
         processTitle: "Tu proceso de venta",
         processSub: (on: number) => `${on} de 9 etapas activas · abre una para configurarla`,
+        processHint: "Activa las etapas que usa tu equipo. El coach solo usa las etapas activas.",
         off: "Apagada",
+        onShort: "Activa",
+        toggleStage: (stage: string) => `Usar ${stage} en las llamadas`,
         noPlaybook: "Sin playbook todavía",
         pbCount: (n: number) => n === 1 ? "1 playbook" : `${n} playbooks`,
         alertUnassigned: (n: number) => n === 1 ? "1 playbook no tiene etapa" : `${n} playbooks no tienen etapa`,
@@ -159,17 +195,35 @@ const COPY = {
         moreActions: "Más acciones",
         confirmDelete: (name: string) => `¿Eliminar "${name}"? No se puede deshacer.`,
         back: "← Tu proceso de venta",
-        stageActive: "Etapa activa",
+        stageActive: "Tu equipo usa esta etapa",
         stageOffNote: "Esta etapa está apagada. Actívala para que el coach la use en las llamadas.",
         callTitle: "Cómo va la llamada",
         callSub: (pb: string) => `Playbook: ${pb} · el coach sigue estos pasos en orden`,
-        callEmpty: "Esta etapa todavía no tiene playbook. Sube uno, escríbelo o elige uno que ya tengas.",
+        callEmpty: "Esta etapa todavía no tiene playbook. Elige cómo quieres hacerlo.",
         upload: "Subir un playbook",
-        write: "Escribir uno",
-        useExisting: "Agregar uno que ya tengo…",
+        uploadCall: "Subir la transcripción de una llamada",
+        writeAI: "Escribirlo con IA",
+        write: "Escribirlo tú",
+        useExisting: "O usa un playbook que ya tienes",
+        useExistingPick: "Elige uno",
         editSteps: "Editar pasos",
         editorNew: "Nuevo playbook",
         editorEdit: "Editar playbook",
+        aiTitle: "Escríbelo con IA",
+        aiSub: "Cuéntanos de estas llamadas: con quién hablas, qué quieres lograr en la llamada y qué suele funcionar. La IA escribe los pasos y tú puedes cambiarlos.",
+        aiPlaceholder: "Llamamos a clínicas pequeñas que pidieron una demo. Queremos entender cómo agendan pacientes hoy y conseguir una segunda reunión con el dueño.",
+        aiButton: "Escribir mis pasos",
+        aiWriting: "Escribiendo tus pasos…",
+        aiReplace: "¿Reemplazar los pasos que tienes por unos nuevos?",
+        aiDone: (n: number) => n === 1 ? "La IA escribió 1 paso. Revísalo y cambia lo que quieras, luego guarda." : `La IA escribió ${n} pasos. Revísalos y cambia lo que quieras, luego guarda.`,
+        aiEmpty: "La IA no pudo escribir pasos con eso. Cuéntanos un poco más e intenta de nuevo.",
+        aiError: "No se pudieron escribir tus pasos. Intenta de nuevo.",
+        callReading: "Leyendo la llamada y escribiendo los pasos…",
+        stepsTitle: "Pasos",
+        stepsSub: "Lo que hace el rep en la llamada, en orden. Con un nombre y una descripción corta basta.",
+        moreDetail: "Más detalle (opcional)",
+        frameDescribe: (stage: string | null) => `${stage ? `Este es un playbook de ventas para la etapa "${stage}" de nuestro proceso de venta. ` : "Este es un playbook de ventas para un tipo de llamada de venta. "}Esto es lo que hace nuestro equipo y lo que quiere lograr en estas llamadas:`,
+        frameCall: (stage: string | null) => `Abajo está la transcripción de una llamada de venta real ${stage ? `de la etapa "${stage}" ` : ""}que salió bien. Escribe los pasos que cualquier rep debería seguir en llamadas como esta, según lo que funcionó. Escríbelos como instrucciones para un rep, no como un resumen de esta llamada.\n\nTranscripción:`,
         moreHere: (n: number) => n - 1 === 1 ? "1 playbook más en esta etapa" : `${n - 1} playbooks más en esta etapa`,
         toneTitle: "Tono",
         toneSub: "Cómo quiere el coach que suene el rep en esta etapa.",
@@ -193,8 +247,20 @@ const COPY = {
         addNew: "Nuevo playbook",
         addImport: "Playbook desde un documento",
         addPreset: "Empezar desde un preset",
+        addTranscript: "Playbook desde la transcripción de una llamada",
+        addAI: "Configurar todo con Claude o ChatGPT",
         addObjections: "Objeciones",
         addKnowledge: "Un documento de conocimiento",
+        addWebsite: "Tu sitio web",
+        amendShortHint: "Escribe lo que es verdad ahora. Encontramos los pasos que dicen lo contrario y te mostramos el cambio antes de guardar.",
+        amendShortPlaceholder: "Ejemplo: ya no damos prueba gratis, ahora es un piloto de 30 días.",
+        websiteTitle: "Agrega tu sitio web",
+        websiteSub: "Leemos tu página de inicio para que el coach sepa qué vendes. Una página, solo texto.",
+        websitePlaceholder: "tuempresa.com",
+        websiteButton: "Leer mi sitio web",
+        websiteReading: "Leyendo…",
+        websiteDone: "Listo. El coach lo está leyendo.",
+        websiteError: "No se pudo leer esa página. Revisa la dirección e intenta de nuevo.",
         blurb: {
             prospecting: "Primer contacto: despertar interés y conseguir la reunión.",
             discovery: "Entender el problema del cliente antes de hablar del producto.",
@@ -222,37 +288,53 @@ function inStage(playbooks: PbLite[], stage: SalesStage): PbLite[] {
 
 // ─── Overview ────────────────────────────────────────────────────────────────
 
-export function StagePipeline({ stageRows, playbooks, onOpen }: {
+export function StagePipeline({ stageRows, playbooks, onOpen, onToggle }: {
     stageRows: StageRow[]; playbooks: PbLite[]; onOpen: (s: SalesStage) => void
+    /// D-801: turn a stage on or off right from its card.
+    onToggle: (s: SalesStage, enabled: boolean) => Promise<void>
 }) {
     const { locale } = useLocale()
     const c = studioCopy(locale)
     const on = new Set(stageRows.filter(r => r.enabled).map(r => r.stage))
+    const [busy, setBusy] = useState<SalesStage | null>(null)
     return (
         <section aria-labelledby="pb-process" className="space-y-3.5">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 id="pb-process" className="text-lg font-bold text-[var(--color-text)]">{c.processTitle}</h2>
-                <span className="text-[13px] text-[var(--color-text-secondary)]">{c.processSub(on.size)}</span>
+            <div className="space-y-0.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h2 id="pb-process" className="text-lg font-bold text-[var(--color-text)]">{c.processTitle}</h2>
+                    <span className="text-[13px] text-[var(--color-text-secondary)]">{c.processSub(on.size)}</span>
+                </div>
+                <p className="text-sm text-[var(--color-text-secondary)]">{c.processHint}</p>
             </div>
-            <ol className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
+            <ol className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(160px,1fr))]">
                 {SALES_STAGES.map((s, i) => {
                     const active = on.has(s)
                     const pbs = inStage(playbooks, s)
                     const meta = !active ? c.off : pbs.length === 0 ? c.noPlaybook : pbs.length === 1 ? pbs[0].name : c.pbCount(pbs.length)
                     const needsWork = active && pbs.length === 0
+                    const label = stageLabel(s, locale) ?? s
                     return (
-                        <li key={s}>
+                        <li key={s} className={`relative h-full min-h-[118px] flex flex-col rounded-[14px] transition-colors ${
+                            active
+                                ? `bg-[var(--color-surface)] border shadow-sm hover:border-[var(--color-accent)] ${needsWork ? "border-amber-300" : "border-[var(--color-border)]"}`
+                                : "border border-dashed border-[var(--color-border-strong,var(--color-border))] hover:border-[var(--color-accent)] hover:bg-[var(--color-surface)]"
+                        }`}>
                             <button type="button" onClick={() => onOpen(s)}
-                                className={`w-full h-full min-h-[104px] text-left flex flex-col gap-1.5 p-3.5 rounded-[14px] transition-colors ${
-                                    active
-                                        ? `bg-[var(--color-surface)] border shadow-sm hover:border-[var(--color-accent)] ${needsWork ? "border-amber-300" : "border-[var(--color-border)]"}`
-                                        : "border border-dashed border-[var(--color-border-strong,var(--color-border))] hover:border-[var(--color-accent)] hover:bg-[var(--color-surface)]"
-                                }`}>
+                                className="flex-1 w-full text-left flex flex-col gap-1.5 p-3.5 pb-1 rounded-t-[14px]">
                                 <span className={`w-6 h-6 rounded-full grid place-items-center text-xs font-bold ${
                                     active ? "bg-[var(--btn-bg)] text-[var(--btn-ink)]" : "bg-[var(--color-hover,var(--color-bg))] text-[var(--color-text-secondary)]"
                                 }`}>{i + 1}</span>
-                                <span className="text-sm font-semibold text-[var(--color-text)]">{stageLabel(s, locale)}</span>
-                                <span className={`text-xs line-clamp-2 ${needsWork ? "text-amber-700" : active ? "text-[var(--color-accent)]" : "text-[var(--color-text-secondary)]"}`}>{meta}</span>
+                                <span className="text-sm font-semibold text-[var(--color-text)]">{label}</span>
+                                {active && <span className={`text-xs line-clamp-2 ${needsWork ? "text-amber-700" : "text-[var(--color-accent)]"}`}>{meta}</span>}
+                            </button>
+                            <button type="button" role="switch" aria-checked={active} aria-label={c.toggleStage(label)}
+                                disabled={busy === s}
+                                onClick={async () => { setBusy(s); await onToggle(s, !active); setBusy(null) }}
+                                className="mx-3.5 mb-3 mt-1 self-start inline-flex items-center gap-2 min-h-9 text-xs font-semibold text-[var(--color-text-secondary)] disabled:opacity-50">
+                                <span className={`relative w-8 h-[18px] rounded-full transition-colors ${active ? "bg-[var(--color-accent)]" : "bg-[var(--color-border-strong,var(--color-border))]"}`}>
+                                    <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow transition-all ${active ? "left-[16px]" : "left-[2px]"}`} />
+                                </span>
+                                {active ? c.onShort : c.off}
                             </button>
                         </li>
                     )
@@ -468,9 +550,9 @@ function MenuItem({ children, onClick, danger }: { children: React.ReactNode; on
 
 /// The page's one "Add" button. Every way to put something into the coach's
 /// head starts here instead of four separate buttons and boxes up top.
-export function AddMenu({ onNew, onImport, onPreset, onObjections, onKnowledge, busy }: {
-    onNew: () => void; onImport: () => void; onPreset: () => void
-    onObjections: () => void; onKnowledge: () => void; busy?: boolean
+export function AddMenu({ onNew, onImport, onImportCall, onPreset, onAI, onObjections, onKnowledge, onWebsite, busy }: {
+    onNew: () => void; onImport: () => void; onImportCall: () => void; onPreset: () => void; onAI: () => void
+    onObjections: () => void; onKnowledge: () => void; onWebsite: () => void; busy?: boolean
 }) {
     const { locale } = useLocale()
     const c = studioCopy(locale)
@@ -479,13 +561,17 @@ export function AddMenu({ onNew, onImport, onPreset, onObjections, onKnowledge, 
             <summary className={`${BTN_PRIMARY} list-none cursor-pointer [&::-webkit-details-marker]:hidden ${busy ? "opacity-60 pointer-events-none" : ""}`}>
                 {c.addMenu} <span aria-hidden="true" className="ml-1.5">▾</span>
             </summary>
-            <div className="absolute right-0 z-30 mt-1.5 w-64 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg py-1">
+            <div className="absolute right-0 z-30 mt-1.5 w-72 rounded-[12px] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg py-1">
+                <MenuItem onClick={onAI}>{c.addAI}</MenuItem>
+                <span className="block h-px bg-[var(--color-border)] my-1" />
                 <MenuItem onClick={onNew}>{c.addNew}</MenuItem>
                 <MenuItem onClick={onImport}>{c.addImport}</MenuItem>
+                <MenuItem onClick={onImportCall}>{c.addTranscript}</MenuItem>
                 <MenuItem onClick={onPreset}>{c.addPreset}</MenuItem>
                 <span className="block h-px bg-[var(--color-border)] my-1" />
                 <MenuItem onClick={onObjections}>{c.addObjections}</MenuItem>
                 <MenuItem onClick={onKnowledge}>{c.addKnowledge}</MenuItem>
+                <MenuItem onClick={onWebsite}>{c.addWebsite}</MenuItem>
             </div>
         </details>
     )
@@ -494,7 +580,7 @@ export function AddMenu({ onNew, onImport, onPreset, onObjections, onKnowledge, 
 // ─── One stage ───────────────────────────────────────────────────────────────
 
 export function StageDetail({
-    orgId, stage, row, playbooks, reloadStages, onBack, onEditPlaybook, onUpload, onNew, onAssignExisting, renderAssignment,
+    orgId, stage, row, playbooks, reloadStages, onBack, onEditPlaybook, onUpload, onUploadCall, onNew, onWriteAI, onAssignExisting, renderAssignment,
 }: {
     orgId: string
     stage: SalesStage
@@ -504,7 +590,9 @@ export function StageDetail({
     onBack: () => void
     onEditPlaybook: (p: PbLite) => void
     onUpload: () => void
+    onUploadCall: () => void
     onNew: () => void
+    onWriteAI: () => void
     onAssignExisting: (playbookId: string) => void
     renderAssignment: (playbookId: string) => React.ReactNode
 }) {
@@ -591,18 +679,25 @@ export function StageDetail({
                             <p className="text-sm text-[var(--color-text-secondary)]">{c.callEmpty}</p>
                         )}
 
-                        <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                            {!main && <button type="button" className={BTN_PRIMARY} onClick={onUpload}>{c.upload}</button>}
-                            {!main && <button type="button" className={BTN_DASHED} onClick={onNew}>{c.write}</button>}
-                            {others.length > 0 && (
-                                <select value="" aria-label={c.useExisting}
+                        {!main && (
+                            <div className="grid gap-2.5 sm:grid-cols-2 pt-1">
+                                <button type="button" className={BTN_PRIMARY} onClick={onWriteAI}>{c.writeAI}</button>
+                                <button type="button" className={BTN_SOFT} onClick={onUpload}>{c.upload}</button>
+                                <button type="button" className={BTN_SOFT} onClick={onUploadCall}>{c.uploadCall}</button>
+                                <button type="button" className={BTN_DASHED} onClick={onNew}>{c.write}</button>
+                            </div>
+                        )}
+                        {others.length > 0 && (
+                            <div className="space-y-1.5 pt-1">
+                                <label htmlFor={`use-existing-${stage}`} className="block text-[13px] text-[var(--color-text-secondary)]">{c.useExisting}</label>
+                                <select id={`use-existing-${stage}`} value=""
                                     onChange={e => { if (e.target.value) onAssignExisting(e.target.value) }}
-                                    className="min-h-11 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[10px] px-3 text-sm text-[var(--color-text)]">
-                                    <option value="">{c.useExisting}</option>
+                                    className="w-full sm:max-w-sm min-h-11 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[10px] px-3 text-sm text-[var(--color-text)]">
+                                    <option value="">{c.useExistingPick}</option>
                                     {others.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                 </select>
-                            )}
-                        </div>
+                            </div>
+                        )}
                         {here.length > 1 && (
                             <p className="text-[13px] text-[var(--color-text-secondary)]">
                                 {c.moreHere(here.length)}: {here.slice(1).map(p => p.name).join(", ")}
@@ -668,5 +763,53 @@ export function StageDetail({
                 </aside>
             </div>
         </div>
+    )
+}
+
+/// D-801: "Add your website" on the Knowledge view. The same server read the
+/// /start wizard uses (`ingest-website`, D-632): one page, text only, saved as
+/// "Website — <domain>" in the knowledge base.
+export function WebsiteCard({ orgId, focus, onAdded }: { orgId: string; focus?: boolean; onAdded: () => void }) {
+    const { locale } = useLocale()
+    const c = studioCopy(locale)
+    const [url, setUrl] = useState("")
+    const [busy, setBusy] = useState(false)
+    const [msg, setMsg] = useState<{ text: string; err: boolean } | null>(null)
+    async function read() {
+        const raw = url.trim()
+        if (!raw) return
+        setBusy(true); setMsg(null)
+        try {
+            const { data: { session } } = await supabase.auth.getSession()
+            const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/ingest-website`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${session?.access_token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ org_id: orgId, url: /^https?:\/\//i.test(raw) ? raw : `https://${raw}`, locale }),
+            })
+            if (!res.ok) { setMsg({ text: c.websiteError, err: true }); return }
+            setMsg({ text: c.websiteDone, err: false }); setUrl("")
+            onAdded()
+        } catch {
+            setMsg({ text: c.websiteError, err: true })
+        } finally {
+            setBusy(false)
+        }
+    }
+    return (
+        <form id="website" className={`${CARD} p-5 space-y-2.5`} onSubmit={e => { e.preventDefault(); read() }}>
+            <div>
+                <label htmlFor="website-url" className="text-[15px] font-bold text-[var(--color-text)]">{c.websiteTitle}</label>
+                <p className="text-[13px] text-[var(--color-text-secondary)] mt-0.5">{c.websiteSub}</p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+                <input id="website-url" type="text" inputMode="url" autoComplete="url" autoFocus={focus}
+                    className={`${INPUT} flex-1`} placeholder={c.websitePlaceholder}
+                    value={url} onChange={e => setUrl(e.target.value)} />
+                <button type="submit" className={`${BTN_PRIMARY} shrink-0`} disabled={busy || url.trim().length < 4}>
+                    {busy ? c.websiteReading : c.websiteButton}
+                </button>
+            </div>
+            {msg && <p className={`text-sm ${msg.err ? "text-red-600" : "text-emerald-600"}`}>{msg.text}</p>}
+        </form>
     )
 }

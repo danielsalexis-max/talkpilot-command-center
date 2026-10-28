@@ -66,7 +66,7 @@ function PlaybookPageInner() {
             </div>
             <OrgBanners org={org} />
             {sub === "objections" && <ObjectionsTab orgId={orgId} org={org} onSaved={reload} />}
-            {sub === "knowledge"  && <KnowledgeTab orgId={orgId} />}
+            {sub === "knowledge"  && <KnowledgeTab orgId={orgId} focus={focus === "website" ? "website" : undefined} />}
         </div>
     )
 
