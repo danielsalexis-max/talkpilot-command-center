@@ -7,7 +7,9 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
-import { useT } from "@/i18n/LocaleProvider"
+import { useLocale, useT } from "@/i18n/LocaleProvider"
+import { aiSetupCopy } from "@/lib/aiSetup"
+import { track } from "@/lib/teamsAnalytics"
 
 export const MCP_CONNECTOR_URL = "https://teams.talkpilot.co/api/mcp"
 
@@ -53,6 +55,7 @@ export function AIConnectorCard({ orgId }: { orgId: string }) {
             </div>
             <p className="text-xs text-[var(--color-text-secondary)]">{t.steps}</p>
             <p className="text-xs text-[var(--color-muted)]">{t.access}</p>
+            <CopySetupPromptRow />
             {rows !== null && (
                 rows.length === 0
                     ? <p className="text-xs text-[var(--color-muted)]">{t.noUse}</p>
@@ -66,6 +69,29 @@ export function AIConnectorCard({ orgId }: { orgId: string }) {
                         ))}
                     </div>
             )}
+        </div>
+    )
+}
+
+/// D-800: the setup prompt for admins who already connected their AI. Home's
+/// AISetupCard carries the full walkthrough while the workspace isn't ready.
+function CopySetupPromptRow() {
+    const { locale } = useLocale()
+    const c = aiSetupCopy(locale)
+    const [copied, setCopied] = useState(false)
+    return (
+        <div className="pt-2 space-y-1.5">
+            <p className="text-xs text-[var(--color-text)] font-medium">{c.settingsTitle}</p>
+            <p className="text-xs text-[var(--color-text-secondary)]">{c.settingsHint}</p>
+            <button
+                className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-text)]"
+                onClick={() => {
+                    navigator.clipboard.writeText(c.prompt).catch(() => {})
+                    track("ai_setup_prompt_copied", { surface: "settings" })
+                    setCopied(true); setTimeout(() => setCopied(false), 2000)
+                }}>
+                {copied ? c.copied : c.copyPrompt}
+            </button>
         </div>
     )
 }

@@ -3,6 +3,8 @@ import type { McpServer } from "@modelcontextprotocol/server"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { supabaseAs, SUPABASE_URL } from "./auth"
 import { decodeBytea, formatTranscript, minutesBetween, parseJsonOrBase64, safeSearch } from "./data"
+import { rollUpGuardrails } from "@/lib/guardrails"
+import { SALES_STAGES } from "@/lib/salesStages"
 
 /// TalkPilot MCP (D-538) — the tools Claude / ChatGPT see.
 ///
@@ -64,6 +66,41 @@ async function log(w: Who, tool: string, extra: { subject?: string | null; org?:
         })
     } catch { /* logging must never break the answer */ }
 }
+
+/// D-800: an org write made from Claude / ChatGPT also lands in the workspace
+/// audit log, so the Command Center shows who changed the playbook and that it
+/// came through an AI app. RLS lets owners/admins append rows as themselves.
+async function audit(w: Who, org: string, action: string, target: string | null, meta: Record<string, unknown> = {}) {
+    try {
+        await w.sb.from("org_audit_log").insert({
+            org_id: org, actor_id: w.userId, action, target,
+            meta: { ...meta, via: "mcp", client_id: w.clientId },
+        })
+    } catch { /* same as log(): never break the answer */ }
+}
+
+/// Calls a Supabase edge function as the user (their JWT), the way the
+/// Command Center does from the browser.
+async function callFunction(w: Who, name: string, body: unknown): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${w.token}`, "Content-Type": "application/json", apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! },
+        body: JSON.stringify(body),
+    })
+    const json = await res.json().catch(() => ({})) as Record<string, unknown>
+    return { ok: res.ok, status: res.status, json }
+}
+
+function errorText(json: Record<string, unknown>, fallback: string): string {
+    const e = json.error as { message?: string } | string | undefined
+    return (typeof e === "string" ? e : e?.message) ?? fallback
+}
+
+const STAGE_ENUM = z.enum(SALES_STAGES)
+
+/// The two titles the company profile doc can carry; a second run finds and
+/// replaces whichever one exists instead of adding a copy.
+const COMPANY_PROFILE_TITLES = { en: "Company profile", es: "Perfil de la empresa" } as const
 
 const NOT_SIGNED_IN = "Not signed in to TalkPilot. Reconnect the TalkPilot connector."
 const NEEDS_PRO = `Using TalkPilot inside Claude or ChatGPT is part of TalkPilot Pro and TalkPilot Teams. This account is on the free plan. Upgrade in the TalkPilot app or at ${PRO_URL}, then try again.`
@@ -490,18 +527,19 @@ export function registerTalkPilotTools(server: McpServer) {
     }))
 
     server.registerTool("update_playbook_stage", {
-        title: "Edit a playbook stage (Teams admins)",
-        description: "TalkPilot Teams owners and admins: change one stage of a playbook. Each list you send replaces that list; leave a field out to keep it. Get stage keys from get_playbooks. Live playbooks change for reps on their next call.",
+        title: "Edit a playbook step (Teams admins)",
+        description: "TalkPilot Teams owners and admins: change one step of a playbook (the playbook's `stages` list; each item is a step). Each list you send replaces that list; leave a field out to keep it. Get step keys from get_playbooks. Live playbooks change for reps on their next call.",
         inputSchema: z.object({
             playbook_id: z.string().uuid(),
-            stage_key: z.string().min(1),
+            stage_key: z.string().min(1).describe("The step's key from get_playbooks"),
             name: z.string().min(1).max(120).optional(),
+            description: z.string().max(1000).optional().describe("What the rep does in this step"),
             talking_points: z.array(z.string().min(1).max(500)).max(30).optional(),
             required: z.array(z.string().min(1).max(300)).max(30).optional(),
             exit_criteria: z.string().max(500).optional(),
         }),
         annotations: WRITE,
-    }, guarded("update_playbook_stage", async (w, a: { playbook_id: string; stage_key: string; name?: string; talking_points?: string[]; required?: string[]; exit_criteria?: string }) => {
+    }, guarded("update_playbook_stage", async (w, a: { playbook_id: string; stage_key: string; name?: string; description?: string; talking_points?: string[]; required?: string[]; exit_criteria?: string }) => {
         const m = await requireTeams(w, "admin")
         if (typeof m === "string") return fail(m)
         const { data: pb, error } = await w.sb.from("org_playbooks").select("id, version, stages")
@@ -515,14 +553,17 @@ export function registerTalkPilotTools(server: McpServer) {
         // stage are kept as they are, so the guardrails rollup stays valid.
         const next = { ...stages[i] }
         if (a.name !== undefined) next.name = a.name
+        if (a.description !== undefined) next.description = a.description
         if (a.talking_points !== undefined) next.talking_points = a.talking_points
-        if (a.required !== undefined) next.required = a.required
+        // `required_items` is the editor's older key (D-165); keep both in step.
+        if (a.required !== undefined) { next.required = a.required; next.required_items = a.required }
         if (a.exit_criteria !== undefined) next.exit_criteria = a.exit_criteria
         stages[i] = next
         const { error: upErr } = await w.sb.from("org_playbooks")
             .update({ stages, version: (pb.version ?? 0) + 1, updated_at: new Date().toISOString() }).eq("id", pb.id)
         if (upErr) return fail(upErr.message)
         await log(w, "update_playbook_stage", { org: m.org_id, target: a.playbook_id })
+        await audit(w, m.org_id, "playbook.step_edited", a.playbook_id, { step: a.stage_key })
         return ok({ updated_stage: next, version: (pb.version ?? 0) + 1 })
     }))
 
@@ -544,21 +585,24 @@ export function registerTalkPilotTools(server: McpServer) {
         return ok({ objections: data ?? [] })
     }))
 
-    server.registerTool("save_objection", {
-        title: "Add or edit an objection (Teams admins)",
-        description: "TalkPilot Teams owners and admins: add an objection with the approved answer, or edit one (pass its id). The live coach starts using it on reps' next calls.",
-        inputSchema: z.object({
-            id: z.string().uuid().optional().describe("Leave out to add a new one"),
-            objection: z.string().min(3).max(500),
-            response: z.string().max(3000).optional().describe("The approved answer"),
-            variants: z.array(z.string().min(2).max(300)).max(20).optional().describe("Other ways people say it"),
-            severity: z.enum(["normal", "critical"]).optional(),
-            active: z.boolean().optional(),
-        }),
-        annotations: WRITE,
-    }, guarded("save_objection", async (w, a: { id?: string; objection: string; response?: string; variants?: string[]; severity?: "normal" | "critical"; active?: boolean }) => {
-        const m = await requireTeams(w, "admin")
-        if (typeof m === "string") return fail(m)
+    // ── Objections: one or many (D-800 adds stages, category and the batch) ──
+
+    const OBJECTION_SHAPE = {
+        id: z.string().uuid().optional().describe("Leave out to add a new one"),
+        objection: z.string().min(3).max(500),
+        response: z.string().max(3000).optional().describe("The approved answer"),
+        variants: z.array(z.string().min(2).max(300)).max(20).optional().describe("Other ways people say it"),
+        category: z.string().max(60).optional().describe("Short tag, e.g. price, competitor, timing, trust"),
+        sales_stages: z.array(STAGE_ENUM).max(9).optional().describe("Stages it applies to; empty or left out = every stage"),
+        severity: z.enum(["normal", "critical"]).optional(),
+        active: z.boolean().optional(),
+    }
+    type ObjectionIn = { id?: string; objection: string; response?: string; variants?: string[]; category?: string; sales_stages?: string[]; severity?: "normal" | "critical"; active?: boolean }
+
+    /// Saves one objection and returns its id, or an error string. A new one
+    /// whose text already exists in the workspace edits that row instead, so
+    /// running the setup prompt twice does not double the library.
+    async function saveObjectionRow(w: Who, org: string, a: ObjectionIn): Promise<{ id: string; created: boolean } | string> {
         const row: Record<string, unknown> = { objection: a.objection.trim(), updated_at: new Date().toISOString() }
         if (a.response !== undefined) {
             const t = a.response.trim()
@@ -566,31 +610,78 @@ export function registerTalkPilotTools(server: McpServer) {
             row.approved_responses = t ? [{ text: t }] : []
         }
         if (a.variants !== undefined) row.variants = a.variants
+        if (a.category !== undefined) row.category = a.category.trim() || null
+        if (a.sales_stages !== undefined) row.sales_stages = Array.from(new Set(a.sales_stages))
         if (a.severity !== undefined) row.severity = a.severity
         if (a.active !== undefined) row.active = a.active
         let id = a.id
+        if (!id) {
+            const { data: same } = await w.sb.from("org_objections").select("id")
+                .eq("org_id", org).ilike("objection", a.objection.trim().replace(/[\\%_]/g, "\\$&")).limit(1)
+            id = (same?.[0]?.id as string | undefined) ?? undefined
+        }
         if (id) {
-            // The text changed, so the old embedding no longer matches it.
+            // The text may have changed, so the old embedding may no longer match it.
             row.embedding = null
             const { data, error } = await w.sb.from("org_objections").update(row)
-                .eq("id", id).eq("org_id", m.org_id).select("id").maybeSingle()
-            if (error) return fail(error.message)
-            if (!data) return fail("No objection with that id in this workspace.")
-        } else {
-            const { data, error } = await w.sb.from("org_objections").insert({
-                org_id: m.org_id, severity: "normal", active: true, source: "mcp", variants: [], ...row,
-            }).select("id").single()
-            if (error) return fail(error.message)
-            id = data.id as string
+                .eq("id", id).eq("org_id", org).select("id").maybeSingle()
+            if (error) return error.message
+            if (!data) return "No objection with that id in this workspace."
+            return { id, created: false }
         }
-        // Embed so it can be matched mid-call (same path the Command Center uses).
-                const res = await fetch(`${SUPABASE_URL}/functions/v1/ingest-knowledge`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${w.token}`, "Content-Type": "application/json", apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! },
-            body: JSON.stringify({ org_id: m.org_id, objection_ids: [id] }),
-        }).catch(() => null)
-        await log(w, "save_objection", { org: m.org_id, target: id })
-        return ok({ saved_id: id, searchable_mid_call: !!res?.ok })
+        const { data, error } = await w.sb.from("org_objections").insert({
+            org_id: org, severity: "normal", active: true, source: "mcp", variants: [], ...row,
+        }).select("id").single()
+        if (error) return error.message
+        return { id: data.id as string, created: true }
+    }
+
+    /// Embed so they can be matched mid-call (same path the Command Center uses).
+    async function embedObjections(w: Who, org: string, ids: string[]): Promise<boolean> {
+        if (ids.length === 0) return true
+        const r = await callFunction(w, "ingest-knowledge", { org_id: org, objection_ids: ids }).catch(() => null)
+        return !!r?.ok
+    }
+
+    server.registerTool("save_objection", {
+        title: "Add or edit an objection (Teams admins)",
+        description: "TalkPilot Teams owners and admins: add an objection with the approved answer, or edit one (pass its id). Tie it to sales stages, or leave them out for every stage. The live coach starts using it on reps' next calls. For several at once use save_objections.",
+        inputSchema: z.object(OBJECTION_SHAPE),
+        annotations: WRITE,
+    }, guarded("save_objection", async (w, a: ObjectionIn) => {
+        const m = await requireTeams(w, "admin")
+        if (typeof m === "string") return fail(m)
+        const r = await saveObjectionRow(w, m.org_id, a)
+        if (typeof r === "string") return fail(r)
+        const embedded = await embedObjections(w, m.org_id, [r.id])
+        await log(w, "save_objection", { org: m.org_id, target: r.id })
+        await audit(w, m.org_id, r.created ? "objection.created" : "objection.updated", r.id)
+        return ok({ saved_id: r.id, created: r.created, searchable_mid_call: embedded })
+    }))
+
+    server.registerTool("save_objections", {
+        title: "Add or edit many objections (Teams admins)",
+        description: "TalkPilot Teams owners and admins: save up to 30 objections in one call, each with the approved answer, other ways people say it, and the sales stages it applies to. One whose text already exists is updated, not duplicated. Read list_objections first.",
+        inputSchema: z.object({ objections: z.array(z.object(OBJECTION_SHAPE)).min(1).max(30) }),
+        annotations: WRITE,
+    }, guarded("save_objections", async (w, a: { objections: ObjectionIn[] }) => {
+        const m = await requireTeams(w, "admin")
+        if (typeof m === "string") return fail(m)
+        const saved: { objection: string; id: string; created: boolean }[] = []
+        const failed: { objection: string; error: string }[] = []
+        for (const o of a.objections) {
+            const r = await saveObjectionRow(w, m.org_id, o)
+            if (typeof r === "string") failed.push({ objection: o.objection, error: r })
+            else saved.push({ objection: o.objection, ...r })
+        }
+        const embedded = await embedObjections(w, m.org_id, saved.map(s => s.id))
+        await log(w, "save_objections", { org: m.org_id })
+        if (saved.length) {
+            await audit(w, m.org_id, "objection.batch_saved", null, {
+                created: saved.filter(s => s.created).length, updated: saved.filter(s => !s.created).length,
+            })
+        }
+        return ok({ saved, failed, searchable_mid_call: embedded })
     }))
 
     server.registerTool("list_knowledge", {
@@ -611,7 +702,7 @@ export function registerTalkPilotTools(server: McpServer) {
 
     server.registerTool("add_knowledge", {
         title: "Add to the team knowledge base (Teams admins)",
-        description: "TalkPilot Teams owners and admins: add a text document (pricing, product facts, case studies, policies) to the workspace knowledge base. It is split, indexed and summarized, and the live coach can quote it on reps' next calls.",
+        description: "TalkPilot Teams owners and admins: add a text document (pricing, product facts, case studies, policies) to the workspace knowledge base. It is split, indexed and summarized, and the live coach can quote it on reps' next calls. For files the user shared with you, send their text. For the company overview use set_company_profile instead.",
         inputSchema: z.object({
             title: z.string().min(2).max(200),
             content: z.string().min(20).max(200000),
@@ -621,16 +712,204 @@ export function registerTalkPilotTools(server: McpServer) {
     }, guarded("add_knowledge", async (w, a: { title: string; content: string; kind?: string }) => {
         const m = await requireTeams(w, "admin")
         if (typeof m === "string") return fail(m)
-                const res = await fetch(`${SUPABASE_URL}/functions/v1/ingest-knowledge`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${w.token}`, "Content-Type": "application/json", apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! },
-            body: JSON.stringify({ org_id: m.org_id, title: a.title, kind: a.kind ?? "doc", content: a.content }),
+        const r = await callFunction(w, "ingest-knowledge", { org_id: m.org_id, title: a.title, kind: a.kind ?? "doc", content: a.content })
+        if (!r.ok || r.json.status === "failed") return fail(`Could not add it: ${errorText(r.json, String(r.status))}`)
+        const id = (r.json.knowledge_id as string | undefined) ?? null
+        await log(w, "add_knowledge", { org: m.org_id, target: id })
+        await audit(w, m.org_id, "knowledge.added", id, { title: a.title })
+        return ok({ knowledge_id: id, chunks_indexed: r.json.chunk_count ?? null })
+    }))
+
+    // ── Workspace setup with AI (D-800) ──────────────────────────────────
+
+    server.registerTool("get_setup_status", {
+        title: "Get the workspace setup status (Teams)",
+        description: "TalkPilot Teams: what is set up in the workspace and what is missing, so you can help the admin finish it. Call this first when the user asks you to set up TalkPilot. Returns the workspace, the user's role (only owners and admins can change setup), the sales stages turned on, every playbook (drafts too), objection and knowledge counts, whether a company profile exists, team size, and the next steps.",
+        inputSchema: z.object({}),
+        annotations: READ,
+    }, guarded("get_setup_status", async (w) => {
+        const m = await membership(w)
+        if (!m) return fail("This account is not part of a TalkPilot Teams workspace. Create one at https://teams.talkpilot.co/start, then try again.")
+        const [{ data: org }, { data: stages }, { data: playbooks }, { count: objections }, { data: knowledge }, { data: members }, { count: invites }] = await Promise.all([
+            w.sb.from("organizations").select("name, settings").eq("id", m.org_id).maybeSingle(),
+            w.sb.from("org_sales_stages").select("stage, enabled, tone").eq("org_id", m.org_id),
+            w.sb.from("org_playbooks").select("id, name, sales_stage, status, stages").eq("org_id", m.org_id).neq("status", "archived"),
+            w.sb.from("org_objections").select("id", { count: "exact", head: true }).eq("org_id", m.org_id).eq("active", true),
+            w.sb.from("org_knowledge").select("id, title, kind, status").eq("org_id", m.org_id).neq("status", "archived").limit(200),
+            w.sb.rpc("get_org_members_with_email", { p_org: m.org_id }),
+            w.sb.from("org_invites").select("id", { count: "exact", head: true }).eq("org_id", m.org_id)
+                .is("accepted_at", null).is("revoked_at", null).gt("expires_at", new Date().toISOString()),
+        ])
+        const pbs = (playbooks ?? []) as { id: string; name: string; sales_stage: string | null; status: string; stages: unknown }[]
+        const docs = (knowledge ?? []) as { id: string; title: string; kind: string; status: string }[]
+        const active = pbs.filter(p => p.status === "active").length
+        const drafts = pbs.filter(p => p.status === "draft").length
+        const on = ((stages ?? []) as { stage: string; enabled: boolean; tone: string | null }[]).filter(s => s.enabled)
+        const titles = Object.values(COMPANY_PROFILE_TITLES) as string[]
+        const hasProfile = docs.some(d => titles.includes(d.title))
+        const activeMembers = ((members ?? []) as { status?: string }[]).filter(x => x.status === "active" || !x.status).length
+        const isAdmin = ["owner", "admin"].includes(m.role)
+        const settings = (org?.settings ?? {}) as Record<string, unknown>
+        const profile = (settings.onboarding_profile ?? {}) as Record<string, unknown>
+        // Same "ready" bar as the Command Center's Home checklist (D-175).
+        const next: string[] = []
+        if (!hasProfile) next.push("Write a company profile with set_company_profile.")
+        if (on.length === 0) next.push("Turn on the sales stages the team uses with set_sales_stages.")
+        if (pbs.length === 0) next.push("Create a playbook for each stage the team uses with create_playbook (saved as drafts).")
+        if (drafts > 0 && active === 0) next.push("The admin turns on a draft playbook in the Command Center (Playbook page). You cannot do this.")
+        if ((objections ?? 0) < 3) next.push("Add the most common objections with their approved answers using save_objections (at least 3).")
+        if (docs.length === 0) next.push("Add documents the coach can quote (pricing, product facts, case studies) with add_knowledge.")
+        if (activeMembers <= 1 && (invites ?? 0) === 0) next.push("The admin invites the team in the Command Center (Team page). You cannot do this.")
+        await log(w, "get_setup_status", { org: m.org_id })
+        return ok({
+            workspace: org?.name ?? null,
+            my_role: m.role,
+            can_edit_setup: isAdmin,
+            team_type: settings.vertical ?? null,
+            website: profile.website ?? null,
+            sales_stages_on: on.map(s => ({ stage: s.stage, tone: s.tone })),
+            all_sales_stages: SALES_STAGES,
+            playbooks: pbs.map(p => ({ id: p.id, name: p.name, sales_stage: p.sales_stage, status: p.status, steps: Array.isArray(p.stages) ? p.stages.length : 0 })),
+            active_objections: objections ?? 0,
+            knowledge_documents: docs.map(d => ({ id: d.id, title: d.title, kind: d.kind, status: d.status })),
+            has_company_profile: hasProfile,
+            members: activeMembers,
+            pending_invites: invites ?? 0,
+            ready: active >= 1 && (objections ?? 0) >= 3 && docs.length >= 1,
+            next_steps: next,
+            command_center: "https://teams.talkpilot.co",
+            note: isAdmin ? undefined : "Only workspace owners and admins can change the setup. This person can read it.",
         })
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok || json?.status === "failed") {
-            return fail(`Could not add it: ${json?.error?.message ?? json?.error ?? res.statusText}`)
+    }))
+
+    server.registerTool("create_playbook", {
+        title: "Create a playbook (Teams admins)",
+        description: "TalkPilot Teams owners and admins: create a playbook, the script the live coach follows on calls at one sales stage. It is saved as a DRAFT: reps do not get it until an admin turns it on in the Command Center. Give it its sales stage and 3 to 8 steps in call order; each step has a short name, what the rep does, the things the rep must cover, and phrases the rep must never say. Write it in the language the team uses on calls and set `language` to match. A playbook whose name already exists is refused; edit it with update_playbook_stage.",
+        inputSchema: z.object({
+            name: z.string().min(2).max(120),
+            sales_stage: STAGE_ENUM.nullable().optional().describe("The sales stage this playbook is for"),
+            methodology: z.string().max(40).optional().describe("e.g. SPIN, MEDDIC, BANT, Sandler, Challenger; default custom"),
+            language: z.enum(["en", "es"]).optional().describe("Language the reps speak on calls; default en"),
+            steps: z.array(z.object({
+                name: z.string().min(1).max(120).describe("Short, like: Ask what they need"),
+                description: z.string().max(1000).optional().describe("What the rep does in this step"),
+                must_cover: z.array(z.string().min(1).max(300)).max(15).optional().describe("Things the rep must cover before moving on"),
+                never_say: z.array(z.string().min(2).max(120)).max(10).optional().describe("Exact phrases the rep must never say in this step"),
+            })).min(1).max(15),
+        }),
+        annotations: WRITE,
+    }, guarded("create_playbook", async (w, a: { name: string; sales_stage?: string | null; methodology?: string; language?: "en" | "es"; steps: { name: string; description?: string; must_cover?: string[]; never_say?: string[] }[] }) => {
+        const m = await requireTeams(w, "admin")
+        if (typeof m === "string") return fail(m)
+        const name = a.name.trim()
+        const { data: existing } = await w.sb.from("org_playbooks").select("id, status")
+            .eq("org_id", m.org_id).ilike("name", name.replace(/[\\%_]/g, "\\$&")).neq("status", "archived").limit(1)
+        if (existing?.length) {
+            return fail(`A playbook named "${name}" already exists (id ${existing[0].id}, ${existing[0].status}). Edit it with update_playbook_stage, or pick another name.`)
         }
-        await log(w, "add_knowledge", { org: m.org_id, target: json.knowledge_id ?? null })
-        return ok({ knowledge_id: json.knowledge_id ?? null, chunks_indexed: json.chunk_count ?? null })
+        // Same stored shape as the Command Center editor: `required` is what the
+        // live coach reads, `required_items` keeps the editor's older key, the
+        // per-step forbidden phrases roll up into the runtime `guardrails` (D-181).
+        const used = new Set<string>()
+        const stages = a.steps.map((s, i) => {
+            let key = s.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || `step_${i + 1}`
+            if (used.has(key)) key = `${key}_${i + 1}`
+            used.add(key)
+            const required = (s.must_cover ?? []).map(x => x.trim()).filter(Boolean)
+            return {
+                key,
+                name: s.name.trim(),
+                description: (s.description ?? "").trim(),
+                required,
+                required_items: required,
+                guardrail_rules: (s.never_say ?? []).map(x => x.trim()).filter(Boolean)
+                    .map(keyword => ({ type: "forbidden_phrase", keyword, action: "warn" })),
+            }
+        })
+        const { data, error } = await w.sb.from("org_playbooks").insert({
+            org_id: m.org_id, name, methodology: a.methodology?.trim() || "custom",
+            sales_stage: a.sales_stage ?? null, stages,
+            guardrails: rollUpGuardrails(stages, a.language ?? "en"),
+            status: "draft", version: 1,
+        }).select("id, name, sales_stage, status").single()
+        if (error) return fail(error.message)
+        await log(w, "create_playbook", { org: m.org_id, target: data.id as string })
+        await audit(w, m.org_id, "playbook.created", data.id as string, { name, sales_stage: a.sales_stage ?? null, status: "draft" })
+        return ok({
+            created: { ...data, steps: stages.map(s => ({ key: s.key, name: s.name })) },
+            note: "Saved as a draft. Tell the user to open the Playbook page in the Command Center (https://teams.talkpilot.co/playbook), check it, and turn it on.",
+        })
+    }))
+
+    server.registerTool("set_sales_stages", {
+        title: "Turn sales stages on or off (Teams admins)",
+        description: "TalkPilot Teams owners and admins: choose which of the nine fixed sales stages the team uses, and the tone the coach uses at each (e.g. \"warm and curious, ask more than you talk\"). Only the stages you send change. Stages: prospecting, discovery, demo, proposal, negotiation, close, onboarding, customer_success, renewal.",
+        inputSchema: z.object({
+            stages: z.array(z.object({
+                stage: STAGE_ENUM,
+                enabled: z.boolean().optional().describe("Default true"),
+                tone: z.string().max(300).optional().describe("Tone for this stage; leave out to keep it"),
+            })).min(1).max(9),
+        }),
+        annotations: WRITE,
+    }, guarded("set_sales_stages", async (w, a: { stages: { stage: string; enabled?: boolean; tone?: string }[] }) => {
+        const m = await requireTeams(w, "admin")
+        if (typeof m === "string") return fail(m)
+        const now = new Date().toISOString()
+        for (const s of a.stages) {
+            const row: Record<string, unknown> = { org_id: m.org_id, stage: s.stage, enabled: s.enabled ?? true, updated_at: now }
+            if (s.tone !== undefined) row.tone = s.tone.trim() || null
+            const { error } = await w.sb.from("org_sales_stages").upsert(row, { onConflict: "org_id,stage" })
+            if (error) return fail(`${s.stage}: ${error.message}`)
+        }
+        await log(w, "set_sales_stages", { org: m.org_id })
+        await audit(w, m.org_id, "sales_stages.updated", null, { stages: a.stages.map(s => `${s.stage}:${s.enabled ?? true ? "on" : "off"}`) })
+        const { data } = await w.sb.from("org_sales_stages").select("stage, enabled, tone").eq("org_id", m.org_id)
+        return ok({ sales_stages: data ?? [] })
+    }))
+
+    server.registerTool("set_company_profile", {
+        title: "Write the company profile (Teams admins)",
+        description: "TalkPilot Teams owners and admins: write the one-page company profile the live coach reads on every call: what the company sells, to whom, the problems it solves, how it differs from competitors, usual prices or deal size, and the words the team uses. Plain prose, in the language the team uses on calls. Running it again replaces the old profile instead of adding a copy.",
+        inputSchema: z.object({
+            content: z.string().min(100).max(30000),
+            language: z.enum(["en", "es"]).optional().describe("Language of the text; sets the document's title. Default en"),
+        }),
+        annotations: WRITE,
+    }, guarded("set_company_profile", async (w, a: { content: string; language?: "en" | "es" }) => {
+        const m = await requireTeams(w, "admin")
+        if (typeof m === "string") return fail(m)
+        const { data: found } = await w.sb.from("org_knowledge").select("id")
+            .eq("org_id", m.org_id).in("title", Object.values(COMPANY_PROFILE_TITLES)).neq("status", "archived")
+            .order("updated_at", { ascending: false }).limit(1)
+        const existing = (found?.[0]?.id as string | undefined) ?? null
+        const r = existing
+            ? await callFunction(w, "ingest-knowledge", { org_id: m.org_id, knowledge_id: existing, content: a.content, locale: a.language ?? "en" })
+            : await callFunction(w, "ingest-knowledge", { org_id: m.org_id, title: COMPANY_PROFILE_TITLES[a.language ?? "en"], kind: "doc", content: a.content, locale: a.language ?? "en" })
+        if (!r.ok || r.json.status === "failed") return fail(`Could not save it: ${errorText(r.json, String(r.status))}`)
+        const id = existing ?? (r.json.knowledge_id as string | undefined) ?? null
+        await log(w, "set_company_profile", { org: m.org_id, target: id })
+        await audit(w, m.org_id, existing ? "company_profile.replaced" : "company_profile.created", id)
+        return ok({ knowledge_id: id, replaced: !!existing, chunks_indexed: r.json.chunk_count ?? null })
+    }))
+
+    server.registerTool("read_website", {
+        title: "Read the company website (Teams admins)",
+        description: "TalkPilot Teams owners and admins: fetch one public page (usually the company's home page) and add its text to the knowledge base, so the coach knows the company. One page, text only.",
+        inputSchema: z.object({
+            url: z.string().min(4).max(500).describe("https://…"),
+            language: z.enum(["en", "es"]).optional().describe("Language the summary is written in; default en"),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    }, guarded("read_website", async (w, a: { url: string; language?: "en" | "es" }) => {
+        const m = await requireTeams(w, "admin")
+        if (typeof m === "string") return fail(m)
+        const url = /^https?:\/\//i.test(a.url.trim()) ? a.url.trim() : `https://${a.url.trim()}`
+        const r = await callFunction(w, "ingest-website", { org_id: m.org_id, url, locale: a.language ?? "en" })
+        if (!r.ok) return fail(`Could not read it: ${errorText(r.json, String(r.status))}`)
+        const id = (r.json.knowledge_id as string | undefined) ?? null
+        await log(w, "read_website", { org: m.org_id, target: id })
+        await audit(w, m.org_id, "knowledge.website_read", id, { url })
+        return ok({ knowledge_id: id, chunks_indexed: r.json.chunk_count ?? null, characters: r.json.chars ?? null })
     }))
 }

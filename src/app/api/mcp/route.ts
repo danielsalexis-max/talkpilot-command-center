@@ -17,7 +17,9 @@ const handler = createMcpHandler(
             "Use these tools to read their past conversations (summaries, Deep Dive analysis, transcripts), " +
             "prepare for upcoming calls, manage follow-up action items, see coaching progress, and update what the live coach knows. " +
             "TalkPilot Teams managers can also review their reps' scored calls, and admins can edit playbooks, objections and the knowledge base. " +
-            "In transcripts, \"You\" is the user and \"Them\" is the other side. Answer in the user's language.",
+            "In transcripts, \"You\" is the user and \"Them\" is the other side. Answer in the user's language. " +
+            "If the user asks you to set up their TalkPilot workspace, call get_setup_status first, use what you know and the files they shared, " +
+            "show them a plan, and save with the TalkPilot tools only after they agree. Playbooks are saved as drafts that an admin turns on in the Command Center.",
     },
 )
 

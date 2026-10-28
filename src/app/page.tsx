@@ -8,6 +8,7 @@ import { supabase, type Scorecard } from "@/lib/supabase"
 import { ScoreRing } from "@/components/ScoreRing"
 import { InsightsSections } from "@/components/InsightsSections"
 import { PageSkeleton, HomeSetupCard, CoachReadingBanner, type SetupState } from "@/components/homeStates"
+import { AISetupCard } from "@/components/aiSetupCard"
 import { useLocale } from "@/i18n/LocaleProvider"
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
@@ -47,6 +48,7 @@ export default function HomePage() {
     const [loading, setLoading]   = useState(true)
     const [error, setError]       = useState<string | null>(null)
     const [userName, setUserName] = useState<string | null>(null)
+    const [isAdmin, setIsAdmin]   = useState(false)
 
     const memberLabel = (m: MemberInfo | undefined) => m?.full_name || m?.email || t.common.rep
 
@@ -77,6 +79,7 @@ export default function HomePage() {
                 return
             }
             const orgId = orgData.org_id
+            setIsAdmin(["owner", "admin"].includes(orgData.member_role))
 
             const [{ data: orgInfo }, { data: scorecards }, { data: mems },
                    { count: pbCount }, { count: objCount }, { count: kbCount }, { count: invCount }] = await Promise.all([
@@ -309,6 +312,12 @@ export default function HomePage() {
 
             {setup && org && (
                 <HomeSetupCard state={setup} orgId={org.id} hasCards={cards.length > 0} />
+            )}
+
+            {/* D-800: let their own AI write the coaching setup. Shown to owners
+                 and admins until the content half of the checklist is done. */}
+            {setup && org && isAdmin && !(setup.activePlaybooks >= 1 && setup.objections >= 3 && setup.knowledge >= 1) && (
+                <AISetupCard surface="home" />
             )}
 
             {/* ── State 3: the live dashboard ── */}
