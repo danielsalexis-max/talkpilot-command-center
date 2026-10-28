@@ -675,6 +675,13 @@ export const en = {
         gotInvite: "Got an invite email? Open its link to join your team's workspace.",
         headerMeta: (plan: string, seats: number, visibility: string) => `${plan} plan · ${seats} seats · ${visibility} visibility`,
         inviteReps: "Invite reps",
+        // D-586: the apps' greeting header and hero banner.
+        greeting: (part: "morning" | "afternoon" | "evening", name: string | null) =>
+            `Good ${part}${name ? `, ${name}` : ""}`,
+        heroTeamTitle: (n: number) => `${n} scored call${n === 1 ? "" : "s"} this month`,
+        heroTeamSub: (avg: number | null) => avg == null ? "Open the calls to see how your team is doing." : `Team average: ${avg}. Open the calls to see who needs coaching.`,
+        heroSeeCalls: "See calls",
+        last30: "Last 30 days",
         attnBreachTitle: (rule: string) => `Guardrail breach — ${rule}`,
         attnReviewCall: "Review call →",
         attnDeclineTitle: (name: string, drop: number) => `${name}’s adherence fell ${drop} pts`,
@@ -1327,6 +1334,13 @@ export const en = {
         },
 
         practice: {
+            // D-586: the practice page as poster cards.
+            all: "All",
+            difficulty: { easy: "Easy", medium: "Medium", hard: "Hard" } as Record<string, string>,
+            minutes: (n: number) => `${n} min`,
+            withCharacter: (name: string) => `with ${name}`,
+            selected: "Selected",
+            assignedCount: (n: number) => `${n} active`,
             assignTitle: "Assign a practice",
             assignSub: "The rep runs it against an AI character in the TalkPilot app and gets a graded scorecard — the grade rolls up here automatically.",
             scenario: "Scenario",

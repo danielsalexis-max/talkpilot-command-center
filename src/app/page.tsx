@@ -46,6 +46,7 @@ export default function HomePage() {
     const [setup, setSetup]       = useState<SetupState | null>(null)
     const [loading, setLoading]   = useState(true)
     const [error, setError]       = useState<string | null>(null)
+    const [userName, setUserName] = useState<string | null>(null)
 
     const memberLabel = (m: MemberInfo | undefined) => m?.full_name || m?.email || t.common.rep
 
@@ -55,6 +56,9 @@ export default function HomePage() {
         try {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) { router.replace("/login"); return }
+            const meta = (user.user_metadata ?? {}) as { full_name?: string; name?: string }
+            const full = meta.full_name || meta.name || ""
+            setUserName(full.trim().split(/\s+/)[0] || null)
 
             const { data: orgData } = await supabase.rpc("get_org_context")
             if (!orgData?.org_id) {
@@ -228,6 +232,9 @@ export default function HomePage() {
         { label: t.common.accuracy,   field: "accuracy_score",  hint: t.home.kpiHints.accuracy },
     ]
 
+    const hour = new Date().getHours()
+    const dayPart: "morning" | "afternoon" | "evening" = hour < 12 ? "morning" : hour < 19 ? "afternoon" : "evening"
+
     const attnStyle: Record<Attention["kind"], string> = {
         breach:  "border-l-red-500",
         decline: "border-l-amber-400",
@@ -240,12 +247,15 @@ export default function HomePage() {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-5">
+            {/* ── The apps' greeting header (D-586) ── */}
+            <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-[var(--color-text)]">{org?.name}</h1>
-                    <p className="text-sm text-[var(--color-text-secondary)] mt-1 capitalize">
-                        {t.home.headerMeta(org?.plan ?? "", org?.seats_purchased ?? 0, (t.data.visibility[org?.visibility ?? ""] ?? org?.visibility ?? "").toLowerCase())}
+                    <h1 className="text-2xl font-bold text-[var(--color-text)]">{t.home.greeting(dayPart, userName)}</h1>
+                    <p className="text-[13px] text-[var(--color-text-secondary)] mt-1">
+                        <span className="capitalize">{new Date().toLocaleDateString(intl, { weekday: "long", month: "short", day: "numeric" })}</span>
+                        {org?.name ? <> · {org.name}</> : null}
+                        <span className="hidden sm:inline capitalize"> · {t.home.headerMeta(org?.plan ?? "", org?.seats_purchased ?? 0, (t.data.visibility[org?.visibility ?? ""] ?? org?.visibility ?? "").toLowerCase())}</span>
                     </p>
                 </div>
                 <Link href={"/team?tab=members" as Route}
@@ -253,6 +263,40 @@ export default function HomePage() {
                     {t.home.inviteReps}
                 </Link>
             </div>
+
+            {/* ── Hero banner: the one thing to do next. The most urgent
+                 attention item when there is one, otherwise the month so far. ── */}
+            {cards.length > 0 && (() => {
+                const top = attention[0]
+                const avg = avgOf(cards, "overall_score")
+                const kicker = top ? attnPill[top.kind].label : t.home.last30
+                const title  = top ? top.title : t.home.heroTeamTitle(cards.length)
+                const sub    = top ? top.sub   : t.home.heroTeamSub(avg)
+                const href   = top ? top.href  : ("/calls" as Route)
+                const cta    = top ? top.cta   : t.home.heroSeeCalls
+                return (
+                    <Link href={href} className="tp-hero-banner group flex items-center gap-3.5 px-4 sm:px-5 py-3.5">
+                        <span className="relative z-[1] hidden sm:grid w-9 h-9 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-white/25">
+                            <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                {top
+                                    ? <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v5m0 3.5v.01M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0z" />
+                                    : <path strokeLinecap="round" strokeLinejoin="round" d="M4 20V10M10 20V4M16 20v-7M22 20H2" />}
+                            </svg>
+                        </span>
+                        <span className="relative z-[1] min-w-0 flex-1">
+                            <span className="flex items-center gap-2 min-w-0">
+                                <span className="shrink-0 text-[10.5px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-md bg-white/15 text-white/90">{kicker}</span>
+                                <span className="truncate font-display text-[15.5px] font-bold" title={title}>{title}</span>
+                            </span>
+                            <span className="block truncate text-[12.5px] text-white/80 mt-0.5">{sub}</span>
+                        </span>
+                        <span className="relative z-[1] hidden md:inline-flex items-center gap-1 shrink-0 px-3 h-8 rounded-[10px] bg-white text-[#0E182B] text-[13px] font-semibold shadow-[0_4px_12px_rgba(0,0,0,0.16)] group-hover:-translate-y-px transition-transform">
+                            {cta.replace(/\s*→\s*$/, "")}
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m9 6 6 6-6 6" /></svg>
+                        </span>
+                    </Link>
+                )
+            })()}
 
             {/* ── First-run: ONE card above the dashboard, not instead of it
                  (D-192 kept). The old shape rendered the checklist AND the
@@ -271,9 +315,9 @@ export default function HomePage() {
             {cards.length > 0 && (<>
 
             {/* Attention feed */}
-            {attention.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    {attention.map(a => (
+            {attention.length > 1 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {attention.slice(1).map(a => (
                         <Link key={a.kind} href={a.href}
                             className={`bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] border-l-[3px] ${attnStyle[a.kind]} p-4 shadow-sm hover:shadow transition-shadow block`}>
                             <span className={`inline-block font-mono text-[10px] tracking-wide px-2 py-0.5 rounded-full ${attnPill[a.kind].cls}`}>{attnPill[a.kind].label}</span>
@@ -287,17 +331,21 @@ export default function HomePage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
                 <div className="space-y-4 min-w-0">
-                    {/* KPI tiles */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {kpis.map(k => (
-                            <div key={k.field} className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-4 shadow-sm">
-                                <p className="text-[11px] uppercase tracking-wide text-[var(--color-muted)] cursor-help" title={k.hint}>{k.label}</p>
-                                <div className="flex items-baseline gap-2 mt-1">
-                                    <span className="font-mono text-2xl text-[var(--color-text)]">{avgOf(cards, k.field) ?? "—"}</span>
-                                    <Delta value={delta(k.field)} />
+                    {/* KPI row — one card, big numbers over small labels, like
+                        the apps' "This week" card (D-586). */}
+                    <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
+                        <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.last30}</h2>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-3">
+                            {kpis.map(k => (
+                                <div key={k.field} title={k.hint} className="cursor-help">
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="font-display text-[28px] font-bold leading-none text-[var(--color-text)]">{avgOf(cards, k.field) ?? "—"}</span>
+                                        <Delta value={delta(k.field)} />
+                                    </div>
+                                    <p className="text-[13px] text-[var(--color-text-secondary)] mt-1.5">{k.label}</p>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
 
                     {/* Trend */}

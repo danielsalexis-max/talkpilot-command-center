@@ -638,6 +638,13 @@ export const es: Dict = {
         gotInvite: "¿Recibiste un email de invitación? Abre su enlace para unirte al espacio de tu equipo.",
         headerMeta: (plan: string, seats: number, visibility: string) => `Plan ${plan} · ${seats} asientos · visibilidad: ${visibility}`,
         inviteReps: "Invitar reps",
+        // D-586: el saludo y el banner principal de las apps.
+        greeting: (part: "morning" | "afternoon" | "evening", name: string | null) =>
+            `${part === "morning" ? "Buenos días" : part === "afternoon" ? "Buenas tardes" : "Buenas noches"}${name ? `, ${name}` : ""}`,
+        heroTeamTitle: (n: number) => `${n} llamada${n === 1 ? "" : "s"} evaluada${n === 1 ? "" : "s"} este mes`,
+        heroTeamSub: (avg: number | null) => avg == null ? "Abre las llamadas para ver cómo va tu equipo." : `Promedio del equipo: ${avg}. Abre las llamadas para ver quién necesita coaching.`,
+        heroSeeCalls: "Ver llamadas",
+        last30: "Últimos 30 días",
         attnBreachTitle: (rule: string) => `Límite infringido — ${rule}`,
         attnReviewCall: "Revisar llamada →",
         attnDeclineTitle: (name: string, drop: number) => `La adherencia de ${name} cayó ${drop} pts`,
@@ -1277,6 +1284,13 @@ export const es: Dict = {
         },
 
         practice: {
+            // D-586: la página de práctica con tarjetas de escena.
+            all: "Todas",
+            difficulty: { easy: "Fácil", medium: "Media", hard: "Difícil" } as Record<string, string>,
+            minutes: (n: number) => `${n} min`,
+            withCharacter: (name: string) => `con ${name}`,
+            selected: "Elegida",
+            assignedCount: (n: number) => `${n} activa${n === 1 ? "" : "s"}`,
             assignTitle: "Asignar una práctica",
             assignSub: "El rep la ejecuta contra un personaje de IA en la app de TalkPilot y recibe un scorecard calificado — la calificación sube aquí automáticamente.",
             scenario: "Escenario",
