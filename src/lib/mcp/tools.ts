@@ -191,7 +191,7 @@ export function registerTalkPilotTools(server: McpServer) {
             if (ctx) {
                 team = {
                     org: ctx.org_name,
-                    playbooks: (ctx.playbooks ?? []).map((pb: Record<string, unknown>) => ({ name: pb.name, call_type: pb.call_type, stages: pb.stages })),
+                    playbooks: (ctx.playbooks ?? []).map((pb: Record<string, unknown>) => ({ name: pb.name, sales_stage: pb.sales_stage ?? null, call_type: pb.call_type, stages: pb.stages })),
                     top_objections: (ctx.objections ?? []).slice(0, 15).map((o: Record<string, unknown>) => ({ objection: o.objection, approved_responses: o.approved_responses })),
                 }
             }
@@ -475,14 +475,14 @@ export function registerTalkPilotTools(server: McpServer) {
 
     server.registerTool("get_playbooks", {
         title: "Get the team playbooks (Teams)",
-        description: "TalkPilot Teams: the workspace's playbooks with their stages (talking points, required steps, exit criteria) and guardrails. Members see what is shared with them; admins see all, including drafts.",
+        description: "TalkPilot Teams: the workspace's playbooks, each with its sales stage (prospecting, discovery, demo, proposal, negotiation, close, onboarding, customer_success, renewal, or null), with their steps (talking points, required steps, exit criteria) and guardrails. Members see what is shared with them; admins see all, including drafts.",
         inputSchema: z.object({}),
         annotations: READ,
     }, guarded("get_playbooks", async (w) => {
         const m = await membership(w)
         if (!m) return fail("This account is not part of a TalkPilot Teams workspace.")
         const { data, error } = await w.sb.from("org_playbooks")
-            .select("id, name, call_type, methodology, status, version, stages, guardrails, updated_at")
+            .select("id, name, sales_stage, call_type, methodology, status, version, stages, guardrails, updated_at")
             .eq("org_id", m.org_id).order("updated_at", { ascending: false })
         if (error) return fail(error.message)
         await log(w, "get_playbooks", { org: m.org_id })
