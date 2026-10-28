@@ -7,12 +7,14 @@ import { supabase } from "@/lib/supabase"
 import { useOrg, OrgBanners } from "@/lib/useOrg"
 import { SettingsTab, BillingTab } from "@/components/orgTabs"
 import { SecurityTab, AuditTab } from "@/components/securityTabs"
+import { IntegrationsTab } from "@/components/integrationsTab"
+import { aiSetupCopy } from "@/lib/aiSetup"
 import { PageSkeleton } from "@/components/homeStates"
 import { getSkinPref, setSkinPref, type SkinPref } from "@/lib/skin"
-import { useT } from "@/i18n/LocaleProvider"
+import { useLocale, useT } from "@/i18n/LocaleProvider"
 import { useState } from "react"
 
-type Tab = "org" | "security" | "audit" | "billing"
+type Tab = "org" | "integrations" | "security" | "audit" | "billing"
 
 function AppearanceCard() {
     const t = useT()
@@ -44,8 +46,11 @@ function SettingsPageInner() {
     const params = useSearchParams()
     const t = useT()
     const { org, orgId, loading, reload } = useOrg()
+    const { locale } = useLocale()
     const TABS: { key: Tab; label: string }[] = [
         { key: "org",      label: t.settingsPage.tabOrg      },
+        // D-802: CRM, tools and the Claude & ChatGPT connector get their own tab.
+        { key: "integrations", label: aiSetupCopy(locale).tabTitle },
         { key: "security", label: t.settingsPage.tabSecurity },
         { key: "audit",    label: t.settingsPage.tabAudit    },
         { key: "billing",  label: t.settingsPage.tabBilling  },
@@ -64,7 +69,7 @@ function SettingsPageInner() {
     const visibleTabs = entitled ? TABS : TABS.filter(tb => tb.key === "billing")
     const raw = params.get("tab")
     const tab: Tab = !entitled ? "billing"
-        : raw === "billing" || raw === "security" || raw === "audit"
+        : raw === "billing" || raw === "security" || raw === "audit" || raw === "integrations"
         ? (raw as Tab) : "org"
     const setTab = (t: Tab) => router.replace(`/settings?tab=${t}`, { scroll: false })
 
@@ -121,6 +126,7 @@ function SettingsPageInner() {
                     <AppearanceCard />
                 </div>
             )}
+            {tab === "integrations" && <IntegrationsTab org={org} onSaved={reload} />}
             {tab === "security" && <SecurityTab orgId={orgId} org={org} />}
             {tab === "audit"    && <AuditTab orgId={orgId} />}
             {tab === "billing"  && <BillingTab orgId={orgId} trialEndsAt={org.trial_ends_at ?? null} />}

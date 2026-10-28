@@ -2,8 +2,9 @@
 
 // D-538: TalkPilot inside Claude and ChatGPT, the admin's view. Each person
 // connects their own AI app (it is their account), so this card only explains
-// it, hands out the connector URL, and shows how the workspace has used it.
-// Reads of a rep's calls are listed by name: the rep can see them too.
+// it, hands out the connector URL and the setup prompt (D-800), and shows how
+// the workspace has used it. Reads of a rep's calls are listed by name: the
+// rep can see them too. Lives in Settings → Integrations since D-802.
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
@@ -15,9 +16,15 @@ export const MCP_CONNECTOR_URL = "https://teams.talkpilot.co/api/mcp"
 
 type LogRow = { user_id: string; subject_user_id: string | null; tool: string; created_at: string }
 
+const CARD = "bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 sm:p-6 shadow-sm"
+const STEP = "rounded-lg border border-[var(--color-line-soft,var(--color-border))] bg-[var(--color-bg)] p-4 space-y-3 flex flex-col"
+const NUM = "w-6 h-6 shrink-0 rounded-full grid place-items-center text-[11px] font-bold bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)]"
+
 export function AIConnectorCard({ orgId }: { orgId: string }) {
     const t = useT().aiConnector
-    const [copied, setCopied] = useState(false)
+    const { locale } = useLocale()
+    const c = aiSetupCopy(locale)
+    const [copied, setCopied] = useState<"link" | "prompt" | null>(null)
     const [rows, setRows] = useState<LogRow[] | null>(null)
     const [names, setNames] = useState<Record<string, string>>({})
 
@@ -35,63 +42,82 @@ export function AIConnectorCard({ orgId }: { orgId: string }) {
         })
     }, [orgId])
 
+    function copy(what: "link" | "prompt") {
+        navigator.clipboard.writeText(what === "link" ? MCP_CONNECTOR_URL : c.prompt).catch(() => {})
+        track(what === "link" ? "ai_setup_link_copied" : "ai_setup_prompt_copied", { surface: "settings" })
+        setCopied(what); setTimeout(() => setCopied(null), 2000)
+    }
+
     const people = new Set((rows ?? []).map(r => r.user_id)).size
     const reads = (rows ?? []).filter(r => r.subject_user_id)
 
     return (
-        <div className="pt-3 border-t border-[var(--color-border)] space-y-2">
-            <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.title}</label>
-            <p className="text-xs text-[var(--color-text-secondary)]">{t.intro}</p>
-            <div className="flex items-center gap-2">
-                <code className="flex-1 truncate rounded-lg bg-[var(--color-bg)] px-3 py-2 text-xs text-[var(--color-text)]">{MCP_CONNECTOR_URL}</code>
-                <button
-                    className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-text)]"
-                    onClick={() => {
-                        navigator.clipboard.writeText(MCP_CONNECTOR_URL).catch(() => {})
-                        setCopied(true); setTimeout(() => setCopied(false), 2000)
-                    }}>
-                    {copied ? t.copied : t.copy}
-                </button>
+        <section aria-labelledby="ai-connector" className={CARD + " space-y-4"}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="max-w-xl">
+                    <h3 id="ai-connector" className="font-display text-[15px] font-bold text-[var(--color-text)]">{t.title}</h3>
+                    <p className="text-[13px] text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">{t.intro}</p>
+                </div>
+                {rows !== null && (
+                    <span className="shrink-0 text-[11px] font-semibold rounded-full px-2.5 py-1 bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)]">
+                        {rows.length === 0 ? c.notUsed : t.usage(people, rows.length)}
+                    </span>
+                )}
             </div>
-            <p className="text-xs text-[var(--color-text-secondary)]">{t.steps}</p>
-            <p className="text-xs text-[var(--color-muted)]">{t.access}</p>
-            <CopySetupPromptRow />
-            {rows !== null && (
-                rows.length === 0
-                    ? <p className="text-xs text-[var(--color-muted)]">{t.noUse}</p>
-                    : <div className="space-y-1 pt-1">
-                        <p className="text-xs text-[var(--color-text)]">{t.usage(people, rows.length)}</p>
-                        {reads.slice(0, 10).map((r, i) => (
-                            <p key={i} className="text-xs text-[var(--color-text-secondary)]">
-                                {t.readLine(names[r.user_id] ?? "?", names[r.subject_user_id!] ?? "?",
-                                    new Date(r.created_at).toLocaleString())}
-                            </p>
-                        ))}
-                    </div>
-            )}
-        </div>
-    )
-}
 
-/// D-800: the setup prompt for admins who already connected their AI. Home's
-/// AISetupCard carries the full walkthrough while the workspace isn't ready.
-function CopySetupPromptRow() {
-    const { locale } = useLocale()
-    const c = aiSetupCopy(locale)
-    const [copied, setCopied] = useState(false)
-    return (
-        <div className="pt-2 space-y-1.5">
-            <p className="text-xs text-[var(--color-text)] font-medium">{c.settingsTitle}</p>
-            <p className="text-xs text-[var(--color-text-secondary)]">{c.settingsHint}</p>
-            <button
-                className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-xs font-medium text-[var(--color-text)]"
-                onClick={() => {
-                    navigator.clipboard.writeText(c.prompt).catch(() => {})
-                    track("ai_setup_prompt_copied", { surface: "settings" })
-                    setCopied(true); setTimeout(() => setCopied(false), 2000)
-                }}>
-                {copied ? c.copied : c.copyPrompt}
-            </button>
-        </div>
+            <div className="grid gap-3 md:grid-cols-2">
+                <div className={STEP}>
+                    <div className="flex items-center gap-2.5">
+                        <span className={NUM}>1</span>
+                        <p className="text-sm font-semibold text-[var(--color-text)]">{c.connectTitle}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <code className="flex-1 min-w-0 truncate rounded-md bg-[var(--color-surface)] border border-[var(--color-border)] px-2.5 py-2 text-xs text-[var(--color-text)]">{MCP_CONNECTOR_URL}</code>
+                        <button type="button" onClick={() => copy("link")}
+                            className="shrink-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs font-semibold text-[var(--color-text)] hover:bg-[var(--color-hover)] transition-colors">
+                            {copied === "link" ? t.copied : t.copy}
+                        </button>
+                    </div>
+                    <dl className="text-xs space-y-1.5">
+                        <div><dt className="inline font-semibold text-[var(--color-text)]">Claude: </dt><dd className="inline text-[var(--color-text-secondary)]">{c.claudePath}</dd></div>
+                        <div><dt className="inline font-semibold text-[var(--color-text)]">ChatGPT: </dt><dd className="inline text-[var(--color-text-secondary)]">{c.chatgptPath}</dd></div>
+                    </dl>
+                    <p className="text-xs text-[var(--color-text-secondary)]">{c.thenAllow}</p>
+                </div>
+
+                <div className={STEP}>
+                    <div className="flex items-center gap-2.5">
+                        <span className={NUM}>2</span>
+                        <p className="text-sm font-semibold text-[var(--color-text)]">{c.setupTitle}</p>
+                    </div>
+                    <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed flex-1">{c.setupSub}</p>
+                    <button type="button" onClick={() => copy("prompt")}
+                        className="self-start px-4 py-2 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors">
+                        {copied === "prompt" ? c.copied : c.copyPrompt}
+                    </button>
+                </div>
+            </div>
+
+            <details className="group text-xs">
+                <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden font-semibold text-[var(--color-accent-deep)] inline-flex items-center gap-1">
+                    <span className="transition-transform group-open:rotate-90" aria-hidden="true">›</span> {c.canSee}
+                </summary>
+                <div className="pt-2 space-y-1.5 text-[var(--color-text-secondary)] leading-relaxed">
+                    <p>{t.access}</p>
+                    <p>{c.appNote}</p>
+                </div>
+            </details>
+
+            {reads.length > 0 && (
+                <div className="space-y-1 border-t border-[var(--color-line-soft,var(--color-border))] pt-3">
+                    {reads.slice(0, 10).map((r, i) => (
+                        <p key={i} className="text-xs text-[var(--color-text-secondary)]">
+                            {t.readLine(names[r.user_id] ?? "?", names[r.subject_user_id!] ?? "?",
+                                new Date(r.created_at).toLocaleString())}
+                        </p>
+                    ))}
+                </div>
+            )}
+        </section>
     )
 }
