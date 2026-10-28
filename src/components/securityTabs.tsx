@@ -372,7 +372,7 @@ export function SecurityTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     }, [orgId])
 
     return (
-        <div className="space-y-6 max-w-3xl">
+        <div className="grid gap-4 lg:grid-cols-2 items-start">
             <MfaCard orgId={orgId} />
             {ent?.sso  ? <SsoCard  orgId={orgId} /> : ent && <EnterpriseLock title={t.security.ssoTitle}  body={t.security.enterpriseLockedSso}  />}
             {ent?.scim ? <ScimCard orgId={orgId} /> : ent && <EnterpriseLock title={t.security.scimTitle} body={t.security.enterpriseLockedScim} />}

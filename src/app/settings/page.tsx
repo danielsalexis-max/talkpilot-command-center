@@ -21,7 +21,7 @@ function AppearanceCard() {
     const [pref, setPref] = useState<SkinPref>("light")
     useEffect(() => { setPref(getSkinPref()) }, [])
     return (
-        <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm space-y-3 max-w-2xl">
+        <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm space-y-3">
             <div>
                 <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.settingsPage.appearance}</h3>
                 <p className="text-xs text-[var(--color-text-secondary)] mt-1">
@@ -121,10 +121,7 @@ function SettingsPageInner() {
             </div>
 
             {tab === "org" && (
-                <div className="space-y-6">
-                    <SettingsTab org={org} onSaved={reload} />
-                    <AppearanceCard />
-                </div>
+                <SettingsTab org={org} onSaved={reload} extra={<AppearanceCard />} />
             )}
             {tab === "integrations" && <IntegrationsTab org={org} onSaved={reload} />}
             {tab === "security" && <SecurityTab orgId={orgId} org={org} />}

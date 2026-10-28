@@ -357,7 +357,7 @@ function reassembleChunks(chunks: { chunk_index: number; content: string }[]): s
 // rather than hiding — honest beats pretty here.
 
 
-export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => void }) {
+export function SettingsTab({ org, onSaved, extra }: { org: OrgInfo; onSaved: () => void; extra?: React.ReactNode }) {
     const t = useT()
     const [name, setName]             = useState(org.name)
     const [visibility, setVisibility] = useState(org.visibility)
@@ -415,7 +415,9 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
     const s = t.tabs.settings.sections
 
     return (
-        <div className="space-y-4 max-w-2xl">
+        // Full width, cards two per row on wide screens (D-802 follow-up).
+        <div className="space-y-4">
+            <div className="grid gap-4 lg:grid-cols-2 items-start">
             <Section title={s.workspace} sub={s.workspaceSub}>
                 <div className="space-y-1">
                     <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.settings.name}</label>
@@ -494,6 +496,9 @@ export function SettingsTab({ org, onSaved }: { org: OrgInfo; onSaved: () => voi
                     </p>
                 </div>
             </Section>
+
+            {extra}
+            </div>
 
             <div className="sticky bottom-4 flex items-center gap-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl px-4 py-3 shadow-md">
                 <button className={BTN_PRIMARY} onClick={save} disabled={saving}>
