@@ -17,7 +17,8 @@ export const MCP_CONNECTOR_URL = "https://teams.talkpilot.co/api/mcp"
 type LogRow = { user_id: string; subject_user_id: string | null; tool: string; created_at: string }
 
 const CARD = "bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 sm:p-6 shadow-sm"
-const STEP = "rounded-lg border border-[var(--color-line-soft,var(--color-border))] bg-[var(--color-bg)] p-4 space-y-3 flex flex-col"
+const STEP_BOX = "rounded-lg border border-[var(--color-line-soft,var(--color-border))] bg-[var(--color-bg)] p-4 space-y-3 flex-col"
+const STEP = STEP_BOX + " flex"
 const NUM = "w-6 h-6 shrink-0 rounded-full grid place-items-center text-[11px] font-bold bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)]"
 
 export function AIConnectorCard({ orgId }: { orgId: string }) {
@@ -54,7 +55,7 @@ export function AIConnectorCard({ orgId }: { orgId: string }) {
     return (
         <section aria-labelledby="ai-connector" className={CARD + " space-y-4"}>
             <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="max-w-xl">
+                <div className="max-w-3xl">
                     <h3 id="ai-connector" className="font-display text-[15px] font-bold text-[var(--color-text)]">{t.title}</h3>
                     <p className="text-[13px] text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">{t.intro}</p>
                 </div>
@@ -65,7 +66,7 @@ export function AIConnectorCard({ orgId }: { orgId: string }) {
                 )}
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <div className={STEP}>
                     <div className="flex items-center gap-2.5">
                         <span className={NUM}>1</span>
@@ -96,9 +97,18 @@ export function AIConnectorCard({ orgId }: { orgId: string }) {
                         {copied === "prompt" ? c.copied : c.copyPrompt}
                     </button>
                 </div>
+
+                <div className={STEP_BOX + " hidden xl:flex"}>
+                    <div className="flex items-center gap-2.5">
+                        <span className={NUM} aria-hidden="true">i</span>
+                        <p className="text-sm font-semibold text-[var(--color-text)]">{c.canSee}</p>
+                    </div>
+                    <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">{t.access}</p>
+                    <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">{c.appNote}</p>
+                </div>
             </div>
 
-            <details className="group text-xs">
+            <details className="group text-xs xl:hidden">
                 <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden font-semibold text-[var(--color-accent-deep)] inline-flex items-center gap-1">
                     <span className="transition-transform group-open:rotate-90" aria-hidden="true">›</span> {c.canSee}
                 </summary>

@@ -66,7 +66,9 @@ export function IntegrationsTab({ org, onSaved }: { org: OrgLite; onSaved: () =>
     const extra = counts ? Object.keys(counts).filter(k => !PROVIDERS.some(p => p.key === k)) : []
 
     return (
-        <div className="space-y-4 max-w-3xl">
+        // Full width (D-802 follow-up): the cards fill the page instead of a
+        // narrow column with empty space on the right.
+        <div className="space-y-4">
             <div>
                 <h2 className="font-display text-lg font-bold text-[var(--color-text)]">{c.tabTitle}</h2>
                 <p className="text-sm text-[var(--color-text-secondary)] mt-0.5">{c.tabSub}</p>
@@ -77,9 +79,9 @@ export function IntegrationsTab({ org, onSaved }: { org: OrgLite; onSaved: () =>
             <section aria-labelledby="crm-tools" className={CARD + " space-y-4"}>
                 <div>
                     <h3 id="crm-tools" className="font-display text-[15px] font-bold text-[var(--color-text)]">{c.crmTitle}</h3>
-                    <p className="text-[13px] text-[var(--color-text-secondary)] mt-0.5 leading-relaxed">{c.crmSub}</p>
+                    <p className="text-[13px] text-[var(--color-text-secondary)] mt-0.5 leading-relaxed max-w-3xl">{c.crmSub}</p>
                 </div>
-                <ul className="grid gap-2 sm:grid-cols-2">
+                <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
                     {[...PROVIDERS, ...extra.map(k => ({ key: k, name: k, icon: "" }))].map(p => {
                         const n = counts?.[p.key] ?? 0
                         return (
@@ -95,7 +97,7 @@ export function IntegrationsTab({ org, onSaved }: { org: OrgLite; onSaved: () =>
                         )
                     })}
                 </ul>
-                <div className="border-t border-[var(--color-line-soft,var(--color-border))] pt-4 space-y-2">
+                <div className="border-t border-[var(--color-line-soft,var(--color-border))] pt-4 space-y-2 max-w-4xl">
                     <label className="flex items-start gap-2.5 text-sm text-[var(--color-text)] cursor-pointer">
                         <input type="checkbox" checked={autoLog} onChange={e => setAutoLog(e.target.checked)}
                             className="accent-[var(--color-accent)] w-4 h-4 mt-0.5" />
