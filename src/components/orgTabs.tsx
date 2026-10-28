@@ -15,6 +15,8 @@ import { SearchBox } from "@/components/SearchBox"
 import { STOCK_PRACTICE_SCENARIOS } from "@/lib/stockPracticeScenarios"
 import { rollUpGuardrails } from "@/lib/guardrails"
 import { PlaybookAssignment, type AssignTarget } from "@/components/playbookAssignment"
+import { SalesStageStrip, ObjectionStageBadge, useEnabledStages, type StageFilter } from "@/components/salesStageStrip"
+import { SALES_STAGES, isSalesStage, stageLabel, stageCopy, type SalesStage } from "@/lib/salesStages"
 import { TeamsSection } from "@/components/teamsSection"
 import { StarterKitPicker } from "@/components/starterKitPicker"
 import { VERTICALS, starterKitsFor, addStarterObjections, type Vertical, type StarterObjection } from "@/lib/starterKit"
@@ -39,9 +41,9 @@ export interface OrgInfo {
     settings?: { rep_visibility?: { playbook?: boolean; knowledge?: boolean; objections?: boolean } } & Record<string, unknown>
 }
 interface KbRow    { id: string; title: string; kind: string; status: string; summary: string | null; intake_receipt: string | null; created_at: string; team_id: string | null; user_id: string | null }
-interface ObjRow   { id: string; objection: string; response_guidance: string | null; approved_responses: { text?: string }[] | null; severity: string; active: boolean; variants: string[] | null; source: string | null; team_id: string | null; user_id: string | null }
+interface ObjRow   { id: string; objection: string; response_guidance: string | null; approved_responses: { text?: string }[] | null; severity: string; active: boolean; variants: string[] | null; source: string | null; team_id: string | null; user_id: string | null; sales_stages?: string[] | null }
 interface PbStage  { key?: string; name: string; description: string; required?: string[]; required_items: string[]; guardrail_rules: Array<{type: string; keyword: string; action: string}> }
-interface PbRow    { id: string; name: string; methodology: string | null; call_type: string | null; status: string; version: number; stages: PbStage[]; created_at: string }
+interface PbRow    { id: string; name: string; methodology: string | null; call_type: string | null; sales_stage: string | null; status: string; version: number; stages: PbStage[]; created_at: string }
 interface MemberRow { user_id: string; email: string | null; role: string; status: string; joined_at: string; playbook_policy?: string | null }
 interface InviteRow { id: string; email: string; role: string; accepted_at: string | null; expires_at: string; revoked_at: string | null }
 interface TeamRow  { id: string; name: string }
@@ -1401,7 +1403,7 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
     const load = useCallback(async () => {
         const [{ data }, { count }, { data: teamRows }, { data: memberRows }] = await Promise.all([
             supabase.from("org_objections")
-                .select("id, objection, response_guidance, approved_responses, severity, active, variants, source, team_id, user_id")
+                .select("id, objection, response_guidance, approved_responses, severity, active, variants, source, team_id, user_id, sales_stages")
                 .eq("org_id", orgId).order("severity"),
             // An objection with no embedding can never be matched mid-call, so
             // the library can look complete while doing nothing.
@@ -1834,6 +1836,8 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
                                     <p className="text-sm text-[var(--color-text)] font-medium">{o.objection}</p>
                                     {sourceBadge(o.source, t) && <StatusBadge label={sourceBadge(o.source, t)!} color="slate" />}
                                     {!o.active && <StatusBadge label={t.data.statuses.disabled} color="slate" />}
+                                    {/* D-740: which sales stages it applies to; set from the Playbook tab's stage strip. */}
+                                    <ObjectionStageBadge stages={o.sales_stages} />
                                 </div>
                                 {guidanceOf(o) && (<>
                                     <p className="text-[10px] uppercase tracking-wide text-[var(--color-muted)] font-semibold mt-1">{t.tabs.objections.labelGuidance}</p>
@@ -1892,10 +1896,13 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
     const [editingId, setEditingId]     = useState<string | null>(null)
     const [pbName, setPbName]           = useState("")
     const [methodology, setMethodology] = useState("custom")
-    // What kind of call this playbook is for (D-307). Free text, not a list:
-    // the verticals we sell to do not share "discovery / demo" vocabulary, and
-    // this is what groups the rep's per-call picker.
-    const [callType, setCallType] = useState("")
+    // The sales stage this playbook is the script for (D-740). Replaces the
+    // free-text call type (D-307) as the organizing field; "" = no stage.
+    const [salesStage, setSalesStage] = useState<SalesStage | "">("")
+    // Which chip of the stage strip is selected; filters the list.
+    const [stageFilter, setStageFilter] = useState<StageFilter>("all")
+    const { rows: stageRows, reload: reloadStages } = useEnabledStages(orgId)
+    const sc = stageCopy(locale)
     const [stages, setStages]           = useState<StageForm[]>([{ name: "", description: "", requiredItems: "", guardrails: [] }])
     const [saving, setSaving]           = useState(false)
     const [msg, setMsg]                 = useState<string | null>(null)
@@ -1959,7 +1966,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
     const load = useCallback(async () => {
         const [{ data }, { data: teamRows }, { data: memberRows }, { data: orgRow }] = await Promise.all([
             supabase.from("org_playbooks")
-                .select("id, name, methodology, call_type, status, version, stages, created_at")
+                .select("id, name, methodology, call_type, sales_stage, status, version, stages, created_at")
                 .eq("org_id", orgId).order("created_at", { ascending: false }),
             supabase.from("org_teams").select("id, name").eq("org_id", orgId).order("name"),
             supabase.rpc("get_org_members_with_email", { p_org: orgId }),
@@ -2042,7 +2049,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
         setEditingId(p.id)
         setPbName(p.name)
         setMethodology(p.methodology ?? "custom")
-        setCallType(p.call_type ?? "")
+        setSalesStage(isSalesStage(p.sales_stage) ? p.sales_stage : "")
         setStages((p.stages ?? []).map(st => ({
             name: st.name ?? "",
             description: st.description ?? "",
@@ -2083,21 +2090,21 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
         // next call, which is the point of editing it.
         const { error } = editingId
             ? await supabase.from("org_playbooks").update({
-                name: pbName.trim(), methodology, call_type: callType.trim() || null,
+                name: pbName.trim(), methodology, sales_stage: salesStage || null,
                 stages: stagesJson,
                 guardrails: guardrailsJson,
                 version: (playbooks.find(p => p.id === editingId)?.version ?? 0) + 1,
             }).eq("id", editingId)
             : await supabase.from("org_playbooks").insert({
                 org_id: orgId, name: pbName.trim(), methodology,
-                call_type: callType.trim() || null, stages: stagesJson,
+                sales_stage: salesStage || null, stages: stagesJson,
                 guardrails: guardrailsJson, status: "draft", version: 1
             })
         setSaving(false)
         if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true) }
         else {
             setMsg(editingId ? t.tabs.playbooks.updated : t.tabs.playbooks.created); setIsErr(false)
-            setPbName(""); setMethodology("custom"); setCallType("")
+            setPbName(""); setMethodology("custom"); setSalesStage("")
             setStages([{ name: "", description: "", requiredItems: "", guardrails: [] }])
             setCreating(false); setEditingId(null); setExtractMsg(null); await load()
         }
@@ -2162,15 +2169,15 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                     </div>
                     <div className="flex items-center gap-2">
                         <input ref={extractFileRef} type="file" accept={EXTRACT_ACCEPT} className="hidden" onChange={handleExtractFile} />
-                        <button className={BTN_PRIMARY} onClick={() => extractFileRef.current?.click()} disabled={extracting}>
+                        <button className={BTN_PRIMARY} onClick={() => { if (!creating) setSalesStage(isSalesStage(stageFilter) ? stageFilter : ""); extractFileRef.current?.click() }} disabled={extracting}>
                             {extracting ? t.tabs.playbooks.extracting : t.tabs.playbooks.importFromDoc}
                         </button>
                         <button className={BTN_GHOST} onClick={() => {
                             if (creating) {
                                 setCreating(false); setEditingId(null)
-                                setPbName(""); setMethodology("custom")
+                                setPbName(""); setMethodology("custom"); setSalesStage("")
                                 setStages([{ name: "", description: "", requiredItems: "", guardrails: [] }])
-                            } else setCreating(true)
+                            } else { setSalesStage(isSalesStage(stageFilter) ? stageFilter : ""); setCreating(true) }
                         }}>
                             {creating ? t.common.cancel : t.tabs.playbooks.newPlaybook}
                         </button>
@@ -2189,13 +2196,15 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                                 <input className={INPUT} placeholder={t.tabs.playbooks.namePlaceholder} value={pbName} onChange={e => setPbName(e.target.value)} />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.playbooks.callType}</label>
-                                <input className={INPUT} placeholder={t.tabs.playbooks.callTypePlaceholder} value={callType} onChange={e => setCallType(e.target.value)} list="tp-call-types" />
-                                <datalist id="tp-call-types">
-                                    {Array.from(new Set(playbooks.map(p => p.call_type).filter(Boolean) as string[])).map(ct => (
-                                        <option key={ct} value={ct} />
-                                    ))}
-                                </datalist>
+                                <label className="text-xs text-[var(--color-text-secondary)] font-medium">{sc.stageField}</label>
+                                <select className={INPUT} value={salesStage} onChange={e => setSalesStage(e.target.value as SalesStage | "")}>
+                                    <option value="">{sc.noStage}</option>
+                                    {SALES_STAGES.map(st => {
+                                        const label = stageLabel(st, locale) ?? st
+                                        const on = stageRows.some(r => r.stage === st && r.enabled)
+                                        return <option key={st} value={st}>{on ? label : sc.offStageOption(label)}</option>
+                                    })}
+                                </select>
                             </div>
                             <div className="space-y-1">
                                 <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.playbooks.methodology}</label>
@@ -2279,9 +2288,18 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
 
             <StarterKitPicker orgId={orgId} vertical={vertical} onVerticalChange={setVertical} onApplied={load} />
 
+            {/* D-740: the company's sales stages. A chip filters the list below. */}
+            <SalesStageStrip orgId={orgId}
+                playbookStages={playbooks.map(p => p.sales_stage)}
+                selected={stageFilter} onSelect={setStageFilter}
+                stages={stageRows} reloadStages={reloadStages}
+                onUploadForStage={st => { setSalesStage(st); extractFileRef.current?.click() }}
+                onNewForStage={st => { setEditingId(null); setSalesStage(st); setCreating(true); window.scrollTo({ top: 0, behavior: "smooth" }) }} />
+
             {loading && <p className="text-sm text-[var(--color-text-secondary)]">{t.common.loading}</p>}
             <div className="space-y-3">
-                {playbooks.map(p => (
+                {playbooks.filter(p => stageFilter === "all"
+                    || (stageFilter === "none" ? !isSalesStage(p.sales_stage) : p.sales_stage === stageFilter)).map(p => (
                     <div key={p.id} className={CARD}>
                         <div className="flex items-center justify-between">
                             <div>
@@ -2291,7 +2309,7 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                                 </div>
                                 <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
                                     {t.tabs.playbooks.metaLine(p.methodology ?? t.tabs.playbooks.methodologyCustom, p.stages?.length ?? 0, p.version)}
-                                    {p.call_type ? ` · ${p.call_type}` : ""}
+                                    {stageLabel(p.sales_stage, locale) ? ` · ${stageLabel(p.sales_stage, locale)}` : ""}
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
