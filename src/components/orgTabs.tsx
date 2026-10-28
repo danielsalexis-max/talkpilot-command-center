@@ -2343,13 +2343,6 @@ export function PlaybooksTab({ orgId, stage: openStage, onNavigate }: {
                 <StarterKitPicker orgId={orgId} vertical={vertical} onVerticalChange={setVertical} onApplied={load} defaultOpen />
             )}
 
-            {/* D-624: correct steps by describing the change. */}
-            {playbooks.length > 0 && (
-                <BrainAmendCard sub={t.tabs.brainAmend.subPlaybooks}
-                    busy={pbAmendBusy} msg={pbAmendMsg} isErr={pbAmendErr}
-                    onFind={findPbAmend} />
-            )}
-
             {loading ? (
                 <p className="text-sm text-[var(--color-text-secondary)]">{t.common.loading}</p>
             ) : (
@@ -2369,6 +2362,14 @@ export function PlaybooksTab({ orgId, stage: openStage, onNavigate }: {
                             archive: t.tabs.playbooks.archive, delete: t.common.delete, empty: t.tabs.playbooks.noPlaybooks,
                         }} />
                 </>
+            )}
+
+            {/* D-624: correct steps by describing the change. Under the list,
+                since it edits what the list holds. */}
+            {playbooks.length > 0 && (
+                <BrainAmendCard sub={t.tabs.brainAmend.subPlaybooks}
+                    busy={pbAmendBusy} msg={pbAmendMsg} isErr={pbAmendErr}
+                    onFind={findPbAmend} />
             )}
 
             {pbAmendProps && (
