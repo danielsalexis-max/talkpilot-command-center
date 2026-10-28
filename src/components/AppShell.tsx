@@ -19,7 +19,7 @@ import { initTeamsAnalytics, identifyTeamsUser, groupOrg, resetTeamsAnalytics, h
 /// The old flat top-nav + "Admin" gear is gone: the coaching library lives
 /// under Playbook, org administration under Settings.
 
-interface NavItem { href: Route; label: string; icon: React.ReactNode; match: (p: string) => boolean; attention?: boolean }
+interface NavItem { href: Route; label: string; icon: React.ReactNode; match: (p: string) => boolean; attention?: boolean; group?: "setup" | "results" }
 
 const ICONS = {
     home: <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5" />,
@@ -224,27 +224,29 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     // it used to be second-to-last, under pages that show data a new org does
     // not have yet. Calls/Review/Team follow, which is roughly the order they
     // become useful.
+    // Two groups (D-736, 2026-10-28): what you set up so the coach knows how
+    // your team sells, then what came back from real calls. Team DNA stays
+    // first among the setup pages (D-630): it writes a playbook from your best
+    // rep, the highest-leverage setup action. Templates moved up next to
+    // Playbook because both decide what reps get; it used to sit after Practice.
     const nav: NavItem[] = [
         { href: "/",          label: t.nav.home,     icon: ICONS.home,     match: p => p === "/" },
-        // Team DNA is its own destination (D-615) and sits SECOND (D-630):
-        // generating a playbook from your best rep is the highest-leverage
-        // setup action in the product, so it outranks the library it feeds.
-        { href: "/dna" as Route, label: t.nav.teamDna, icon: ICONS.dna, match: p => p.startsWith("/dna") },
+        { href: "/dna" as Route, label: t.nav.teamDna, icon: ICONS.dna, match: p => p.startsWith("/dna"), group: "setup" },
         { href: "/playbook",  label: t.nav.playbook, icon: ICONS.playbook, match: p => p.startsWith("/playbook"),
-          attention: needsSetup },
-        // Review merged into Calls as its "Needs review" filter (D-615) — the
-        // queue was a strict subset of this table, and a second nav item for a
-        // subset read as a second product. /coaching redirects.
-        { href: "/calls",     label: t.nav.calls,    icon: ICONS.calls,    match: p => p.startsWith("/calls") || p.startsWith("/scorecard") || p.startsWith("/coaching") },
-        { href: "/team",      label: t.nav.team,     icon: ICONS.team,     match: p => p.startsWith("/team"),
-          attention: needsTeam },
-        // Practice is its own page (D-192): Review is about calls that already
-        // happened, practice is about the next one.
-        { href: "/practice",  label: t.nav.practice, icon: ICONS.practice, match: p => p.startsWith("/practice") },
+          attention: needsSetup, group: "setup" },
         // Team wording templates (D-770): how the team's CRM note, task and
         // follow-up email look. Managers set these too, so it is not inside
         // Settings, which they don't see.
-        { href: "/templates" as Route, label: teamTemplatesDict[locale].nav, icon: ICONS.templates, match: (p: string) => p.startsWith("/templates") },
+        { href: "/templates" as Route, label: teamTemplatesDict[locale].nav, icon: ICONS.templates, match: (p: string) => p.startsWith("/templates"), group: "setup" },
+        // Practice is its own page (D-192): Review is about calls that already
+        // happened, practice is about the next one.
+        { href: "/practice",  label: t.nav.practice, icon: ICONS.practice, match: p => p.startsWith("/practice"), group: "setup" },
+        // Review merged into Calls as its "Needs review" filter (D-615) — the
+        // queue was a strict subset of this table, and a second nav item for a
+        // subset read as a second product. /coaching redirects.
+        { href: "/calls",     label: t.nav.calls,    icon: ICONS.calls,    match: p => p.startsWith("/calls") || p.startsWith("/scorecard") || p.startsWith("/coaching"), group: "results" },
+        { href: "/team",      label: t.nav.team,     icon: ICONS.team,     match: p => p.startsWith("/team"),
+          attention: needsTeam, group: "results" },
         // Managers can't edit org settings or billing (RLS would silently
         // refuse) — don't show them doors they can't open.
         ...(role === "manager" ? [] : [
@@ -476,6 +478,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     // Settings and the app download sit under a divider, like Get Pro and
     // Settings do in the apps' sidebar.
     const footerHrefs = new Set<string>(["/settings", "/apps"])
+    const GroupedNav = ({ items }: { items: NavItem[] }) => {
+        const groupLabel = { setup: t.nav.groupSetup, results: t.nav.groupResults }
+        return (
+            <>
+                {items.map((n, i) => {
+                    const startsGroup = n.group && n.group !== items[i - 1]?.group
+                    return (
+                        <div key={n.href}>
+                            {startsGroup && (
+                                <span className="block px-2.5 pt-4 pb-1.5 text-[11px] font-semibold uppercase tracking-[.06em] text-[var(--color-text-secondary)]">
+                                    {groupLabel[n.group!]}
+                                </span>
+                            )}
+                            <NavLink n={n} />
+                        </div>
+                    )
+                })}
+            </>
+        )
+    }
+
     const mainNav = nav.filter(n => !footerHrefs.has(n.href))
     const footNav = nav.filter(n => footerHrefs.has(n.href))
 
@@ -512,7 +535,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <aside className="tp-side relative z-[1] hidden md:flex flex-col w-[232px] shrink-0 sticky top-0 h-screen border-r border-[var(--color-border)] px-3 pt-[18px] pb-3.5">
                 <div className="px-2 pb-5"><Brand /></div>
                 <nav className="flex flex-col gap-0.5">
-                    {mainNav.map(n => <NavLink key={n.href} n={n} />)}
+                    <GroupedNav items={mainNav} />
                     {footNav.length > 0 && <span className="block h-px bg-[var(--color-border)] mx-2 my-2.5" />}
                     {footNav.map(n => <NavLink key={n.href} n={n} />)}
                 </nav>
@@ -544,7 +567,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     </div>
                     {menuOpen && (
                         <nav className="border-t border-[var(--color-border)] px-3 py-3 space-y-0.5">
-                            {mainNav.map(n => <NavLink key={n.href} n={n} />)}
+                            <GroupedNav items={mainNav} />
                             {footNav.length > 0 && <span className="block h-px bg-[var(--color-border)] mx-2 my-2.5" />}
                             {footNav.map(n => <NavLink key={n.href} n={n} />)}
                             <div className="px-1 py-2"><LocaleSwitcher /></div>

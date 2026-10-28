@@ -16,7 +16,8 @@ import { STOCK_PRACTICE_SCENARIOS, SCENARIO_SCENE, localizedScenario, scenarioTi
 import { SCENE_ART } from "@/lib/sceneArt"
 import { rollUpGuardrails } from "@/lib/guardrails"
 import { PlaybookAssignment, type AssignTarget } from "@/components/playbookAssignment"
-import { SalesStageStrip, ObjectionStageBadge, useEnabledStages, type StageFilter } from "@/components/salesStageStrip"
+import { ObjectionStageBadge, useEnabledStages } from "@/components/salesStageStrip"
+import { StagePipeline, SetupAlert, SharedCards, PlaybookTable, AddMenu, StageDetail, useBrainCounts, studioCopy, type PbLite, type PlaybookView } from "@/components/playbookStudio"
 import { SALES_STAGES, isSalesStage, stageLabel, stageCopy, type SalesStage } from "@/lib/salesStages"
 import { TeamsSection } from "@/components/teamsSection"
 import { StarterKitPicker } from "@/components/starterKitPicker"
@@ -1867,7 +1868,7 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
             {/* The company's phrases moved here from the retired Company voice
                 tab (D-416) — same layer of the live prompt as an objection's
                 approved answer, so they belong on the same page. */}
-            <PhrasesSection org={org} onSaved={onSaved} />
+            <div id="phrases" className="scroll-mt-6"><PhrasesSection org={org} onSaved={onSaved} /></div>
 
             {objAmendProps && (
                 <BrainAmendReview busy={objAmendApplying}
@@ -1889,7 +1890,14 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
 
 // ─── Playbooks Tab ────────────────────────────────────────────────────────────
 
-export function PlaybooksTab({ orgId }: { orgId: string }) {
+/// The Playbook page's main view (D-736). `stage` is the open stage, from the
+/// URL; `onNavigate` moves between the overview, a stage, and the shared
+/// Objections and Knowledge views, so the browser's back button works.
+export function PlaybooksTab({ orgId, stage: openStage, onNavigate }: {
+    orgId: string
+    stage: SalesStage | null
+    onNavigate: (v: PlaybookView) => void
+}) {
     const { locale, t } = useLocale()
     const [playbooks, setPlaybooks]     = useState<PbRow[]>([])
     const [loading, setLoading]         = useState(true)
@@ -1900,10 +1908,11 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
     // The sales stage this playbook is the script for (D-740). Replaces the
     // free-text call type (D-307) as the organizing field; "" = no stage.
     const [salesStage, setSalesStage] = useState<SalesStage | "">("")
-    // Which chip of the stage strip is selected; filters the list.
-    const [stageFilter, setStageFilter] = useState<StageFilter>("all")
     const { rows: stageRows, reload: reloadStages } = useEnabledStages(orgId)
     const sc = stageCopy(locale)
+    const studio = studioCopy(locale)
+    const counts = useBrainCounts(orgId)
+    const [showPresets, setShowPresets] = useState(false)
     const [stages, setStages]           = useState<StageForm[]>([{ name: "", description: "", requiredItems: "", guardrails: [] }])
     const [saving, setSaving]           = useState(false)
     const [msg, setMsg]                 = useState<string | null>(null)
@@ -2160,37 +2169,47 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
         setPlaybooks(prev => prev.filter(p => p.id !== id))
     }
 
-    return (
-        <div className="space-y-6">
-            <div className={CARD}>
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h3 className="text-sm font-semibold text-[var(--color-text)]">{t.tabs.playbooks.title}</h3>
-                        <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{t.tabs.playbooks.sub}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <input ref={extractFileRef} type="file" accept={EXTRACT_ACCEPT} className="hidden" onChange={handleExtractFile} />
-                        <button className={BTN_PRIMARY} onClick={() => { if (!creating) setSalesStage(isSalesStage(stageFilter) ? stageFilter : ""); extractFileRef.current?.click() }} disabled={extracting}>
-                            {extracting ? t.tabs.playbooks.extracting : t.tabs.playbooks.importFromDoc}
-                        </button>
-                        <button className={BTN_GHOST} onClick={() => {
-                            if (creating) {
-                                setCreating(false); setEditingId(null)
-                                setPbName(""); setMethodology("custom"); setSalesStage("")
-                                setStages([{ name: "", description: "", requiredItems: "", guardrails: [] }])
-                            } else { setSalesStage(isSalesStage(stageFilter) ? stageFilter : ""); setCreating(true) }
-                        }}>
-                            {creating ? t.common.cancel : t.tabs.playbooks.newPlaybook}
-                        </button>
-                    </div>
-                </div>
+    function resetEditor() {
+        setCreating(false); setEditingId(null)
+        setPbName(""); setMethodology("custom"); setSalesStage("")
+        setStages([{ name: "", description: "", requiredItems: "", guardrails: [] }])
+        setExtractMsg(null)
+    }
+    function openNew(st?: SalesStage) {
+        resetEditor()
+        setSalesStage(st ?? ""); setCreating(true); setMsg(null)
+        window.scrollTo({ top: 0, behavior: "smooth" })
+    }
+    function openImport(st?: SalesStage) {
+        if (!creating) setSalesStage(st ?? "")
+        extractFileRef.current?.click()
+    }
+    /// The one write here that skips the editor: moving a playbook into a
+    /// stage, from the setup alert or a stage's "add one you have".
+    async function assignStage(id: string, st: SalesStage) {
+        const { error } = await supabase.from("org_playbooks").update({ sales_stage: st }).eq("id", id)
+        if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true); return }
+        await load()
+    }
 
-                {extractMsg && (
-                    <p className={`mt-3 text-xs ${extractErr ? "text-red-600" : "text-emerald-600"}`}>{extractMsg}</p>
-                )}
+    const fileInput = <input ref={extractFileRef} type="file" accept={EXTRACT_ACCEPT} className="hidden" onChange={handleExtractFile} />
+    const extractNote = (extracting || extractMsg) && (
+        <p className={`text-sm ${extractErr ? "text-red-600" : extracting ? "text-[var(--color-text-secondary)]" : "text-emerald-600"}`}>
+            {extracting ? t.tabs.playbooks.extracting : extractMsg}
+        </p>
+    )
+    const lite = playbooks as PbLite[]
 
-                {creating && (
-                    <div className="mt-5 space-y-5 pt-5 border-t border-[var(--color-border)]">
+    if (creating) return (
+        <div className="space-y-4 max-w-4xl">
+            {fileInput}
+            <button type="button" onClick={resetEditor} className="min-h-11 text-sm font-medium text-[var(--color-accent)] hover:underline underline-offset-2">
+                ← {t.common.cancel}
+            </button>
+            <div className={CARD + " sm:p-7"}>
+                <h1 className="text-[22px] font-bold tracking-tight text-[var(--color-text)] mb-5">{editingId ? studio.editorEdit : studio.editorNew}</h1>
+                {extractNote && <div className="mb-4">{extractNote}</div>}
+                <div className="space-y-5">
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                             <div className="col-span-2 space-y-1">
                                 <label className="text-xs text-[var(--color-text-secondary)] font-medium">{t.tabs.playbooks.name}</label>
@@ -2276,67 +2295,81 @@ export function PlaybooksTab({ orgId }: { orgId: string }) {
                             <Msg msg={msg} error={isErr} />
                         </div>
                     </div>
-                )}
             </div>
+        </div>
+    )
 
-            {/* D-624: correct stages by describing the change, same card as
-                Knowledge and Objections. */}
+    if (openStage) return (
+        <div className="space-y-4">
+            {fileInput}
+            {extractNote}
+            <Msg msg={msg} error={isErr} />
+            <StageDetail orgId={orgId} stage={openStage}
+                row={stageRows.find(r => r.stage === openStage) ?? null}
+                playbooks={lite} reloadStages={reloadStages}
+                onBack={() => onNavigate(null)}
+                onEditPlaybook={p => { const full = playbooks.find(x => x.id === p.id); if (full) startEdit(full) }}
+                onUpload={() => openImport(openStage)}
+                onNew={() => openNew(openStage)}
+                onAssignExisting={id => assignStage(id, openStage)}
+                renderAssignment={id => <PlaybookAssignment orgId={orgId} playbookId={id} teams={teams} members={people} />} />
+        </div>
+    )
+
+    return (
+        <div className="space-y-9">
+            {fileInput}
+            <header className="flex flex-wrap items-start justify-between gap-4">
+                <div className="max-w-2xl">
+                    <h1 className="text-[28px] font-bold tracking-tight text-[var(--color-text)]">{t.playbookPage.title}</h1>
+                    <p className="text-[15px] text-[var(--color-text-secondary)] mt-1">{t.playbookPage.sub}</p>
+                </div>
+                <AddMenu busy={extracting}
+                    onNew={() => openNew()}
+                    onImport={() => openImport()}
+                    onPreset={() => setShowPresets(true)}
+                    onObjections={() => onNavigate({ tab: "objections" })}
+                    onKnowledge={() => onNavigate({ tab: "knowledge" })} />
+            </header>
+
+            {(extractNote || msg) && (
+                <div className="space-y-1 -mt-4">
+                    {extractNote}
+                    <Msg msg={msg} error={isErr} />
+                </div>
+            )}
+
+            {showPresets && (
+                <StarterKitPicker orgId={orgId} vertical={vertical} onVerticalChange={setVertical} onApplied={load} defaultOpen />
+            )}
+
+            {/* D-624: correct steps by describing the change. */}
             {playbooks.length > 0 && (
                 <BrainAmendCard sub={t.tabs.brainAmend.subPlaybooks}
                     busy={pbAmendBusy} msg={pbAmendMsg} isErr={pbAmendErr}
                     onFind={findPbAmend} />
             )}
 
-            <StarterKitPicker orgId={orgId} vertical={vertical} onVerticalChange={setVertical} onApplied={load} />
-
-            {/* D-740: the company's sales stages. A chip filters the list below. */}
-            <SalesStageStrip orgId={orgId}
-                playbookStages={playbooks.map(p => p.sales_stage)}
-                selected={stageFilter} onSelect={setStageFilter}
-                stages={stageRows} reloadStages={reloadStages}
-                onUploadForStage={st => { setSalesStage(st); extractFileRef.current?.click() }}
-                onNewForStage={st => { setEditingId(null); setSalesStage(st); setCreating(true); window.scrollTo({ top: 0, behavior: "smooth" }) }} />
-
-            {loading && <p className="text-sm text-[var(--color-text-secondary)]">{t.common.loading}</p>}
-            <div className="space-y-3">
-                {playbooks.filter(p => stageFilter === "all"
-                    || (stageFilter === "none" ? !isSalesStage(p.sales_stage) : p.sales_stage === stageFilter)).map(p => (
-                    <div key={p.id} className={CARD}>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <p className="text-sm font-semibold text-[var(--color-text)]">{p.name}</p>
-                                    <StatusBadge label={t.data.statuses[p.status] ?? p.status} color={p.status === "active" ? "green" : p.status === "draft" ? "yellow" : "slate"} />
-                                </div>
-                                <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                                    {t.tabs.playbooks.metaLine(p.methodology ?? t.tabs.playbooks.methodologyCustom, p.stages?.length ?? 0, p.version)}
-                                    {stageLabel(p.sales_stage, locale) ? ` · ${stageLabel(p.sales_stage, locale)}` : ""}
-                                </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button className={BTN_GHOST} onClick={() => startEdit(p)}>{t.common.edit}</button>
-                                {p.status !== "active"   && <button className={BTN_GHOST} onClick={() => setStatus(p.id, "active")}>{t.tabs.playbooks.activate}</button>}
-                                {p.status === "active"   && <button className={BTN_GHOST} onClick={() => setStatus(p.id, "draft")}>{t.tabs.playbooks.deactivate}</button>}
-                                {p.status !== "archived" && <button className={BTN_GHOST} onClick={() => setStatus(p.id, "archived")}>{t.tabs.playbooks.archive}</button>}
-                                <button className={BTN_DANGER} onClick={() => deletePlaybook(p.id)}>{t.common.delete}</button>
-                            </div>
-                        </div>
-                        {p.stages && p.stages.length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                                {p.stages.map((s, i) => (
-                                    <span key={i} className="text-xs bg-[var(--color-bg)] border border-[var(--color-border)] px-2 py-0.5 rounded text-[var(--color-text-secondary)]">
-                                        {i + 1}. {s.name}
-                                    </span>
-                                ))}
-                            </div>
-                        )}
-                        <PlaybookAssignment orgId={orgId} playbookId={p.id} teams={teams} members={people} />
-                    </div>
-                ))}
-                {!loading && playbooks.length === 0 && !creating && (
-                    <p className="text-sm text-[var(--color-text-secondary)]">{t.tabs.playbooks.noPlaybooks}</p>
-                )}
-            </div>
+            {loading ? (
+                <p className="text-sm text-[var(--color-text-secondary)]">{t.common.loading}</p>
+            ) : (
+                <>
+                    <StagePipeline stageRows={stageRows} playbooks={lite} onOpen={st => onNavigate({ stage: st })} />
+                    <SetupAlert playbooks={lite} stageRows={stageRows}
+                        onAssign={assignStage} onOpenStage={st => onNavigate({ stage: st })} />
+                    <SharedCards counts={counts}
+                        onOpen={w => onNavigate(w === "phrases" ? { tab: "objections", focus: "phrases" } : { tab: w })} />
+                    <PlaybookTable playbooks={lite}
+                        statusLabel={st => t.data.statuses[st] ?? st}
+                        onEdit={p => { const full = playbooks.find(x => x.id === p.id); if (full) startEdit(full) }}
+                        onStatus={setStatus} onDelete={deletePlaybook}
+                        onOpenStage={st => onNavigate({ stage: st })}
+                        labels={{
+                            edit: t.common.edit, activate: t.tabs.playbooks.activate, deactivate: t.tabs.playbooks.deactivate,
+                            archive: t.tabs.playbooks.archive, delete: t.common.delete, empty: t.tabs.playbooks.noPlaybooks,
+                        }} />
+                </>
+            )}
 
             {pbAmendProps && (
                 <BrainAmendReview busy={pbAmendApplying}

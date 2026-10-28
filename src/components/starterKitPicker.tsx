@@ -21,9 +21,11 @@ const CARD = "bg-[var(--color-surface)] border border-[var(--color-border)] roun
 const BTN_GHOST = "px-3 py-1.5 text-xs font-medium rounded-lg border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:border-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors"
 
 export function StarterKitPicker({
-    orgId, vertical, onVerticalChange, onApplied,
+    orgId, vertical, onVerticalChange, onApplied, defaultOpen = false,
 }: {
     orgId: string
+    /// Opened from the Playbook page's Add menu (D-736): show the kits at once.
+    defaultOpen?: boolean
     vertical: Vertical
     onVerticalChange: (v: Vertical) => void
     onApplied: () => void
@@ -32,7 +34,7 @@ export function StarterKitPicker({
     const [busy, setBusy]   = useState<string | null>(null)
     const [msg, setMsg]     = useState<string | null>(null)
     const [isErr, setIsErr] = useState(false)
-    const [open, setOpen]   = useState(false)
+    const [open, setOpen]   = useState(defaultOpen)
 
     const kits = starterKitsFor(locale).filter(k => k.vertical === vertical)
 

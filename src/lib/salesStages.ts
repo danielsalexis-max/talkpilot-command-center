@@ -76,6 +76,7 @@ const COPY = {
         noStage: "No stage",
         offStageOption: (label: string) => `${label} (off)`,
         saveError: "Could not save. Try again.",
+        cancel: "Cancel",
     },
     es: {
         all: "Todos",
@@ -114,6 +115,7 @@ const COPY = {
         noStage: "Sin etapa",
         offStageOption: (label: string) => `${label} (desactivada)`,
         saveError: "No se pudo guardar. Intenta de nuevo.",
+        cancel: "Cancelar",
     },
 } satisfies Record<Locale, unknown>
 
