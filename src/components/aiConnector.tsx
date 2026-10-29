@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useLocale, useT } from "@/i18n/LocaleProvider"
-import { aiSetupCopy, claudeNewChatURL, CHATGPT_URL } from "@/lib/aiSetup"
+import { aiSetupCopy, CLAUDE_URL, CHATGPT_URL } from "@/lib/aiSetup"
 import { track } from "@/lib/teamsAnalytics"
 
 export const MCP_CONNECTOR_URL = "https://teams.talkpilot.co/api/mcp"
@@ -25,7 +25,7 @@ export function AIConnectorCard({ orgId }: { orgId: string }) {
     const t = useT().aiConnector
     const { locale } = useLocale()
     const c = aiSetupCopy(locale)
-    const [copied, setCopied] = useState<"link" | "prompt" | "chatgpt" | null>(null)
+    const [copied, setCopied] = useState<"link" | "prompt" | "claude" | "chatgpt" | null>(null)
     const [rows, setRows] = useState<LogRow[] | null>(null)
     const [names, setNames] = useState<Record<string, string>>({})
 
@@ -43,10 +43,11 @@ export function AIConnectorCard({ orgId }: { orgId: string }) {
         })
     }, [orgId])
 
-    function copy(what: "link" | "prompt" | "chatgpt") {
+    function copy(what: "link" | "prompt" | "claude" | "chatgpt") {
         navigator.clipboard.writeText(what === "link" ? MCP_CONNECTOR_URL : c.prompt).catch(() => {})
+        if (what === "claude") window.open(CLAUDE_URL, "_blank", "noopener")
         if (what === "chatgpt") window.open(CHATGPT_URL, "_blank", "noopener")
-        track(what === "link" ? "ai_setup_link_copied" : what === "chatgpt" ? "ai_setup_open_chatgpt" : "ai_setup_prompt_copied", { surface: "settings" })
+        track(what === "link" ? "ai_setup_link_copied" : what === "claude" ? "ai_setup_open_claude" : what === "chatgpt" ? "ai_setup_open_chatgpt" : "ai_setup_prompt_copied", { surface: "settings" })
         setCopied(what); setTimeout(() => setCopied(null), 2000)
     }
 
@@ -94,11 +95,10 @@ export function AIConnectorCard({ orgId }: { orgId: string }) {
                     </div>
                     <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed flex-1">{c.setupSub}</p>
                     <div className="flex flex-wrap items-center gap-2">
-                        <a href={claudeNewChatURL(c.prompt)} target="_blank" rel="noopener noreferrer"
-                            onClick={() => track("ai_setup_open_claude", { surface: "settings" })}
+                        <button type="button" onClick={() => copy("claude")}
                             className="px-4 py-2 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-lg transition-colors">
-                            {c.openClaude}
-                        </a>
+                            {copied === "claude" ? c.copied : c.openClaude}
+                        </button>
                         <button type="button" onClick={() => copy("chatgpt")}
                             className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-semibold text-[var(--color-text)] hover:bg-[var(--color-hover)] transition-colors">
                             {copied === "chatgpt" ? c.copied : c.openChatGPT}
@@ -108,7 +108,7 @@ export function AIConnectorCard({ orgId }: { orgId: string }) {
                             {copied === "prompt" ? c.copied : c.copyPrompt}
                         </button>
                     </div>
-                    <p className="text-xs text-[var(--color-text-secondary)]">{c.chatgptHint}</p>
+                    <p className="text-xs text-[var(--color-text-secondary)]">{c.pasteHint}</p>
                 </div>
 
                 <div className={STEP_BOX + " hidden xl:flex"}>

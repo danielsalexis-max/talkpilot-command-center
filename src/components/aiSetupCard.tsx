@@ -9,7 +9,7 @@
 import Link from "next/link"
 import { useState } from "react"
 import { useLocale } from "@/i18n/LocaleProvider"
-import { aiSetupCopy, claudeNewChatURL, CHATGPT_URL } from "@/lib/aiSetup"
+import { aiSetupCopy, CLAUDE_URL, CHATGPT_URL } from "@/lib/aiSetup"
 import { track } from "@/lib/teamsAnalytics"
 import { MCP_CONNECTOR_URL } from "@/components/aiConnector"
 
@@ -57,11 +57,11 @@ export function AISetupCard({ surface }: { surface: "home" | "playbook" }) {
                         <p className="text-sm font-semibold text-[var(--color-text)]">{c.step2}</p>
                         <p className="text-xs text-[var(--color-text-secondary)]">{c.step2Hint}</p>
                         <div className="flex flex-wrap items-center gap-2 pt-1">
-                            <a href={claudeNewChatURL(c.prompt)} target="_blank" rel="noopener noreferrer"
+                            <button
                                 className="px-4 py-2 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-semibold rounded-xl transition-colors"
-                                onClick={() => track("ai_setup_open_claude", { surface })}>
-                                {c.openClaude}
-                            </a>
+                                onClick={() => { copy("claude", c.prompt); window.open(CLAUDE_URL, "_blank", "noopener"); track("ai_setup_open_claude", { surface }) }}>
+                                {copied === "claude" ? c.copied : c.openClaude}
+                            </button>
                             <button className={btn + " py-2 text-sm"}
                                 onClick={() => { copy("chatgpt", c.prompt); window.open(CHATGPT_URL, "_blank", "noopener"); track("ai_setup_open_chatgpt", { surface }) }}>
                                 {copied === "chatgpt" ? c.copied : c.openChatGPT}
@@ -71,7 +71,7 @@ export function AISetupCard({ surface }: { surface: "home" | "playbook" }) {
                                 {copied === "prompt" ? c.copied : c.copyPrompt}
                             </button>
                         </div>
-                        <p className="text-xs text-[var(--color-text-secondary)]">{c.chatgptHint}</p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">{c.pasteHint}</p>
                     </div>
                 </li>
                 <li className="flex gap-3 py-4">

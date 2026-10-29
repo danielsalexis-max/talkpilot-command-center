@@ -19,8 +19,8 @@ const COPY = {
         step1Then: "Paste this link, sign in to TalkPilot and click Allow.",
         step2: "Start the chat with our prompt",
         step2Hint: "Use it where your AI knows your company best: a Claude or ChatGPT project about your company works great. Add files too: sales deck, pricing, scripts.",
-        chatgptHint: "In ChatGPT, turn TalkPilot on for that chat, then paste.",
-        openClaude: "Open in Claude",
+        pasteHint: "We copy the prompt for you. Paste it in the new chat. In ChatGPT, turn TalkPilot on for that chat first.",
+        openClaude: "Copy and open Claude",
         openChatGPT: "Copy and open ChatGPT",
         step3: "Come back here",
         step3Hint: "Playbooks arrive as drafts. Open Playbook, check them and turn them on.",
@@ -67,8 +67,8 @@ const COPY = {
         step1Then: "Pega este enlace, inicia sesión en TalkPilot y haz clic en Permitir.",
         step2: "Empieza el chat con nuestro prompt",
         step2Hint: "Úsalo donde tu IA más sabe de tu empresa: un proyecto de Claude o ChatGPT sobre tu empresa funciona muy bien. Agrega también archivos: presentación de ventas, precios, guiones.",
-        chatgptHint: "En ChatGPT, activa TalkPilot en ese chat y luego pega el prompt.",
-        openClaude: "Abrir en Claude",
+        pasteHint: "Copiamos el prompt por ti. Pégalo en el chat nuevo. En ChatGPT, activa TalkPilot en ese chat primero.",
+        openClaude: "Copiar y abrir Claude",
         openChatGPT: "Copiar y abrir ChatGPT",
         step3: "Vuelve aquí",
         step3Hint: "Los playbooks llegan como borradores. Abre Playbook, revísalos y actívalos.",
@@ -113,9 +113,10 @@ export function aiSetupCopy(locale: Locale): AISetupCopy {
     return COPY[locale]
 }
 
-/// D-804: Claude takes the prompt in the URL and opens a new chat with it
-/// typed in, not sent (checked 2026-10-28; Claude shows a "use caution" note
-/// above it). ChatGPT's `?q=` can send right away, before the person turns the
-/// connector on for that chat, so ChatGPT gets copy-then-open.
-export const claudeNewChatURL = (prompt: string) => `https://claude.ai/new?q=${encodeURIComponent(prompt)}`
+/// D-805: both apps get copy-then-open. Claude can take the prompt in the URL
+/// (`/new?q=`), but then it shows a "Use caution before running this prompt"
+/// warning above it, which reads as a security problem at the moment a
+/// customer sets up the product (D-804 had used it). ChatGPT's `?q=` can send
+/// right away, before the person turns the connector on for that chat.
+export const CLAUDE_URL = "https://claude.ai/new"
 export const CHATGPT_URL = "https://chatgpt.com/"
