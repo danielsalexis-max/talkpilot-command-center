@@ -106,7 +106,7 @@ export default function HomePage() {
                 supabase.from("org_objections").select("id", { count: "exact", head: true })
                     .eq("org_id", orgId).eq("active", true),
                 supabase.from("org_knowledge").select("id", { count: "exact", head: true })
-                    .eq("org_id", orgId),
+                    .eq("org_id", orgId).neq("status", "archived"),
                 supabase.from("org_invites").select("id", { count: "exact", head: true })
                     .eq("org_id", orgId).is("accepted_at", null).is("revoked_at", null)
                     .gt("expires_at", new Date().toISOString()),

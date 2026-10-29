@@ -1047,7 +1047,7 @@ export function KnowledgeTab({ orgId, focus }: { orgId: string; focus?: "website
                                     onChange={s => setAudience(d, s)}
                                 />
                                 <StatusBadge label={t.data.kinds[d.kind] ?? d.kind.replace("_"," ")} color={kindColor(d.kind)} />
-                                <StatusBadge label={t.data.statuses[d.status] ?? d.status} color={d.status === "ready" ? "green" : d.status === "error" ? "red" : "yellow"} />
+                                <StatusBadge label={t.data.statuses[d.status] ?? d.status} color={d.status === "ready" ? "green" : d.status === "error" || d.status === "failed" ? "red" : d.status === "archived" ? "slate" : "yellow"} />
                                 <button className={BTN_GHOST} onClick={() => startEdit(d)}>{t.common.edit}</button>
                                 {/* Repair, not refresh — so it shows only where
                                     there is something to repair. */}
@@ -2842,7 +2842,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                 .eq("org_id", orgId).order("created_at", { ascending: false }).limit(30),
             supabase.from("org_playbooks").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "active"),
             supabase.from("org_objections").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("active", true),
-            supabase.from("org_knowledge").select("id", { count: "exact", head: true }).eq("org_id", orgId),
+            supabase.from("org_knowledge").select("id", { count: "exact", head: true }).eq("org_id", orgId).neq("status", "archived"),
             // Where each member installed and used TalkPilot (D-325). Not
             // download data — we have none per user; `installed` is a push
             // token, `used` is a real conversation.

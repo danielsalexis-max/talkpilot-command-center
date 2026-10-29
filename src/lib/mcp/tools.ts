@@ -21,7 +21,7 @@ import { SALES_STAGES } from "@/lib/salesStages"
 
 type Ctx = { http?: { authInfo?: { token: string; clientId: string; extra?: Record<string, unknown> } } }
 
-type Who = { sb: SupabaseClient; token: string; userId: string; clientId: string }
+type Who = { sb: SupabaseClient; token: string; userId: string; email: string | null; clientId: string }
 
 type Membership = { org_id: string; role: "owner" | "admin" | "manager" | "member"; team_id: string | null }
 
@@ -31,7 +31,18 @@ function who(ctx: Ctx): Who | null {
     const a = ctx.http?.authInfo
     const userId = a?.extra?.userId
     if (!a?.token || typeof userId !== "string") return null
-    return { sb: supabaseAs(a.token), token: a.token, userId, clientId: a.clientId }
+    const email = typeof a.extra?.email === "string" ? a.extra.email : null
+    return { sb: supabaseAs(a.token), token: a.token, userId, email, clientId: a.clientId }
+}
+
+/// D-803: the most common setup failure is a connector signed in with the
+/// wrong account (a personal email, not the one in the workspace). Say which
+/// account it is and how to switch, instead of a bare "not in a workspace".
+function noWorkspace(w: Who): string {
+    const as = w.email ? `as ${w.email}` : "with an account"
+    return `You are signed in to TalkPilot ${as}, which is not part of a TalkPilot Teams workspace. ` +
+        "If the team's workspace uses another email, disconnect the TalkPilot connector in this AI app and connect it again, signing in with that email. " +
+        "To create a workspace: https://teams.talkpilot.co/start"
 }
 
 function ok(data: unknown) {
@@ -403,10 +414,10 @@ export function registerTalkPilotTools(server: McpServer) {
 
     async function requireTeams(w: Who, need: "manager" | "admin"): Promise<Membership | string> {
         const m = await membership(w)
-        if (!m) return "This account is not part of a TalkPilot Teams workspace."
+        if (!m) return noWorkspace(w)
         const ok = need === "admin" ? ["owner", "admin"].includes(m.role) : ["owner", "admin", "manager"].includes(m.role)
         if (!ok) return need === "admin"
-            ? "Only workspace owners and admins can change this. Ask an admin."
+            ? `Only workspace owners and admins can change this, and ${w.email ?? "this account"} is a ${m.role}. Ask an admin.`
             : "Only managers and admins can see the team's calls."
         return m
     }
@@ -517,7 +528,7 @@ export function registerTalkPilotTools(server: McpServer) {
         annotations: READ,
     }, guarded("get_playbooks", async (w) => {
         const m = await membership(w)
-        if (!m) return fail("This account is not part of a TalkPilot Teams workspace.")
+        if (!m) return fail(noWorkspace(w))
         const { data, error } = await w.sb.from("org_playbooks")
             .select("id, name, sales_stage, call_type, methodology, status, version, stages, guardrails, updated_at")
             .eq("org_id", m.org_id).order("updated_at", { ascending: false })
@@ -574,7 +585,7 @@ export function registerTalkPilotTools(server: McpServer) {
         annotations: READ,
     }, guarded("list_objections", async (w, a: { include_inactive?: boolean }) => {
         const m = await membership(w)
-        if (!m) return fail("This account is not part of a TalkPilot Teams workspace.")
+        if (!m) return fail(noWorkspace(w))
         let q = w.sb.from("org_objections")
             .select("id, objection, category, severity, variants, response_guidance, approved_responses, active, hit_count")
             .eq("org_id", m.org_id).order("hit_count", { ascending: false }).limit(300)
@@ -691,7 +702,7 @@ export function registerTalkPilotTools(server: McpServer) {
         annotations: READ,
     }, guarded("list_knowledge", async (w) => {
         const m = await membership(w)
-        if (!m) return fail("This account is not part of a TalkPilot Teams workspace.")
+        if (!m) return fail(noWorkspace(w))
         const { data, error } = await w.sb.from("org_knowledge")
             .select("id, title, kind, summary, status, updated_at").eq("org_id", m.org_id)
             .order("updated_at", { ascending: false }).limit(200)
@@ -700,83 +711,230 @@ export function registerTalkPilotTools(server: McpServer) {
         return ok({ documents: data ?? [] })
     }))
 
+    const KIND_ENUM = z.enum(["doc", "pricing", "battlecard", "faq", "objection", "compliance", "case_study"])
+
+    /// Adds one document, or re-indexes the live one with the same title (D-803),
+    /// so running the setup prompt again updates "Precios" instead of adding a
+    /// second copy the coach would quote from too.
+    async function saveDocument(w: Who, org: string, d: { title: string; content: string; kind?: string; language?: "en" | "es" }):
+        Promise<{ knowledge_id: string | null; replaced: boolean; chunks_indexed: unknown } | string> {
+        const title = d.title.trim()
+        const { data: same } = await w.sb.from("org_knowledge").select("id")
+            .eq("org_id", org).ilike("title", title.replace(/[\\%_]/g, "\\$&")).neq("status", "archived")
+            .order("updated_at", { ascending: false }).limit(1)
+        const existing = (same?.[0]?.id as string | undefined) ?? null
+        if (existing && d.kind) await w.sb.from("org_knowledge").update({ kind: d.kind }).eq("id", existing).eq("org_id", org)
+        const r = existing
+            ? await callFunction(w, "ingest-knowledge", { org_id: org, knowledge_id: existing, content: d.content, locale: d.language ?? "en" })
+            : await callFunction(w, "ingest-knowledge", { org_id: org, title, kind: d.kind ?? "doc", content: d.content, locale: d.language ?? "en" })
+        if (!r.ok || r.json.status === "failed") return errorText(r.json, String(r.status))
+        return { knowledge_id: existing ?? (r.json.knowledge_id as string | undefined) ?? null, replaced: !!existing, chunks_indexed: r.json.chunk_count ?? null }
+    }
+
     server.registerTool("add_knowledge", {
-        title: "Add to the team knowledge base (Teams admins)",
-        description: "TalkPilot Teams owners and admins: add a text document (pricing, product facts, case studies, policies) to the workspace knowledge base. It is split, indexed and summarized, and the live coach can quote it on reps' next calls. For files the user shared with you, send their text. For the company overview use set_company_profile instead.",
+        title: "Add a document to the team knowledge base (Teams admins)",
+        description: "TalkPilot Teams owners and admins: add a text document (pricing, product facts, case studies, policies, FAQ, battlecard) to the workspace knowledge base. It is split, indexed and summarized; the live coach can quote it on reps' next calls and the truth audit checks reps' claims against it. For files the user shared with you (PDF, Word, slides), send their full text. A live document with the same title is replaced in place, not duplicated. For several documents use add_documents; for the company overview use set_company_profile.",
         inputSchema: z.object({
             title: z.string().min(2).max(200),
             content: z.string().min(20).max(200000),
-            kind: z.enum(["doc", "pricing", "battlecard", "faq", "objection", "compliance", "case_study"]).optional().describe("Default doc"),
+            kind: KIND_ENUM.optional().describe("Default doc"),
+            language: z.enum(["en", "es"]).optional().describe("Language the summary is written in; default en"),
         }),
         annotations: WRITE,
-    }, guarded("add_knowledge", async (w, a: { title: string; content: string; kind?: string }) => {
+    }, guarded("add_knowledge", async (w, a: { title: string; content: string; kind?: string; language?: "en" | "es" }) => {
         const m = await requireTeams(w, "admin")
         if (typeof m === "string") return fail(m)
-        const r = await callFunction(w, "ingest-knowledge", { org_id: m.org_id, title: a.title, kind: a.kind ?? "doc", content: a.content })
-        if (!r.ok || r.json.status === "failed") return fail(`Could not add it: ${errorText(r.json, String(r.status))}`)
-        const id = (r.json.knowledge_id as string | undefined) ?? null
-        await log(w, "add_knowledge", { org: m.org_id, target: id })
-        await audit(w, m.org_id, "knowledge.added", id, { title: a.title })
-        return ok({ knowledge_id: id, chunks_indexed: r.json.chunk_count ?? null })
+        const r = await saveDocument(w, m.org_id, a)
+        if (typeof r === "string") return fail(`Could not add it: ${r}`)
+        await log(w, "add_knowledge", { org: m.org_id, target: r.knowledge_id })
+        await audit(w, m.org_id, r.replaced ? "knowledge.replaced" : "knowledge.added", r.knowledge_id, { title: a.title })
+        return ok(r)
+    }))
+
+    server.registerTool("add_documents", {
+        title: "Add several documents to the knowledge base (Teams admins)",
+        description: "TalkPilot Teams owners and admins: add up to 10 text documents in one call (pricing, product, security, integrations, battlecard, case studies). Same rules as add_knowledge: send the full text of each file, and a live document with the same title is replaced in place.",
+        inputSchema: z.object({
+            documents: z.array(z.object({
+                title: z.string().min(2).max(200),
+                content: z.string().min(20).max(100000),
+                kind: KIND_ENUM.optional().describe("Default doc"),
+            })).min(1).max(10),
+            language: z.enum(["en", "es"]).optional().describe("Language the summaries are written in; default en"),
+        }),
+        annotations: WRITE,
+    }, guarded("add_documents", async (w, a: { documents: { title: string; content: string; kind?: string }[]; language?: "en" | "es" }) => {
+        const m = await requireTeams(w, "admin")
+        if (typeof m === "string") return fail(m)
+        const saved: Record<string, unknown>[] = []
+        const failed: { title: string; error: string }[] = []
+        for (const d of a.documents) {
+            const r = await saveDocument(w, m.org_id, { ...d, language: a.language })
+            if (typeof r === "string") failed.push({ title: d.title, error: r })
+            else saved.push({ title: d.title, ...r })
+        }
+        await log(w, "add_documents", { org: m.org_id })
+        if (saved.length) await audit(w, m.org_id, "knowledge.batch_added", null, { titles: saved.map(s => s.title) })
+        return ok({ saved, failed })
+    }))
+
+    // ── Taking things out of use (D-803) ─────────────────────────────────
+
+    server.registerTool("archive_items", {
+        title: "Archive playbooks, documents or objections (Teams admins)",
+        description: "TalkPilot Teams owners and admins: take old playbooks, knowledge documents or objections out of use, for example when the user wants to start over or something is out of date. Get ids from get_setup_status. Playbooks become archived (reps stop getting them on their next call), documents become archived (the coach stops quoting them), objections are turned off. Nothing is deleted. Set restore: true to undo: playbooks come back as drafts, documents come back, objections turn back on. Only do this after the user agreed to it.",
+        inputSchema: z.object({
+            playbook_ids: z.array(z.string().uuid()).max(50).optional(),
+            document_ids: z.array(z.string().uuid()).max(50).optional(),
+            objection_ids: z.array(z.string().uuid()).max(300).optional(),
+            restore: z.boolean().optional().describe("Default false"),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    }, guarded("archive_items", async (w, a: { playbook_ids?: string[]; document_ids?: string[]; objection_ids?: string[]; restore?: boolean }) => {
+        const m = await requireTeams(w, "admin")
+        if (typeof m === "string") return fail(m)
+        const now = new Date().toISOString()
+        const out: Record<string, unknown> = {}
+        if (a.playbook_ids?.length) {
+            // Restoring never makes a playbook live: it comes back as a draft (D-800).
+            const { data, error } = await w.sb.from("org_playbooks")
+                .update({ status: a.restore ? "draft" : "archived", updated_at: now })
+                .eq("org_id", m.org_id).in("id", a.playbook_ids).select("id, name, status")
+            if (error) return fail(`Playbooks: ${error.message}`)
+            out.playbooks = data ?? []
+        }
+        if (a.document_ids?.length) {
+            const { data, error } = await w.sb.from("org_knowledge")
+                .update({ status: a.restore ? "ready" : "archived", updated_at: now })
+                .eq("org_id", m.org_id).in("id", a.document_ids).select("id, title, status")
+            if (error) return fail(`Documents: ${error.message}`)
+            out.documents = data ?? []
+        }
+        if (a.objection_ids?.length) {
+            const { data, error } = await w.sb.from("org_objections")
+                .update({ active: !!a.restore, updated_at: now })
+                .eq("org_id", m.org_id).in("id", a.objection_ids).select("id, objection, active")
+            if (error) return fail(`Objections: ${error.message}`)
+            out.objections = data ?? []
+        }
+        const asked = (a.playbook_ids?.length ?? 0) + (a.document_ids?.length ?? 0) + (a.objection_ids?.length ?? 0)
+        if (asked === 0) return fail("Send at least one id in playbook_ids, document_ids or objection_ids.")
+        const done = ["playbooks", "documents", "objections"].reduce((n, k) => n + ((out[k] as unknown[] | undefined)?.length ?? 0), 0)
+        await log(w, "archive_items", { org: m.org_id })
+        await audit(w, m.org_id, a.restore ? "setup.items_restored" : "setup.items_archived", null, {
+            playbooks: a.playbook_ids?.length ?? 0, documents: a.document_ids?.length ?? 0, objections: a.objection_ids?.length ?? 0,
+        })
+        return ok({
+            ...out,
+            not_found: asked - done,
+            note: done < asked ? "Some ids were not found in this workspace; they were skipped." : undefined,
+        })
     }))
 
     // ── Workspace setup with AI (D-800) ──────────────────────────────────
 
     server.registerTool("get_setup_status", {
         title: "Get the workspace setup status (Teams)",
-        description: "TalkPilot Teams: what is set up in the workspace and what is missing, so you can help the admin finish it. Call this first when the user asks you to set up TalkPilot. Returns the workspace, the user's role (only owners and admins can change setup), the sales stages turned on, every playbook (drafts too), objection and knowledge counts, whether a company profile exists, team size, and the next steps.",
+        description: "TalkPilot Teams: everything that is set up in the workspace and what is missing or inconsistent, so you can help the admin finish it. Call this first when the user asks you to set up TalkPilot. Returns the workspace, the user's role (only owners and admins can change setup), the sales stages turned on, every playbook (drafts too), every active objection and every document with their ids (use them to update, replace or archive), whether a company profile exists, team size, warnings about things that don't fit together, and the next steps.",
         inputSchema: z.object({}),
         annotations: READ,
     }, guarded("get_setup_status", async (w) => {
         const m = await membership(w)
-        if (!m) return fail("This account is not part of a TalkPilot Teams workspace. Create one at https://teams.talkpilot.co/start, then try again.")
-        const [{ data: org }, { data: stages }, { data: playbooks }, { count: objections }, { data: knowledge }, { data: members }, { count: invites }] = await Promise.all([
+        if (!m) return fail(noWorkspace(w))
+        const [{ data: org }, { data: stages }, { data: playbooks }, { data: objectionRows }, { data: knowledge }, { data: members }, { count: invites }] = await Promise.all([
             w.sb.from("organizations").select("name, settings").eq("id", m.org_id).maybeSingle(),
             w.sb.from("org_sales_stages").select("stage, enabled, tone").eq("org_id", m.org_id),
-            w.sb.from("org_playbooks").select("id, name, sales_stage, status, stages").eq("org_id", m.org_id).neq("status", "archived"),
-            w.sb.from("org_objections").select("id", { count: "exact", head: true }).eq("org_id", m.org_id).eq("active", true),
-            w.sb.from("org_knowledge").select("id, title, kind, status").eq("org_id", m.org_id).neq("status", "archived").limit(200),
+            w.sb.from("org_playbooks").select("id, name, sales_stage, status, methodology, stages, updated_at").eq("org_id", m.org_id).neq("status", "archived"),
+            w.sb.from("org_objections").select("id, objection, category, severity, sales_stages, hit_count, updated_at")
+                .eq("org_id", m.org_id).eq("active", true).order("hit_count", { ascending: false }).limit(300),
+            w.sb.from("org_knowledge").select("id, title, kind, status, updated_at, created_at").eq("org_id", m.org_id).neq("status", "archived").limit(200),
             w.sb.rpc("get_org_members_with_email", { p_org: m.org_id }),
             w.sb.from("org_invites").select("id", { count: "exact", head: true }).eq("org_id", m.org_id)
                 .is("accepted_at", null).is("revoked_at", null).gt("expires_at", new Date().toISOString()),
         ])
-        const pbs = (playbooks ?? []) as { id: string; name: string; sales_stage: string | null; status: string; stages: unknown }[]
-        const docs = (knowledge ?? []) as { id: string; title: string; kind: string; status: string }[]
+        const pbs = (playbooks ?? []) as { id: string; name: string; sales_stage: string | null; status: string; methodology: string | null; stages: unknown; updated_at: string | null }[]
+        const docs = (knowledge ?? []) as { id: string; title: string; kind: string; status: string; updated_at: string | null; created_at: string | null }[]
+        const objs = (objectionRows ?? []) as { id: string; objection: string; category: string | null; severity: string; sales_stages: string[] | null; hit_count: number | null; updated_at: string | null }[]
+        const objections = objs.length
         const active = pbs.filter(p => p.status === "active").length
         const drafts = pbs.filter(p => p.status === "draft").length
         const on = ((stages ?? []) as { stage: string; enabled: boolean; tone: string | null }[]).filter(s => s.enabled)
+        const onSet = new Set(on.map(s => s.stage))
         const titles = Object.values(COMPANY_PROFILE_TITLES) as string[]
         const hasProfile = docs.some(d => titles.includes(d.title))
         const activeMembers = ((members ?? []) as { status?: string }[]).filter(x => x.status === "active" || !x.status).length
         const isAdmin = ["owner", "admin"].includes(m.role)
         const settings = (org?.settings ?? {}) as Record<string, unknown>
         const profile = (settings.onboarding_profile ?? {}) as Record<string, unknown>
+
+        // D-803: things that are each fine alone but don't fit together. The
+        // Home checklist only counts rows, so a workspace can read "ready"
+        // while its playbooks sit on stages nobody turned on.
+        const warnings: string[] = []
+        for (const p of pbs) {
+            if (p.sales_stage && !onSet.has(p.sales_stage)) {
+                warnings.push(`Playbook "${p.name}" (${p.status}) is for the ${p.sales_stage} stage, which is turned off. Turn the stage on with set_sales_stages, or archive the playbook.`)
+            }
+            if (!p.sales_stage && p.status === "active") {
+                warnings.push(`Playbook "${p.name}" is active but has no sales stage, so the coach cannot tell when to use it.`)
+            }
+        }
+        for (const s of on) {
+            const forStage = pbs.filter(p => p.sales_stage === s.stage)
+            if (forStage.length === 0) warnings.push(`The ${s.stage} stage is on but has no playbook.`)
+            else if (!forStage.some(p => p.status === "active")) warnings.push(`The ${s.stage} stage only has draft playbooks; reps get nothing there until an admin turns one on in the Command Center.`)
+            if (forStage.filter(p => p.status === "active").length > 1) warnings.push(`The ${s.stage} stage has ${forStage.filter(p => p.status === "active").length} active playbooks; reps pick one per call.`)
+        }
+        const STALE_DAYS = 60
+        const stale = docs.filter(d => {
+            const t = Date.parse(d.updated_at ?? d.created_at ?? "")
+            return Number.isFinite(t) && Date.now() - t > STALE_DAYS * 86400_000 && !titles.includes(d.title)
+        })
+        if (stale.length) warnings.push(`${stale.length} document(s) were last updated more than ${STALE_DAYS} days ago (${stale.map(d => `"${d.title}"`).join(", ")}). Ask the user whether prices, dates and product facts in them are still true; replace them with add_knowledge (same title) or archive them.`)
+        for (const d of docs.filter(d => d.status === "failed")) warnings.push(`Document "${d.title}" failed to index; the coach cannot use it. Add it again with add_knowledge.`)
+        const seen = new Map<string, number>()
+        for (const o of objs) {
+            const k = o.objection.trim().toLowerCase().replace(/[¿?¡!."“”']/g, "")
+            seen.set(k, (seen.get(k) ?? 0) + 1)
+        }
+        const dupes = [...seen.values()].filter(n => n > 1).length
+        if (dupes) warnings.push(`${dupes} objection(s) appear more than once with nearly the same text. Keep one and archive the rest with archive_items.`)
+
         // Same "ready" bar as the Command Center's Home checklist (D-175).
         const next: string[] = []
         if (!hasProfile) next.push("Write a company profile with set_company_profile.")
         if (on.length === 0) next.push("Turn on the sales stages the team uses with set_sales_stages.")
         if (pbs.length === 0) next.push("Create a playbook for each stage the team uses with create_playbook (saved as drafts).")
-        if (drafts > 0 && active === 0) next.push("The admin turns on a draft playbook in the Command Center (Playbook page). You cannot do this.")
-        if ((objections ?? 0) < 3) next.push("Add the most common objections with their approved answers using save_objections (at least 3).")
-        if (docs.length === 0) next.push("Add documents the coach can quote (pricing, product facts, case studies) with add_knowledge.")
+        if (drafts > 0) next.push("The admin checks the draft playbooks and turns them on in the Command Center (Playbook page). You cannot do this.")
+        if (objections < 3) next.push("Add the most common objections with their approved answers using save_objections (at least 3).")
+        if (docs.filter(d => !titles.includes(d.title)).length === 0) next.push("Add documents the coach can quote (pricing, product facts, case studies) with add_documents or add_knowledge.")
         if (activeMembers <= 1 && (invites ?? 0) === 0) next.push("The admin invites the team in the Command Center (Team page). You cannot do this.")
+        if (warnings.length) next.push("Fix or show the user the warnings.")
         await log(w, "get_setup_status", { org: m.org_id })
         return ok({
             workspace: org?.name ?? null,
+            signed_in_as: w.email,
             my_role: m.role,
             can_edit_setup: isAdmin,
             team_type: settings.vertical ?? null,
             website: profile.website ?? null,
             sales_stages_on: on.map(s => ({ stage: s.stage, tone: s.tone })),
             all_sales_stages: SALES_STAGES,
-            playbooks: pbs.map(p => ({ id: p.id, name: p.name, sales_stage: p.sales_stage, status: p.status, steps: Array.isArray(p.stages) ? p.stages.length : 0 })),
-            active_objections: objections ?? 0,
-            knowledge_documents: docs.map(d => ({ id: d.id, title: d.title, kind: d.kind, status: d.status })),
+            playbooks: pbs.map(p => ({
+                id: p.id, name: p.name, sales_stage: p.sales_stage, status: p.status, methodology: p.methodology,
+                steps: Array.isArray(p.stages) ? (p.stages as { key?: string; name?: string }[]).map(s => ({ key: s.key, name: s.name })) : [],
+                updated_at: p.updated_at,
+            })),
+            active_objections: objections,
+            objections: objs.map(o => ({ id: o.id, objection: o.objection, category: o.category, severity: o.severity, sales_stages: o.sales_stages ?? [], times_heard: o.hit_count ?? 0 })),
+            knowledge_documents: docs.map(d => ({ id: d.id, title: d.title, kind: d.kind, status: d.status, updated_at: d.updated_at ?? d.created_at })),
             has_company_profile: hasProfile,
             members: activeMembers,
             pending_invites: invites ?? 0,
-            ready: active >= 1 && (objections ?? 0) >= 3 && docs.length >= 1,
+            ready: active >= 1 && objections >= 3 && docs.length >= 1,
+            warnings,
             next_steps: next,
+            tools_for_setup: ["get_setup_status", "set_company_profile", "read_website", "add_documents", "add_knowledge", "set_sales_stages", "create_playbook", "update_playbook_stage", "save_objections", "archive_items"],
             command_center: "https://teams.talkpilot.co",
             note: isAdmin ? undefined : "Only workspace owners and admins can change the setup. This person can read it.",
         })
@@ -784,7 +942,7 @@ export function registerTalkPilotTools(server: McpServer) {
 
     server.registerTool("create_playbook", {
         title: "Create a playbook (Teams admins)",
-        description: "TalkPilot Teams owners and admins: create a playbook, the script the live coach follows on calls at one sales stage. It is saved as a DRAFT: reps do not get it until an admin turns it on in the Command Center. Give it its sales stage and 3 to 8 steps in call order; each step has a short name, what the rep does, the things the rep must cover, and phrases the rep must never say. Write it in the language the team uses on calls and set `language` to match. A playbook whose name already exists is refused; edit it with update_playbook_stage.",
+        description: "TalkPilot Teams owners and admins: create a playbook, the script the live coach follows on calls at one sales stage. It is saved as a DRAFT: reps do not get it until an admin turns it on in the Command Center. Give it its sales stage and 3 to 8 steps in call order; each step has a short name, what the rep does, the things the rep must cover, and phrases the rep must never say. Write it in the language the team uses on calls and set `language` to match. A playbook whose name already exists is refused, unless it is a draft and you send replace_draft: true.",
         inputSchema: z.object({
             name: z.string().min(2).max(120),
             sales_stage: STAGE_ENUM.nullable().optional().describe("The sales stage this playbook is for"),
@@ -796,16 +954,30 @@ export function registerTalkPilotTools(server: McpServer) {
                 must_cover: z.array(z.string().min(1).max(300)).max(15).optional().describe("Things the rep must cover before moving on"),
                 never_say: z.array(z.string().min(2).max(120)).max(10).optional().describe("Exact phrases the rep must never say in this step"),
             })).min(1).max(15),
+            replace_draft: z.boolean().optional().describe("If a DRAFT with this name exists, archive it and save this one instead. Default false"),
         }),
         annotations: WRITE,
-    }, guarded("create_playbook", async (w, a: { name: string; sales_stage?: string | null; methodology?: string; language?: "en" | "es"; steps: { name: string; description?: string; must_cover?: string[]; never_say?: string[] }[] }) => {
+    }, guarded("create_playbook", async (w, a: { name: string; sales_stage?: string | null; methodology?: string; language?: "en" | "es"; replace_draft?: boolean; steps: { name: string; description?: string; must_cover?: string[]; never_say?: string[] }[] }) => {
         const m = await requireTeams(w, "admin")
         if (typeof m === "string") return fail(m)
         const name = a.name.trim()
         const { data: existing } = await w.sb.from("org_playbooks").select("id, status")
             .eq("org_id", m.org_id).ilike("name", name.replace(/[\\%_]/g, "\\$&")).neq("status", "archived").limit(1)
+        let replaced: string | null = null
         if (existing?.length) {
-            return fail(`A playbook named "${name}" already exists (id ${existing[0].id}, ${existing[0].status}). Edit it with update_playbook_stage, or pick another name.`)
+            // D-803: a re-run of the setup prompt rewrites its own draft instead
+            // of failing. A live playbook is never swapped out silently.
+            if (a.replace_draft && existing[0].status === "draft") {
+                const { error: arErr } = await w.sb.from("org_playbooks")
+                    .update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", existing[0].id).eq("org_id", m.org_id)
+                if (arErr) return fail(arErr.message)
+                replaced = existing[0].id as string
+            } else {
+                return fail(`A playbook named "${name}" already exists (id ${existing[0].id}, ${existing[0].status}). ` +
+                    (existing[0].status === "draft"
+                        ? "Send replace_draft: true to rewrite it, edit one step with update_playbook_stage, or pick another name."
+                        : "It is live for reps. Edit it with update_playbook_stage, archive it with archive_items if the user agreed, or pick another name."))
+            }
         }
         // Same stored shape as the Command Center editor: `required` is what the
         // live coach reads, `required_items` keeps the editor's older key, the
@@ -834,9 +1006,17 @@ export function registerTalkPilotTools(server: McpServer) {
         }).select("id, name, sales_stage, status").single()
         if (error) return fail(error.message)
         await log(w, "create_playbook", { org: m.org_id, target: data.id as string })
-        await audit(w, m.org_id, "playbook.created", data.id as string, { name, sales_stage: a.sales_stage ?? null, status: "draft" })
+        await audit(w, m.org_id, "playbook.created", data.id as string, { name, sales_stage: a.sales_stage ?? null, status: "draft", replaced })
+        let stageOff = false
+        if (a.sales_stage) {
+            const { data: st } = await w.sb.from("org_sales_stages").select("enabled")
+                .eq("org_id", m.org_id).eq("stage", a.sales_stage).maybeSingle()
+            stageOff = !st?.enabled
+        }
         return ok({
             created: { ...data, steps: stages.map(s => ({ key: s.key, name: s.name })) },
+            replaced_draft_id: replaced ?? undefined,
+            warning: stageOff ? `The ${a.sales_stage} stage is turned off, so reps will not get this playbook. Turn it on with set_sales_stages.` : undefined,
             note: "Saved as a draft. Tell the user to open the Playbook page in the Command Center (https://teams.talkpilot.co/playbook), check it, and turn it on.",
         })
     }))

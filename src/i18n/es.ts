@@ -70,7 +70,7 @@ export const es: Dict = {
         } as Record<string, string>,
         statuses: {
             active: "activo", draft: "borrador", archived: "archivado",
-            ready: "listo", error: "error", pending: "pendiente", processing: "procesando",
+            ready: "listo", error: "error", failed: "falló", pending: "pendiente", processing: "procesando",
             disabled: "desactivada", trialing: "en prueba",
         } as Record<string, string>,
         severities: {

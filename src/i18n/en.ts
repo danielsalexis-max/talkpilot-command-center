@@ -74,7 +74,7 @@ export const en = {
         } as Record<string, string>,
         statuses: {
             active: "active", draft: "draft", archived: "archived",
-            ready: "ready", error: "error", pending: "pending", processing: "processing",
+            ready: "ready", error: "error", failed: "failed", pending: "pending", processing: "processing",
             disabled: "disabled", trialing: "trial",
         } as Record<string, string>,
         severities: {

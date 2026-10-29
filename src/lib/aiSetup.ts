@@ -49,7 +49,7 @@ const COPY = {
 
 1. Use TalkPilot's get_setup_status to see what is already set up.
 2. Use what you know about my company and the files in this chat or project. Ask me up to 5 short questions, only about what you can't find.
-3. Before you save anything, show me the plan: a company profile, the sales stages we use, one playbook per stage with its steps, our most common objections with the answer we want the team to give, and the documents you will add.
+3. Before you save anything, show me the plan: a company profile, the sales stages we use, one playbook per stage with its steps, our most common objections with the answer we want the team to give, the documents you will add, and anything we already have that is out of date or wrong, with what you would replace or archive.
 4. When I say yes, save it with the TalkPilot tools. Playbooks are saved as drafts.
 5. Write everything in the language my team uses on calls. At the end, tell me what is left to do in the Command Center.`,
     },
@@ -93,7 +93,7 @@ const COPY = {
 
 1. Usa get_setup_status de TalkPilot para ver qué ya está configurado.
 2. Usa lo que sabes de mi empresa y los archivos de este chat o proyecto. Hazme hasta 5 preguntas cortas, solo sobre lo que no encuentres.
-3. Antes de guardar nada, muéstrame el plan: un perfil de la empresa, las etapas de venta que usamos, un playbook por etapa con sus pasos, nuestras objeciones más comunes con la respuesta que queremos que dé el equipo, y los documentos que vas a agregar.
+3. Antes de guardar nada, muéstrame el plan: un perfil de la empresa, las etapas de venta que usamos, un playbook por etapa con sus pasos, nuestras objeciones más comunes con la respuesta que queremos que dé el equipo, los documentos que vas a agregar, y lo que ya tenemos que esté viejo o mal, con lo que reemplazarías o archivarías.
 4. Cuando te diga que sí, guárdalo con las herramientas de TalkPilot. Los playbooks se guardan como borradores.
 5. Escribe todo en el idioma que usa mi equipo en sus llamadas. Al final, dime qué falta hacer en el Command Center.`,
     },
