@@ -387,7 +387,7 @@ export function registerTalkPilotTools(server: McpServer) {
 
     server.registerTool("update_my_context", {
         title: "Update what TalkPilot knows about me",
-        description: "Rewrite what the live coach knows about the user. Each field replaces the old text, so read get_my_context first and send the full new text. about_me: who they are and what their calls are for. company: what their company does. coach_notes: facts the coach should always have (prices, product details, names). Leave out a field to keep it.",
+        description: "Rewrite what the live coach knows about the user. Each field replaces the old text, so read get_my_context first and send the full new text. about_me: who they are and what their calls are for. company: what their company does. coach_notes: facts the coach should always have (prices, product details, names). Leave out a field to keep it. Draft it from what you already know about the user (your memory, past chats, their files) and show it to them before saving.",
         inputSchema: z.object({
             about_me: z.string().max(4000).optional(),
             company: z.string().max(4000).optional(),
@@ -846,7 +846,7 @@ export function registerTalkPilotTools(server: McpServer) {
     }, guarded("get_setup_status", async (w) => {
         const m = await membership(w)
         if (!m) return fail(noWorkspace(w))
-        const [{ data: org }, { data: stages }, { data: playbooks }, { data: objectionRows }, { data: knowledge }, { data: members }, { count: invites }] = await Promise.all([
+        const [{ data: org }, { data: stages }, { data: playbooks }, { data: objectionRows }, { data: knowledge }, { data: members }, { count: invites }, { data: me }] = await Promise.all([
             w.sb.from("organizations").select("name, settings").eq("id", m.org_id).maybeSingle(),
             w.sb.from("org_sales_stages").select("stage, enabled, tone").eq("org_id", m.org_id),
             w.sb.from("org_playbooks").select("id, name, sales_stage, status, methodology, stages, updated_at").eq("org_id", m.org_id).neq("status", "archived"),
@@ -856,7 +856,10 @@ export function registerTalkPilotTools(server: McpServer) {
             w.sb.rpc("get_org_members_with_email", { p_org: m.org_id }),
             w.sb.from("org_invites").select("id", { count: "exact", head: true }).eq("org_id", m.org_id)
                 .is("accepted_at", null).is("revoked_at", null).gt("expires_at", new Date().toISOString()),
+            w.sb.from("user_profiles").select("role_description, preferences").eq("id", w.userId).maybeSingle(),
         ])
+        const myPrefs = ((me?.preferences ?? {}) as Record<string, string>)
+        const aboutMe = (myPrefs.mac_user_context || me?.role_description || "").trim()
         const pbs = (playbooks ?? []) as { id: string; name: string; sales_stage: string | null; status: string; methodology: string | null; stages: unknown; updated_at: string | null }[]
         const docs = (knowledge ?? []) as { id: string; title: string; kind: string; status: string; updated_at: string | null; created_at: string | null }[]
         const objs = (objectionRows ?? []) as { id: string; objection: string; category: string | null; severity: string; sales_stages: string[] | null; hit_count: number | null; updated_at: string | null }[]
@@ -907,6 +910,8 @@ export function registerTalkPilotTools(server: McpServer) {
 
         // Same "ready" bar as the Command Center's Home checklist (D-175).
         const next: string[] = []
+        // D-804: the person running setup is usually a rep on calls too.
+        if (aboutMe.length < 40) next.push("Fill in the user's own profile (who they are, their role, what their calls are for) from what you already know about them, and save it with update_my_context after they agree.")
         if (!hasProfile) next.push("Write a company profile with set_company_profile.")
         if (on.length === 0) next.push("Turn on the sales stages the team uses with set_sales_stages.")
         if (pbs.length === 0) next.push("Create a playbook for each stage the team uses with create_playbook (saved as drafts).")
@@ -934,12 +939,13 @@ export function registerTalkPilotTools(server: McpServer) {
             objections: objs.map(o => ({ id: o.id, objection: o.objection, category: o.category, severity: o.severity, sales_stages: o.sales_stages ?? [], times_heard: o.hit_count ?? 0 })),
             knowledge_documents: docs.map(d => ({ id: d.id, title: d.title, kind: d.kind, status: d.status, updated_at: d.updated_at ?? d.created_at })),
             has_company_profile: hasProfile,
+            my_profile_filled: aboutMe.length >= 40,
             members: activeMembers,
             pending_invites: invites ?? 0,
             ready: active >= 1 && objections >= 3 && docs.length >= 1,
             warnings,
             next_steps: next,
-            tools_for_setup: ["get_setup_status", "set_company_profile", "read_website", "add_documents", "add_knowledge", "set_sales_stages", "create_playbook", "update_playbook_stage", "save_objections", "archive_items"],
+            tools_for_setup: ["get_setup_status", "get_my_context", "update_my_context", "set_company_profile", "read_website", "add_documents", "add_knowledge", "set_sales_stages", "create_playbook", "update_playbook_stage", "save_objections", "archive_items"],
             command_center: "https://teams.talkpilot.co",
             note: isAdmin ? undefined : "Only workspace owners and admins can change the setup. This person can read it.",
         })
