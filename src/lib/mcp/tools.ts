@@ -539,10 +539,10 @@ export function registerTalkPilotTools(server: McpServer) {
 
     server.registerTool("update_playbook_stage", {
         title: "Edit a playbook step (Teams admins)",
-        description: "TalkPilot Teams owners and admins: change one step of a playbook (the playbook's `stages` list; each item is a step). Each list you send replaces that list; leave a field out to keep it. Get step keys from get_playbooks. Live playbooks change for reps on their next call.",
+        description: "TalkPilot Teams owners and admins: change one step of a playbook (the playbook's `stages` list; each item is a step). Each list you send replaces that list; leave a field out to keep it. Name the step by its key, its name or its number. Live playbooks change for reps on their next call.",
         inputSchema: z.object({
             playbook_id: z.string().uuid(),
-            stage_key: z.string().min(1).describe("The step's key from get_playbooks"),
+            stage_key: z.string().min(1).describe("The step: its key, its name, or its number (1 = first) from get_setup_status or get_playbooks"),
             name: z.string().min(1).max(120).optional(),
             description: z.string().max(1000).optional().describe("What the rep does in this step"),
             talking_points: z.array(z.string().min(1).max(500)).max(30).optional(),
@@ -558,8 +558,13 @@ export function registerTalkPilotTools(server: McpServer) {
         if (error) return fail(error.message)
         if (!pb) return fail("No playbook with that id in this workspace.")
         const stages = Array.isArray(pb.stages) ? [...pb.stages] as Record<string, unknown>[] : []
-        const i = stages.findIndex(s => s.key === a.stage_key)
-        if (i < 0) return fail(`No stage "${a.stage_key}". Stages: ${stages.map(s => s.key).join(", ")}`)
+        // D-803: older playbooks (templates, early editor) have steps with no
+        // `key`, so a step can also be named by its name or its 1-based number.
+        const want = a.stage_key.trim()
+        let i = stages.findIndex(s => s.key === want)
+        if (i < 0) i = stages.findIndex(s => typeof s.name === "string" && s.name.trim().toLowerCase() === want.toLowerCase())
+        if (i < 0 && /^\d+$/.test(want) && Number(want) >= 1 && Number(want) <= stages.length) i = Number(want) - 1
+        if (i < 0) return fail(`No step "${want}". Steps: ${stages.map((s, n) => `${n + 1}. ${s.name ?? s.key}`).join(", ")}`)
         // Only the named fields change; guardrail_rules and anything else on the
         // stage are kept as they are, so the guardrails rollup stays valid.
         const next = { ...stages[i] }
@@ -885,7 +890,7 @@ export function registerTalkPilotTools(server: McpServer) {
             else if (!forStage.some(p => p.status === "active")) warnings.push(`The ${s.stage} stage only has draft playbooks; reps get nothing there until an admin turns one on in the Command Center.`)
             if (forStage.filter(p => p.status === "active").length > 1) warnings.push(`The ${s.stage} stage has ${forStage.filter(p => p.status === "active").length} active playbooks; reps pick one per call.`)
         }
-        const STALE_DAYS = 60
+        const STALE_DAYS = 30
         const stale = docs.filter(d => {
             const t = Date.parse(d.updated_at ?? d.created_at ?? "")
             return Number.isFinite(t) && Date.now() - t > STALE_DAYS * 86400_000 && !titles.includes(d.title)
@@ -922,7 +927,7 @@ export function registerTalkPilotTools(server: McpServer) {
             all_sales_stages: SALES_STAGES,
             playbooks: pbs.map(p => ({
                 id: p.id, name: p.name, sales_stage: p.sales_stage, status: p.status, methodology: p.methodology,
-                steps: Array.isArray(p.stages) ? (p.stages as { key?: string; name?: string }[]).map(s => ({ key: s.key, name: s.name })) : [],
+                steps: Array.isArray(p.stages) ? (p.stages as { key?: string; name?: string }[]).map((s, n) => ({ number: n + 1, key: s.key ?? null, name: s.name })) : [],
                 updated_at: p.updated_at,
             })),
             active_objections: objections,
