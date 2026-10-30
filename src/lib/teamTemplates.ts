@@ -8,28 +8,9 @@ import type { Locale } from "@/i18n"
 /// Jira or ClickUp. Mirrors PROVIDER_SLOTS / PROVIDER_GROUP in the app repo's
 /// supabase/functions/_shared/templates.ts.
 
-export type TemplateGroup = "crm" | "tasks" | "email" | "slack"
-export type TemplateSlot = "recap" | "call_log" | "task_name" | "task" | "email_subject" | "email_body"
-
-export const GROUP_SLOTS: Record<TemplateGroup, TemplateSlot[]> = {
-    crm:   ["call_log", "task_name", "task"],
-    tasks: ["task_name", "task"],
-    email: ["email_subject", "email_body"],
-    slack: ["recap", "task"],
-}
-
-export const GROUP_ORDER: TemplateGroup[] = ["crm", "tasks", "email", "slack"]
-
-export const TEMPLATE_TOKENS = [
-    "contact_name", "company", "takeaway", "action_items", "deal_name",
-    "deal_stage", "call_date", "call_title", "call_duration", "user_name",
-] as const
-
-export const MAX_TEMPLATE_CHARS = 8000
-
-export function isSingleLine(slot: TemplateSlot): boolean {
-    return slot === "task_name" || slot === "email_subject"
-}
+export { GROUP_SLOTS, GROUP_ORDER, TEMPLATE_TOKENS, MAX_TEMPLATE_CHARS, isSingleLine } from "@/lib/templateSlots"
+export type { TemplateGroup, TemplateSlot } from "@/lib/templateSlots"
+import { isSingleLine, MAX_TEMPLATE_CHARS, type TemplateGroup, type TemplateSlot } from "@/lib/templateSlots"
 
 export interface OrgTemplateRow { tool_group: TemplateGroup; slot: TemplateSlot; template: string; updated_at: string }
 

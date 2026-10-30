@@ -36,7 +36,7 @@ const COPY = {
         chatgptPath: "Settings → Apps & Connectors → Create (Developer mode)",
         thenAllow: "Paste the link, sign in to TalkPilot and click Allow.",
         setupTitle: "Set up your workspace",
-        setupSub: "Your AI fills in your profile, company, playbooks and objections from what it already knows, and asks you only about what is missing. Playbooks arrive as drafts.",
+        setupSub: "Your AI fills in your profile, company, playbooks, objections and message templates from what it already knows, and asks you only about what is missing. Playbooks arrive as drafts.",
         canSee: "What it can see",
         appNote: "Reps can also connect from the TalkPilot app: Settings → Integrations → Claude & ChatGPT.",
         notUsed: "Not used yet",
@@ -52,7 +52,7 @@ const COPY = {
 
 1. Call TalkPilot's get_setup_status and get_my_context to see what is already there.
 2. Before you ask me anything, gather what you already know about me and my company: your memory of me and our past chats, this project's files and instructions, the files in this chat, the tools I have connected (Drive, email, CRM, calendar, notes) and our website (use read_website).
-3. Draft everything from that: my own profile (who I am, my role, what my calls are for), the company profile, the sales stages we use, one playbook per stage with its steps, our most common objections with the answer we want the team to give, the documents to add, and anything we already have that is out of date or wrong, with what you would replace or archive.
+3. Draft everything from that: my own profile (who I am, my role, what my calls are for), the company profile, the sales stages we use, one playbook per stage with its steps, our most common objections with the answer we want the team to give, the documents to add, the wording of what TalkPilot sends after each call (the CRM note, the follow-up email, the Slack recap and tasks; look for real ones in my sent email or CRM, or ask me to paste one of each), and anything we already have that is out of date or wrong, with what you would replace or archive.
 4. Show me the plan and mark each part: ✅ you found it (say where), 🤔 your best guess, ❓ missing. Then ask me only about the 🤔 and ❓ parts, all in one message, numbered, with your best guess next to each so I can just answer "ok". Don't ask what you already know.
 5. When I say yes, save it with the TalkPilot tools. Playbooks are saved as drafts. If I change something, change only that.
 6. Write everything in the language my team uses on calls. At the end, tell me what you saved and what is left to do in the Command Center.`,
@@ -84,7 +84,7 @@ const COPY = {
         chatgptPath: "Settings → Apps & Connectors → Create (Developer mode)",
         thenAllow: "Pega el enlace, inicia sesión en TalkPilot y haz clic en Permitir.",
         setupTitle: "Configura tu espacio de trabajo",
-        setupSub: "Tu IA llena tu perfil, tu empresa, tus playbooks y tus objeciones con lo que ya sabe, y te pregunta solo lo que falta. Los playbooks llegan como borradores.",
+        setupSub: "Tu IA llena tu perfil, tu empresa, tus playbooks, tus objeciones y tus plantillas de mensajes con lo que ya sabe, y te pregunta solo lo que falta. Los playbooks llegan como borradores.",
         canSee: "Qué puede ver",
         appNote: "Los reps también pueden conectarlo desde la app de TalkPilot: Ajustes → Integraciones → Claude y ChatGPT.",
         notUsed: "Sin uso todavía",
@@ -100,7 +100,7 @@ const COPY = {
 
 1. Usa get_setup_status y get_my_context de TalkPilot para ver qué ya está configurado.
 2. Antes de preguntarme nada, reúne lo que ya sabes de mí y de mi empresa: lo que recuerdas de mí y de nuestras conversaciones, los archivos e instrucciones de este proyecto, los archivos de este chat, las herramientas que tengo conectadas (Drive, correo, CRM, calendario, notas) y nuestro sitio web (usa read_website).
-3. Con eso, arma todo: mi perfil (quién soy, mi rol, para qué son mis llamadas), el perfil de la empresa, las etapas de venta que usamos, un playbook por etapa con sus pasos, nuestras objeciones más comunes con la respuesta que queremos que dé el equipo, los documentos que vas a agregar, y lo que ya tenemos que esté viejo o mal, con lo que reemplazarías o archivarías.
+3. Con eso, arma todo: mi perfil (quién soy, mi rol, para qué son mis llamadas), el perfil de la empresa, las etapas de venta que usamos, un playbook por etapa con sus pasos, nuestras objeciones más comunes con la respuesta que queremos que dé el equipo, los documentos que vas a agregar, cómo se escribe lo que TalkPilot envía después de cada llamada (la nota del CRM, el correo de seguimiento, el resumen de Slack y las tareas; busca ejemplos reales en mis correos enviados o en el CRM, o pídeme que pegue uno de cada uno), y lo que ya tenemos que esté viejo o mal, con lo que reemplazarías o archivarías.
 4. Muéstrame el plan y marca cada parte: ✅ lo encontraste (di dónde), 🤔 es tu mejor suposición, ❓ falta. Luego pregúntame solo por lo 🤔 y lo ❓, todo en un mensaje, numerado y con tu mejor suposición al lado, para que yo solo responda "ok". No me preguntes lo que ya sabes.
 5. Cuando te diga que sí, guárdalo con las herramientas de TalkPilot. Los playbooks se guardan como borradores. Si cambio algo, cambia solo eso.
 6. Escribe todo en el idioma que usa mi equipo en sus llamadas. Al final, dime qué guardaste y qué falta hacer en el Command Center.`,

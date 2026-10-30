@@ -5,6 +5,7 @@ import { supabaseAs, SUPABASE_URL } from "./auth"
 import { decodeBytea, formatTranscript, minutesBetween, parseJsonOrBase64, safeSearch } from "./data"
 import { rollUpGuardrails } from "@/lib/guardrails"
 import { SALES_STAGES } from "@/lib/salesStages"
+import { GROUP_ORDER, GROUP_SLOTS, MAX_TEMPLATE_CHARS, TEMPLATE_TOKENS, isSingleLine, type TemplateGroup, type TemplateSlot } from "@/lib/templateSlots"
 
 /// TalkPilot MCP (D-538) — the tools Claude / ChatGPT see.
 ///
@@ -113,6 +114,32 @@ const STAGE_ENUM = z.enum(SALES_STAGES)
 /// replaces whichever one exists instead of adding a copy.
 const COMPANY_PROFILE_TITLES = { en: "Company profile", es: "Perfil de la empresa" } as const
 
+/// D-824: what each template slot is, in the model's words.
+const SLOT_PURPOSE: Record<string, string> = {
+    "crm.call_log": "The note logged on the contact in HubSpot or Salesforce after the call.",
+    "crm.task_name": "The title of a CRM task made from a follow-up.",
+    "crm.task": "The notes under that CRM task.",
+    "tasks.task_name": "The title of a task in Monday, Asana, Jira or ClickUp.",
+    "tasks.task": "The notes under that task.",
+    "email.email_subject": "The subject of the follow-up email to the person on the call.",
+    "email.email_body": "The body of that follow-up email.",
+    "slack.recap": "The recap posted to a Slack channel after the call.",
+    "slack.task": "A Slack message about one follow-up.",
+}
+
+const TOKEN_HELP: Record<string, string> = {
+    contact_name: "the person they spoke with",
+    company: "that person's company",
+    takeaway: "a short summary of what was discussed and decided",
+    action_items: "the next steps, one per line",
+    deal_name: "the CRM deal's name",
+    deal_stage: "the CRM deal's stage",
+    call_date: "the date of the call",
+    call_title: "the meeting's title",
+    call_duration: "how long the call took",
+    user_name: "the rep's own name",
+}
+
 const NOT_SIGNED_IN = "Not signed in to TalkPilot. Reconnect the TalkPilot connector."
 const NEEDS_PRO = `Using TalkPilot inside Claude or ChatGPT is part of TalkPilot Pro and TalkPilot Teams. This account is on the free plan. Upgrade in the TalkPilot app or at ${PRO_URL}, then try again.`
 
@@ -215,7 +242,7 @@ export function registerTalkPilotTools(server: McpServer) {
 
     server.registerTool("prepare_for_call", {
         title: "Prepare for an upcoming call",
-        description: "Gather everything TalkPilot knows before a call with a person or company: past conversations that mention them (with summaries), open action items from those calls, and, for TalkPilot Teams members, the team's active playbooks and most common objections. Use it to write a prep brief.",
+        description: "Gather everything TalkPilot knows before a call with a person or company: past conversations that mention them (with summaries), open action items from those calls, what the user's Memory says about that person or company (and the user's own notes on them), and, for TalkPilot Teams members, the team's active playbooks and most common objections. Use it to write a prep brief.",
         inputSchema: z.object({
             who_or_what: z.string().min(2).describe("Person, company or topic of the upcoming call"),
         }),
@@ -232,6 +259,14 @@ export function registerTalkPilotTools(server: McpServer) {
             ? await w.sb.from("action_items").select("id, title, description, status, due_at, conversation_id")
                 .in("conversation_id", ids).in("status", ["pending", "approved", "failed"])
             : { data: [] }
+        // D-823: what Memory knows about them (People and Companies). Missing
+        // before the memory migration runs; then this is just empty.
+        const [{ data: people }, { data: companies }] = await Promise.all([
+            w.sb.from("memory_people").select("email, name, company_domain, about, notes")
+                .or(`name.ilike.${p},email.ilike.${p},company_domain.ilike.${p}`).limit(5),
+            w.sb.from("memory_companies").select("domain, name, about, notes")
+                .or(`name.ilike.${p},domain.ilike.${p}`).limit(3),
+        ])
         const m = await membership(w)
         let team: Record<string, unknown> | null = null
         if (m) {
@@ -248,6 +283,7 @@ export function registerTalkPilotTools(server: McpServer) {
         return ok({
             past_conversations: (calls ?? []).map(c => ({ ...callSummaryRow(c), notes: c.brief_notes ?? null })),
             open_action_items: open ?? [],
+            memory: { people: people ?? [], companies: companies ?? [] },
             team,
             note: (calls ?? []).length === 0 ? "No past conversations matched. Try a shorter name or the company name." : undefined,
         })
@@ -838,6 +874,90 @@ export function registerTalkPilotTools(server: McpServer) {
 
     // ── Workspace setup with AI (D-800) ──────────────────────────────────
 
+    // ── Team wording templates (D-824) ──────────────────────────────────────
+    // The same rows the Command Center's Templates page writes (org_templates,
+    // D-770). Owners, admins and managers write (the table's RLS says so too);
+    // any member reads. Every send uses the rep's own version, else the
+    // team's, else the built-in wording, so nothing here locks a rep in.
+
+    server.registerTool("get_templates", {
+        title: "Get the team's message templates (Teams)",
+        description: "TalkPilot Teams: the wording TalkPilot uses for what it sends after a call, per tool group and slot. Groups and slots: crm (call_log = the note logged in HubSpot/Salesforce, task_name, task) · tasks (task_name, task; Monday, Asana, Jira, ClickUp) · email (email_subject, email_body; the follow-up email) · slack (recap, task). A slot with no team text uses TalkPilot's built-in wording. Templates are plain text with {{token}} placeholders; the allowed tokens are listed in the answer.",
+        inputSchema: z.object({}),
+        annotations: READ,
+    }, guarded("get_templates", async (w) => {
+        const m = await membership(w)
+        if (!m) return fail(noWorkspace(w))
+        const { data, error } = await w.sb.from("org_templates")
+            .select("tool_group, slot, template, updated_at").eq("org_id", m.org_id)
+        if (error) return fail(`TalkPilot error: ${error.message}`)
+        const rows = (data ?? []) as { tool_group: TemplateGroup; slot: TemplateSlot; template: string; updated_at: string }[]
+        await log(w, "get_templates", { org: m.org_id })
+        return ok({
+            can_edit: ["owner", "admin", "manager"].includes(m.role),
+            slots: GROUP_ORDER.flatMap(g => GROUP_SLOTS[g].map(slot => {
+                const row = rows.find(r => r.tool_group === g && r.slot === slot)
+                return {
+                    tool_group: g, slot, what_it_is: SLOT_PURPOSE[`${g}.${slot}`], one_line: isSingleLine(slot),
+                    team_template: row?.template ?? null, uses: row ? "team" : "built-in", updated_at: row?.updated_at ?? null,
+                }
+            })),
+            tokens: TOKEN_HELP,
+            rules: "Plain text only, no logic. Use only the tokens listed. task_name and email_subject are one line. Keep the team's own language, greeting, format and sign-off.",
+        })
+    }))
+
+    server.registerTool("save_templates", {
+        title: "Save the team's message templates (Teams leads)",
+        description: "TalkPilot Teams owners, admins and managers: set how the team's CRM note, task, follow-up email and Slack messages look after a call. Best made from a real message the team already sends: keep its language, format and sign-off and swap the parts that change per call for tokens. Send several slots at once. An empty template puts that slot back to TalkPilot's built-in wording. Reps can still make their own version. Each saved slot comes back with a preview filled with sample values; show it to the user.",
+        inputSchema: z.object({
+            templates: z.array(z.object({
+                tool_group: z.enum(["crm", "tasks", "email", "slack"]),
+                slot: z.enum(["recap", "call_log", "task_name", "task", "email_subject", "email_body"]),
+                template: z.string().max(MAX_TEMPLATE_CHARS).describe("Plain text with {{token}} placeholders. Empty = back to the built-in wording."),
+            })).min(1).max(12),
+        }),
+        annotations: WRITE,
+    }, guarded("save_templates", async (w, args: { templates: { tool_group: TemplateGroup; slot: TemplateSlot; template: string }[] }) => {
+        const m = await membership(w)
+        if (!m) return fail(noWorkspace(w))
+        if (!["owner", "admin", "manager"].includes(m.role)) {
+            return fail(`Only workspace owners, admins and managers can change the team's templates. This person's role is ${m.role}.`)
+        }
+        const results: Record<string, unknown>[] = []
+        for (const t of args.templates) {
+            const key = `${t.tool_group}.${t.slot}`
+            if (!GROUP_SLOTS[t.tool_group].includes(t.slot)) {
+                results.push({ slot: key, saved: false, error: `The ${t.tool_group} group has no ${t.slot} slot. Its slots: ${GROUP_SLOTS[t.tool_group].join(", ")}.` })
+                continue
+            }
+            let text = t.template.replace(/\r\n/g, "\n").trim()
+            if (isSingleLine(t.slot)) text = text.replace(/\s*\n\s*/g, " ")
+            if (!text) {
+                const { error } = await w.sb.from("org_templates").delete()
+                    .eq("org_id", m.org_id).eq("tool_group", t.tool_group).eq("slot", t.slot)
+                results.push(error ? { slot: key, saved: false, error: error.message } : { slot: key, saved: true, uses: "built-in" })
+                if (!error) await audit(w, m.org_id, "template.reset", key)
+                continue
+            }
+            const unknown = [...text.matchAll(/\{\{\s*([a-z_]+)\s*\}\}/g)].map(x => x[1])
+                .filter(tok => !(TEMPLATE_TOKENS as readonly string[]).includes(tok))
+            if (unknown.length) {
+                results.push({ slot: key, saved: false, error: `Unknown token(s): ${[...new Set(unknown)].join(", ")}. Use only: ${TEMPLATE_TOKENS.join(", ")}.` })
+                continue
+            }
+            const { error } = await w.sb.from("org_templates").upsert(
+                { org_id: m.org_id, tool_group: t.tool_group, slot: t.slot, template: text, updated_by: w.userId },
+                { onConflict: "org_id,tool_group,slot" })
+            if (error) { results.push({ slot: key, saved: false, error: error.message }); continue }
+            await audit(w, m.org_id, "template.save", key)
+            const preview = await callFunction(w, "integrations-status", { action: "preview_template", key: t.slot, template: text })
+            results.push({ slot: key, saved: true, uses: "team", preview: preview.ok ? preview.json.rendered ?? null : null })
+        }
+        await log(w, "save_templates", { org: m.org_id })
+        return ok({ results, command_center: "https://teams.talkpilot.co/templates" })
+    }))
+
     server.registerTool("get_setup_status", {
         title: "Get the workspace setup status (Teams)",
         description: "TalkPilot Teams: everything that is set up in the workspace and what is missing or inconsistent, so you can help the admin finish it. Call this first when the user asks you to set up TalkPilot. Returns the workspace, the user's role (only owners and admins can change setup), the sales stages turned on, every playbook (drafts too), every active objection and every document with their ids (use them to update, replace or archive), whether a company profile exists, team size, warnings about things that don't fit together, and the next steps.",
@@ -846,7 +966,7 @@ export function registerTalkPilotTools(server: McpServer) {
     }, guarded("get_setup_status", async (w) => {
         const m = await membership(w)
         if (!m) return fail(noWorkspace(w))
-        const [{ data: org }, { data: stages }, { data: playbooks }, { data: objectionRows }, { data: knowledge }, { data: members }, { count: invites }, { data: me }] = await Promise.all([
+        const [{ data: org }, { data: stages }, { data: playbooks }, { data: objectionRows }, { data: knowledge }, { data: members }, { count: invites }, { data: me }, { data: tmpl }] = await Promise.all([
             w.sb.from("organizations").select("name, settings").eq("id", m.org_id).maybeSingle(),
             w.sb.from("org_sales_stages").select("stage, enabled, tone").eq("org_id", m.org_id),
             w.sb.from("org_playbooks").select("id, name, sales_stage, status, methodology, stages, updated_at").eq("org_id", m.org_id).neq("status", "archived"),
@@ -857,7 +977,9 @@ export function registerTalkPilotTools(server: McpServer) {
             w.sb.from("org_invites").select("id", { count: "exact", head: true }).eq("org_id", m.org_id)
                 .is("accepted_at", null).is("revoked_at", null).gt("expires_at", new Date().toISOString()),
             w.sb.from("user_profiles").select("role_description, preferences").eq("id", w.userId).maybeSingle(),
+            w.sb.from("org_templates").select("tool_group, slot").eq("org_id", m.org_id),
         ])
+        const templatesSet = ((tmpl ?? []) as { tool_group: string; slot: string }[]).map(t => `${t.tool_group}.${t.slot}`)
         const myPrefs = ((me?.preferences ?? {}) as Record<string, string>)
         const aboutMe = (myPrefs.mac_user_context || me?.role_description || "").trim()
         const pbs = (playbooks ?? []) as { id: string; name: string; sales_stage: string | null; status: string; methodology: string | null; stages: unknown; updated_at: string | null }[]
@@ -918,6 +1040,8 @@ export function registerTalkPilotTools(server: McpServer) {
         if (drafts > 0) next.push("The admin checks the draft playbooks and turns them on in the Command Center (Playbook page). You cannot do this.")
         if (objections < 3) next.push("Add the most common objections with their approved answers using save_objections (at least 3).")
         if (docs.filter(d => !titles.includes(d.title)).length === 0) next.push("Add documents the coach can quote (pricing, product facts, case studies) with add_documents or add_knowledge.")
+        // D-824: what reaches the CRM and the client after every call.
+        if (templatesSet.length === 0) next.push("Set the team's wording for what TalkPilot sends after a call (CRM note, follow-up email, Slack recap, tasks) with save_templates. Ask the user to paste one real example of each that the team already sends, and turn it into a template; if they have none, write one in their style. Show the previews.")
         if (activeMembers <= 1 && (invites ?? 0) === 0) next.push("The admin invites the team in the Command Center (Team page). You cannot do this.")
         if (warnings.length) next.push("Fix or show the user the warnings.")
         await log(w, "get_setup_status", { org: m.org_id })
@@ -939,13 +1063,14 @@ export function registerTalkPilotTools(server: McpServer) {
             objections: objs.map(o => ({ id: o.id, objection: o.objection, category: o.category, severity: o.severity, sales_stages: o.sales_stages ?? [], times_heard: o.hit_count ?? 0 })),
             knowledge_documents: docs.map(d => ({ id: d.id, title: d.title, kind: d.kind, status: d.status, updated_at: d.updated_at ?? d.created_at })),
             has_company_profile: hasProfile,
+            team_templates_set: templatesSet,
             my_profile_filled: aboutMe.length >= 40,
             members: activeMembers,
             pending_invites: invites ?? 0,
             ready: active >= 1 && objections >= 3 && docs.length >= 1,
             warnings,
             next_steps: next,
-            tools_for_setup: ["get_setup_status", "get_my_context", "update_my_context", "set_company_profile", "read_website", "add_documents", "add_knowledge", "set_sales_stages", "create_playbook", "update_playbook_stage", "save_objections", "archive_items"],
+            tools_for_setup: ["get_setup_status", "get_my_context", "update_my_context", "set_company_profile", "read_website", "add_documents", "add_knowledge", "set_sales_stages", "create_playbook", "update_playbook_stage", "save_objections", "archive_items", "get_templates", "save_templates"],
             command_center: "https://teams.talkpilot.co",
             note: isAdmin ? undefined : "Only workspace owners and admins can change the setup. This person can read it.",
         })
