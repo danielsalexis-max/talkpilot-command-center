@@ -509,6 +509,9 @@ export default function StartPage() {
     /// D-575/D-605: the checkout opens a Stripe trial of this many days
     /// ($0 today). Null = pay from day one (no grant and over the pilot cap).
     const [cardTrialDays, setCardTrialDays] = useState<number | null>(null)
+    /// D-827: create-org said no pilot because this email or company already
+    /// had one. The seats step promised a free pilot, so the card step says why.
+    const [pilotUsed, setPilotUsed] = useState(false)
     const [checkoutBusy, setCheckoutBusy] = useState(false)
 
     const [invites, setInvites]       = useState<string[]>(["", "", ""])
@@ -842,6 +845,7 @@ export default function StartPage() {
             }
             setHasTrial(!!res.trial_ends_at)
             setCardTrialDays(typeof res.card_trial_days === "number" ? res.card_trial_days : null)
+            setPilotUsed(res.pilot_used === true)
             setScreen("knowledge")
         } catch (e) {
             const msg = (e as Error).message
@@ -1369,6 +1373,9 @@ export default function StartPage() {
                                     <p className="text-xs text-[var(--color-accent-deep)]">
                                         {cardTrialDays ? t.start.cardTrialSub(cardTrialDays, seats) : t.start.paySub(seats)}
                                     </p>
+                                    {pilotUsed && !cardTrialDays && (
+                                        <p className="text-xs text-[var(--color-accent-deep)]">{t.start.pilotUsedNote}</p>
+                                    )}
                                     <div className="flex flex-wrap gap-2 pt-1">
                                         <button onClick={startCheckout} disabled={checkoutBusy} className={BTN + " sm:w-auto px-5"}>
                                             {checkoutBusy ? t.start.openingCheckout : cardTrialDays ? t.start.cardTrialCta : t.start.goToCheckout}

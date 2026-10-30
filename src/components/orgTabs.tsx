@@ -4671,6 +4671,8 @@ interface BillingInfo {
         current_period_end: number
         cancel_at_period_end: boolean
     } | null
+    /** D-827: set while a card pilot runs. Live-call hours used vs. allowed. */
+    pilot?: { ends_at: string; capped: boolean; minutes_used: number; minutes_cap: number } | null
 }
 
 export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?: string | null }) {
@@ -4789,6 +4791,22 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
             }
         } finally {
             setSaving(false)
+        }
+    }
+
+    // D-827: end the pilot and start the plan today. The way out of the
+    // pilot's usage cap; the webhook gives the team Pro back once it's paying.
+    const [startBusy, setStartBusy] = useState(false)
+    async function startPlanNow() {
+        setStartBusy(true); setMsg(null)
+        try {
+            await call("start_now")
+            setMsg(t.tabs.billing.pilotStarted); setIsErr(false)
+            await load()
+        } catch (e) {
+            setMsg(errStr(e)); setIsErr(true)
+        } finally {
+            setStartBusy(false)
         }
     }
 
@@ -4999,6 +5017,25 @@ export function BillingTab({ orgId, trialEndsAt }: { orgId: string; trialEndsAt?
                             {portalBusy ? t.tabs.billing.opening : t.tabs.billing.manageBilling}
                         </button>
                     </div>
+                    {info.pilot && info.stripe.status === "trialing" && (
+                        info.pilot.capped ? (
+                            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 space-y-2">
+                                <p className="text-xs text-amber-900">
+                                    {t.tabs.billing.pilotCapped(Math.round(info.pilot.minutes_cap / 60))}
+                                </p>
+                                <button className={BTN_PRIMARY} onClick={startPlanNow} disabled={startBusy}>
+                                    {startBusy ? t.tabs.billing.opening : t.tabs.billing.pilotStartNow}
+                                </button>
+                            </div>
+                        ) : (
+                            <p className="text-xs text-[var(--color-text-secondary)] mt-3">
+                                {t.tabs.billing.pilotHours(
+                                    Math.round(info.pilot.minutes_used / 6) / 10,
+                                    Math.round(info.pilot.minutes_cap / 60),
+                                )}
+                            </p>
+                        )
+                    )}
                     <p className="text-xs text-[var(--color-muted)] mt-3">
                         {t.tabs.billing.portalNote}
                     </p>
