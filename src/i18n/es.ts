@@ -692,6 +692,7 @@ export const es: Dict = {
         required: "Requerido",
         recommended: "Recomendado",
         setUp: "Configurar →",
+        watchSetupVideo: "Mira el video de configuración (2 min)",
         nextStep: "Siguiente paso",
         stepCount: (done: number, total: number) => `${done} de ${total} listos`,
         dismissChecklist: "Cerrar esta lista",

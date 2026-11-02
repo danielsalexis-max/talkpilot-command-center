@@ -729,6 +729,7 @@ export const en = {
         required: "Required",
         recommended: "Recommended",
         setUp: "Set up →",
+        watchSetupVideo: "Watch the setup video (2 min)",
         nextStep: "Next step",
         stepCount: (done: number, total: number) => `${done} of ${total} done`,
         dismissChecklist: "Dismiss this checklist",

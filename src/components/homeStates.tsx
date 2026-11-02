@@ -3,7 +3,7 @@
 import Link from "next/link"
 import type { Route } from "next"
 import { useEffect, useState } from "react"
-import { useT } from "@/i18n/LocaleProvider"
+import { useLocale, useT } from "@/i18n/LocaleProvider"
 import { supabase } from "@/lib/supabase"
 import { track } from "@/lib/teamsAnalytics"
 
@@ -99,6 +99,7 @@ export function setupRequiredMet(r: SetupState): boolean {
 /// a side-by-side column, and retires once real scorecards exist.
 export function HomeSetupCard({ state, orgId, hasCards }: { state: SetupState; orgId: string; hasCards: boolean }) {
     const t = useT()
+    const { locale } = useLocale()
     const storageKey = `tp-setup-checklist-dismissed-${orgId}`
     const [dismissed, setDismissed] = useState(() => {
         try { return localStorage.getItem(storageKey) === "1" } catch { return false }
@@ -172,6 +173,14 @@ export function HomeSetupCard({ state, orgId, hasCards }: { state: SetupState; o
                             {current.required ? t.homeStates.required : t.homeStates.recommended}
                         </span>
                     </div>
+
+                    {/* D-843: the 2-minute setup video; leaves with the checklist. */}
+                    <a href={`https://www.talkpilot.co/tutorial/command-center?lang=${locale}`} target="_blank" rel="noopener"
+                        onClick={() => track("tutorial_opened", { platform: "command_center", source: "setup_card", page: "command-center", done, total: checks.length })}
+                        className="inline-flex items-center gap-2 mt-4 text-sm font-semibold text-[var(--color-accent-deep)] hover:underline">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24" aria-hidden><path d="M8 5v14l11-7z" /></svg>
+                        {t.homeStates.watchSetupVideo}
+                    </a>
 
                     {/* Thin progress bar, same language as the /start wizard */}
                     <div className="h-1 rounded-full bg-[var(--color-line-soft)] mt-7" aria-hidden>
