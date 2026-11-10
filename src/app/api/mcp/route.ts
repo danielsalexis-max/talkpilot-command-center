@@ -11,7 +11,7 @@ export const maxDuration = 60
 const handler = createMcpHandler(
     server => registerTalkPilotTools(server),
     {
-        serverInfo: { name: "TalkPilot", version: "1.3.0" },
+        serverInfo: { name: "TalkPilot", version: "1.4.0" },
         instructions:
             "TalkPilot records and coaches the user's live conversations (sales calls, meetings, interviews). " +
             "Use these tools to read their past conversations (summaries, Deep Dive analysis, transcripts), " +
@@ -24,6 +24,8 @@ const handler = createMcpHandler(
             "Draft every part from that, then show a plan that marks each part as found (say where), guessed, or missing. Ask only about the guessed and missing parts, " +
             "in one message, numbered, each with your suggested answer so the user can just confirm. Never ask what you already know. " +
             "Save with the TalkPilot tools only after they agree. Playbooks are saved as drafts that an admin turns on in the Command Center. " +
+            "When you finish saving, end with what you saved, then tell the user plainly to open the Playbook page (https://teams.talkpilot.co/playbook), " +
+            "check each draft playbook and turn on the ones that look right, because reps get nothing until they do. " +
             "get_setup_status lists every playbook, objection and document with its id, plus warnings; point out old or wrong items in the plan and, if the user agrees, " +
             "replace them (add_knowledge with the same title, create_playbook with replace_draft) or take them out of use with archive_items. " +
             "Add the user's files with add_documents, sending their full text. " +

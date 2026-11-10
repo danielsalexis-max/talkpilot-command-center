@@ -55,7 +55,7 @@ const COPY = {
 3. Draft everything from that: my own profile (who I am, my role, what my calls are for), the company profile, the sales stages we use, one playbook per stage with its steps, our most common objections with the answer we want the team to give, the documents to add, the wording of what TalkPilot sends after each call (the CRM note, the follow-up email, the Slack recap and tasks; look for real ones in my sent email or CRM, or ask me to paste one of each), and anything we already have that is out of date or wrong, with what you would replace or archive.
 4. Show me the plan and mark each part: ✅ you found it (say where), 🤔 your best guess, ❓ missing. Then ask me only about the 🤔 and ❓ parts, all in one message, numbered, with your best guess next to each so I can just answer "ok". Don't ask what you already know.
 5. When I say yes, save it with the TalkPilot tools. Playbooks are saved as drafts. If I change something, change only that.
-6. Write everything in the language my team uses on calls. At the end, tell me what you saved and what is left to do in the Command Center.`,
+6. Write everything in the language my team uses on calls. At the end, tell me what you saved and what is left to do in the Command Center. Close by telling me to open the Playbook page in the Command Center, check each draft playbook and turn on the ones I like, because my team gets nothing until I do.`,
     },
     es: {
         kicker: "Configuración rápida",
@@ -103,7 +103,7 @@ const COPY = {
 3. Con eso, arma todo: mi perfil (quién soy, mi rol, para qué son mis llamadas), el perfil de la empresa, las etapas de venta que usamos, un playbook por etapa con sus pasos, nuestras objeciones más comunes con la respuesta que queremos que dé el equipo, los documentos que vas a agregar, cómo se escribe lo que TalkPilot envía después de cada llamada (la nota del CRM, el correo de seguimiento, el resumen de Slack y las tareas; busca ejemplos reales en mis correos enviados o en el CRM, o pídeme que pegue uno de cada uno), y lo que ya tenemos que esté viejo o mal, con lo que reemplazarías o archivarías.
 4. Muéstrame el plan y marca cada parte: ✅ lo encontraste (di dónde), 🤔 es tu mejor suposición, ❓ falta. Luego pregúntame solo por lo 🤔 y lo ❓, todo en un mensaje, numerado y con tu mejor suposición al lado, para que yo solo responda "ok". No me preguntes lo que ya sabes.
 5. Cuando te diga que sí, guárdalo con las herramientas de TalkPilot. Los playbooks se guardan como borradores. Si cambio algo, cambia solo eso.
-6. Escribe todo en el idioma que usa mi equipo en sus llamadas. Al final, dime qué guardaste y qué falta hacer en el Command Center.`,
+6. Escribe todo en el idioma que usa mi equipo en sus llamadas. Al final, dime qué guardaste y qué falta hacer en el Command Center. Cierra diciéndome que abra la página de Playbook en el Command Center, revise cada playbook en borrador y active los que me gusten, porque mi equipo no recibe nada hasta que lo haga.`,
     },
 }
 
