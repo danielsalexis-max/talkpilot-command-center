@@ -1408,6 +1408,8 @@ export const en = {
             roleUpdated: (role: string) => `Role updated to ${role}.`,
             removedMsg: "Removed — their seat is free. Their personal TalkPilot account is untouched.",
             usesSeat: "Uses the app",
+            inviteUsesSeat: "Will take calls with TalkPilot (uses a paid seat). Leave unchecked for someone who only uses the Command Center.",
+            noSeat: "no seat",
             usesSeatHelp: "Checked = this person takes calls with TalkPilot, uses a paid seat and gets live coaching. Unchecked = Command Center only, no seat.",
             seatOn: "Seat turned on. They get live coaching in the app.",
             seatOff: "Seat freed. They keep their Command Center access but no live coaching in the app.",

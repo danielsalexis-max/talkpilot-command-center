@@ -47,7 +47,7 @@ interface ObjRow   { id: string; objection: string; response_guidance: string | 
 interface PbStage  { key?: string; name: string; description: string; required?: string[]; required_items: string[]; guardrail_rules: Array<{type: string; keyword: string; action: string}> }
 interface PbRow    { id: string; name: string; methodology: string | null; call_type: string | null; sales_stage: string | null; status: string; version: number; stages: PbStage[]; created_at: string }
 interface MemberRow { user_id: string; email: string | null; role: string; status: string; joined_at: string; playbook_policy?: string | null; uses_seat?: boolean }
-interface InviteRow { id: string; email: string; role: string; accepted_at: string | null; expires_at: string; revoked_at: string | null }
+interface InviteRow { id: string; email: string; role: string; accepted_at: string | null; expires_at: string; revoked_at: string | null; uses_seat?: boolean }
 interface TeamRow  { id: string; name: string }
 interface PracticeAssignmentRow {
     id: string; title: string; note: string | null; due_at: string | null; scenario_id: string | null
@@ -2795,6 +2795,9 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     const [loading, setLoading]         = useState(true)
     const [inviteEmail, setInviteEmail] = useState("")
     const [inviteRole, setInviteRole]   = useState("member")
+    // D-912: reps take a seat by default; managers and admins invited for the
+    // Command Center don't. The admin can flip it either way before sending.
+    const [inviteSeat, setInviteSeat]   = useState(true)
     // A team pick on the invite itself, because an invite without one lands as
     // team_id NULL and manages_user() answers false for that member forever —
     // the manager's dashboard just shows nobody (D-423). Optional on purpose:
@@ -2838,7 +2841,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                 return r
             }),
             supabase.from("org_invites")
-                .select("id, email, role, accepted_at, expires_at, revoked_at")
+                .select("id, email, role, accepted_at, expires_at, revoked_at, uses_seat")
                 .eq("org_id", orgId).order("created_at", { ascending: false }).limit(30),
             supabase.from("org_playbooks").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("status", "active"),
             supabase.from("org_objections").select("id", { count: "exact", head: true }).eq("org_id", orgId).eq("active", true),
@@ -2890,6 +2893,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                 // member arrived team-less and nothing after the invite ever
                 // assigned one (D-423).
                 team_id: inviteTeam || null,
+                uses_seat: inviteSeat,
                 language: clientLocale(),
             }),
         })
@@ -3002,7 +3006,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                     />
                     <select
                         value={inviteRole}
-                        onChange={e => setInviteRole(e.target.value)}
+                        onChange={e => { setInviteRole(e.target.value); setInviteSeat(e.target.value === "member") }}
                         className="w-32 flex-shrink-0 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <option value="member">{t.data.roles.member}</option>
@@ -3023,6 +3027,10 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                         {inviting ? t.tabs.members.sendingInvite : t.tabs.members.sendInvite}
                     </button>
                 </div>
+                <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]" title={t.tabs.members.usesSeatHelp}>
+                    <input type="checkbox" checked={inviteSeat} onChange={e => setInviteSeat(e.target.checked)} className="accent-[var(--color-accent)]" />
+                    {t.tabs.members.inviteUsesSeat}
+                </label>
                 <Msg msg={msg} error={isErr} />
             </div>
 
@@ -3122,6 +3130,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                                 <span className="text-[var(--color-text-secondary)]">{inv.email}</span>
                                 <div className="flex items-center gap-3 text-xs">
                                     <span className="text-[var(--color-text-secondary)] capitalize">{t.data.roles[inv.role] ?? inv.role}</span>
+                                    {inv.uses_seat === false && <span className="text-[var(--color-muted)]">{t.tabs.members.noSeat}</span>}
                                     {inv.revoked_at ? (
                                         <StatusBadge label={t.tabs.members.revoked} color="slate" />
                                     ) : inv.accepted_at ? (

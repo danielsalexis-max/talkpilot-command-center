@@ -1356,6 +1356,8 @@ export const es: Dict = {
             roleUpdated: (role: string) => `Rol actualizado a ${role}.`,
             removedMsg: "Eliminado — su asiento queda libre. Su cuenta personal de TalkPilot no se toca.",
             usesSeat: "Usa la app",
+            inviteUsesSeat: "Hará llamadas con TalkPilot (ocupa un asiento pagado). Déjalo sin marcar si solo usará el Command Center.",
+            noSeat: "sin asiento",
             usesSeatHelp: "Marcado: esta persona hace llamadas con TalkPilot, ocupa un asiento pagado y recibe la guía en vivo. Sin marcar: solo usa el Command Center y no ocupa asiento.",
             seatOn: "Asiento activado. Ya recibe la guía en vivo en la app.",
             seatOff: "Asiento liberado. Sigue entrando al Command Center, pero ya no recibe la guía en vivo en la app.",
