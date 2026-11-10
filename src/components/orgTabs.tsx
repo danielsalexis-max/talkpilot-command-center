@@ -46,7 +46,7 @@ interface KbRow    { id: string; title: string; kind: string; status: string; su
 interface ObjRow   { id: string; objection: string; response_guidance: string | null; approved_responses: { text?: string }[] | null; severity: string; active: boolean; variants: string[] | null; source: string | null; team_id: string | null; user_id: string | null; sales_stages?: string[] | null }
 interface PbStage  { key?: string; name: string; description: string; required?: string[]; required_items: string[]; guardrail_rules: Array<{type: string; keyword: string; action: string}> }
 interface PbRow    { id: string; name: string; methodology: string | null; call_type: string | null; sales_stage: string | null; status: string; version: number; stages: PbStage[]; created_at: string }
-interface MemberRow { user_id: string; email: string | null; role: string; status: string; joined_at: string; playbook_policy?: string | null }
+interface MemberRow { user_id: string; email: string | null; role: string; status: string; joined_at: string; playbook_policy?: string | null; uses_seat?: boolean }
 interface InviteRow { id: string; email: string; role: string; accepted_at: string | null; expires_at: string; revoked_at: string | null }
 interface TeamRow  { id: string; name: string }
 interface PracticeAssignmentRow {
@@ -2938,6 +2938,21 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
         setMsg(t.tabs.members.roleUpdated(t.data.roles[role] ?? role))
     }
 
+    // D-911: only people who use the app take a paid seat. Turning it off
+    // frees the seat and ends their Pro through the workspace; turning it on
+    // must fit in the seats paid for (a database trigger enforces it).
+    async function changeUsesSeat(userId: string, usesSeat: boolean) {
+        const { error } = await supabase.from("org_members")
+            .update({ uses_seat: usesSeat }).eq("org_id", orgId).eq("user_id", userId)
+        if (error) {
+            setMsg(error.message.includes("seat_limit") ? t.tabs.members.seatFull : humanError(error.message, t.tabs.doingSaveThat, t))
+            setIsErr(true); return
+        }
+        setMembers(prev => prev.map(m => m.user_id === userId ? { ...m, uses_seat: usesSeat } : m))
+        await auditWrite("member.seat_changed", { user_id: userId, uses_seat: usesSeat })
+        setIsErr(false); setMsg(usesSeat ? t.tabs.members.seatOn : t.tabs.members.seatOff)
+    }
+
     // Revoking keeps the row (the accept page needs to say "withdrawn", which
     // a deleted row can't) and frees the seat — pending counts exclude it.
     async function revokeInvite(inv: InviteRow) {
@@ -3040,6 +3055,15 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                                 <PlatformTags tags={platforms.get(m.user_id) ?? []} />
                             </div>
                             <div className="flex items-center gap-2">
+                                <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] whitespace-nowrap" title={t.tabs.members.usesSeatHelp}>
+                                    <input
+                                        type="checkbox"
+                                        checked={m.uses_seat !== false}
+                                        onChange={e => changeUsesSeat(m.user_id, e.target.checked)}
+                                        className="accent-[var(--color-accent)]"
+                                    />
+                                    {t.tabs.members.usesSeat}
+                                </label>
                                 <StatusBadge label={t.data.roles[m.role] ?? m.role} color={roleColor(m.role)} />
                                 {/* `owner` is deliberately absent as a choice (D-227): it is a
                                     database role, not a rank the UI sells. The workspace creator

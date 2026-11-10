@@ -408,6 +408,8 @@ export const en = {
         // Seat-dependent pilot copy (D-609): the free pilot covers up to 5 seats.
         // D-909: no self-serve pilot; billing starts the day the workspace is activated.
         billingTodayBox: (seats: number, monthly: number) => `With ${seats} seats, billing starts today: ~$${monthly}/month. You can add or remove seats anytime.`,
+        // D-911: seats are for the people who take calls, not the admin.
+        seatsWhoNote: "A seat is for each person who takes calls with TalkPilot. You, as admin, don't need one unless you take calls too.",
         stepOfN: (n: number, total: number) => `${n} of ${total}`,
         back: "Back",
         // D-626: the recommended kit is applied at creation.
@@ -1405,8 +1407,13 @@ export const en = {
             revokedMsg: (email: string) => `Invitation to ${email} revoked — the seat is free and the link no longer works.`,
             roleUpdated: (role: string) => `Role updated to ${role}.`,
             removedMsg: "Removed — their seat is free. Their personal TalkPilot account is untouched.",
+            usesSeat: "Uses the app",
+            usesSeatHelp: "Checked = this person takes calls with TalkPilot, uses a paid seat and gets live coaching. Unchecked = Command Center only, no seat.",
+            seatOn: "Seat turned on. They get live coaching in the app.",
+            seatOff: "Seat freed. They keep their Command Center access but no live coaching in the app.",
+            seatFull: "All seats are in use. Add a seat in Settings → Billing, or free one first.",
             creator: "Workspace creator",
-            creatorLocked: "This is the account that created the workspace and receives billing and trial notices. Its access can't be changed here.",
+            creatorLocked:"This is the account that created the workspace and receives billing and trial notices. Its access can't be changed here.",
             policyInherit: (orgDefault: string) => `Workspace default (${orgDefault})`,
             policyEnforced: "Always uses their playbook",
             policyRepChoice: "May choose, or none",
@@ -1643,7 +1650,7 @@ export const en = {
             checkoutCanceled: "Checkout canceled — your trial continues unchanged.",
             seats: "Seats",
             seatUsage: (members: number, pending: number, purchased: number) =>
-                `${members} member${members !== 1 ? "s" : ""}${pending > 0 ? ` + ${pending} pending invite${pending !== 1 ? "s" : ""}` : ""} of ${purchased} seat${purchased !== 1 ? "s" : ""}`,
+                `${members} ${members !== 1 ? "people use" : "person uses"} the app${pending > 0 ? ` + ${pending} pending invite${pending !== 1 ? "s" : ""}` : ""} of ${purchased} seat${purchased !== 1 ? "s" : ""}. Admins who only use the Command Center don't take a seat.`,
             planBadge: (plan: string) => `${plan} plan`,
             legendMembers: (n: number) => `${n} in use`,
             legendPending: (n: number) => `${n} awaiting acceptance`,

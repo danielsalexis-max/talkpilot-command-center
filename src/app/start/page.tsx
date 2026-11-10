@@ -1194,6 +1194,7 @@ export default function StartPage() {
                                     <strong>{t.start.pricingBoxTitle}</strong><br />
                                     {t.start.billingTodayBox(seats, seats * SEAT_PRICE_MONTHLY)}
                                 </div>
+                                <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed">{t.start.seatsWhoNote}</p>
                                 {error && <p className="text-xs text-red-600">{error}</p>}
                                 <button type="submit" disabled={busy} className={BTN}>{busy ? t.start.creating : t.start.startFreeTrial}</button>
                             </form>

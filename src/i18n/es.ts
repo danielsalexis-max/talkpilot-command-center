@@ -382,6 +382,8 @@ export const es: Dict = {
         },
         // D-909: sin piloto autoservicio; el cobro empieza el día que se activa el espacio.
         billingTodayBox: (seats: number, monthly: number) => `Con ${seats} asientos, el cobro empieza hoy: ~$${monthly} USD al mes. Puedes sumar o quitar asientos cuando quieras.`,
+        // D-911: los asientos son para quienes hacen llamadas, no para el admin.
+        seatsWhoNote: "Cada asiento es para una persona que hace llamadas con TalkPilot. Tú, como admin, no necesitas uno a menos que también hagas llamadas.",
         stepOfN: (n: number, total: number) => `${n} de ${total}`,
         back: "Atrás",
         kitLive: (kit: string) => `El playbook “${kit}” ya está activo — tus reps reciben coaching con él desde su primera llamada. Sus sugerencias de objeciones te esperan en Playbook → Objeciones.`,
@@ -1353,8 +1355,13 @@ export const es: Dict = {
             revokedMsg: (email: string) => `Invitación a ${email} revocada — el asiento queda libre y el enlace deja de funcionar.`,
             roleUpdated: (role: string) => `Rol actualizado a ${role}.`,
             removedMsg: "Eliminado — su asiento queda libre. Su cuenta personal de TalkPilot no se toca.",
+            usesSeat: "Usa la app",
+            usesSeatHelp: "Marcado: esta persona hace llamadas con TalkPilot, ocupa un asiento pagado y recibe la guía en vivo. Sin marcar: solo usa el Command Center y no ocupa asiento.",
+            seatOn: "Asiento activado. Ya recibe la guía en vivo en la app.",
+            seatOff: "Asiento liberado. Sigue entrando al Command Center, pero ya no recibe la guía en vivo en la app.",
+            seatFull: "Todos los asientos están ocupados. Agrega uno en Ajustes → Facturación o libera otro primero.",
             creator: "Creador del espacio",
-            creatorLocked: "Esta es la cuenta que creó el espacio de trabajo y recibe los avisos de facturación y prueba. Su acceso no se puede cambiar aquí.",
+            creatorLocked:"Esta es la cuenta que creó el espacio de trabajo y recibe los avisos de facturación y prueba. Su acceso no se puede cambiar aquí.",
             policyInherit: (orgDefault: string) => `Predeterminado del espacio (${orgDefault})`,
             policyEnforced: "Siempre usa su playbook",
             policyRepChoice: "Puede elegir, o ninguno",
@@ -1591,7 +1598,7 @@ export const es: Dict = {
             checkoutCanceled: "Pago cancelado — tu prueba continúa sin cambios.",
             seats: "Asientos",
             seatUsage: (members: number, pending: number, purchased: number) =>
-                `${members} miembro${members !== 1 ? "s" : ""}${pending > 0 ? ` + ${pending === 1 ? "1 invitación pendiente" : `${pending} invitaciones pendientes`}` : ""} de ${purchased} asiento${purchased !== 1 ? "s" : ""}`,
+                `${members} ${members !== 1 ? "personas usan" : "persona usa"} la app${pending > 0 ? ` + ${pending === 1 ? "1 invitación pendiente" : `${pending} invitaciones pendientes`}` : ""} de ${purchased} asiento${purchased !== 1 ? "s" : ""}. Los admins que solo usan el Command Center no ocupan asiento.`,
             planBadge: (plan: string) => `plan ${plan}`,
             legendMembers: (n: number) => `${n} en uso`,
             legendPending: (n: number) => `${n} por aceptar`,
