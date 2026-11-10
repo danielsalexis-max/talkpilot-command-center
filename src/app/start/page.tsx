@@ -27,9 +27,9 @@ import type { Dict } from "@/i18n"
 /// after setup (the dashboard checklist carries them), so nothing here
 /// promises an OAuth or upload this page can't do.
 ///
-/// The card comes last (D-605): checkout opens a Stripe trial — $0 today,
-/// first charge on day 30 — for pilots of up to 5 seats (D-609). Bigger
-/// workspaces are told, on the seats screen, that billing starts today.
+/// The card comes last, and billing starts that day (D-909). Checkout opens a
+/// $0-today trial only when create-org returns card_trial_days, which now
+/// happens only for a sales grant (org_trial_grants).
 
 type Screen =
     | "account" | "team" | "size" | "pain" | "methodology"
@@ -912,7 +912,6 @@ export default function StartPage() {
     const kitTitle = pVertical
         ? starterKitsFor(locale).find(k => k.key === recommendedKitKey(pVertical, kitMethodOf(pMethods)))?.title
         : null
-    const overPilotCap = seats > MAX_PILOT_SEATS
     const websiteDomain = (() => {
         const v = orgWebsite.trim()
         if (!v) return null
@@ -1189,20 +1188,12 @@ export default function StartPage() {
                                         </a>
                                     </p>
                                 </div>
-                                {/* The pilot promise flips with the count (D-609): up to 5
-                                    seats pilots free; above that, billing starts today and
-                                    the box says so before any card is asked for. */}
-                                {overPilotCap ? (
-                                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-900 leading-relaxed">
-                                        <strong>{t.start.pricingBoxTitle}</strong><br />
-                                        {t.start.pilotBoxBig(seats, seats * SEAT_PRICE_MONTHLY)}
-                                    </div>
-                                ) : (
-                                    <div className="bg-[var(--color-accent-subtle)] rounded-xl px-4 py-3 text-xs text-[var(--color-accent-deep)] leading-relaxed">
-                                        <strong>{t.start.pricingBoxTitle}</strong><br />
-                                        {t.start.pilotBoxSmall}
-                                    </div>
-                                )}
+                                {/* D-909: no self-serve pilot. Billing starts today at any
+                                    seat count; a pilot exists only as a grant we set up. */}
+                                <div className="bg-[var(--color-accent-subtle)] rounded-xl px-4 py-3 text-xs text-[var(--color-accent-deep)] leading-relaxed">
+                                    <strong>{t.start.pricingBoxTitle}</strong><br />
+                                    {t.start.billingTodayBox(seats, seats * SEAT_PRICE_MONTHLY)}
+                                </div>
                                 {error && <p className="text-xs text-red-600">{error}</p>}
                                 <button type="submit" disabled={busy} className={BTN}>{busy ? t.start.creating : t.start.startFreeTrial}</button>
                             </form>

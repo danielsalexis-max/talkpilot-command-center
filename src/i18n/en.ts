@@ -406,8 +406,8 @@ export const en = {
             uploaded: (n: number) => `${n} document${n === 1 ? "" : "s"} studied — your coach answers from them now.`,
         },
         // Seat-dependent pilot copy (D-609): the free pilot covers up to 5 seats.
-        pilotBoxSmall: "30-day pilot: $0 today, first charge on day 30, cancel anytime before.",
-        pilotBoxBig: (seats: number, monthly: number) => `The free pilot covers up to 5 seats. With ${seats} seats, billing starts today (~$${monthly}/month). Tip: start your pilot with up to 5 people — you can add seats anytime.`,
+        // D-909: no self-serve pilot; billing starts the day the workspace is activated.
+        billingTodayBox: (seats: number, monthly: number) => `With ${seats} seats, billing starts today: ~$${monthly}/month. You can add or remove seats anytime.`,
         stepOfN: (n: number, total: number) => `${n} of ${total}`,
         back: "Back",
         // D-626: the recommended kit is applied at creation.

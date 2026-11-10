@@ -380,8 +380,8 @@ export const es: Dict = {
             uploading: (n: number) => `Tu coach está leyendo ${n} documento${n === 1 ? "" : "s"}…`,
             uploaded: (n: number) => `${n} documento${n === 1 ? "" : "s"} estudiado${n === 1 ? "" : "s"} — tu coach ya responde con ellos.`,
         },
-        pilotBoxSmall: "Piloto de 30 días: $0 hoy, primer cobro el día 30, cancela cuando quieras antes.",
-        pilotBoxBig: (seats: number, monthly: number) => `El piloto gratis cubre hasta 5 asientos. Con ${seats} asientos, la facturación empieza hoy (~$${monthly}/mes). Consejo: empieza tu piloto con hasta 5 personas — puedes sumar asientos cuando quieras.`,
+        // D-909: sin piloto autoservicio; el cobro empieza el día que se activa el espacio.
+        billingTodayBox: (seats: number, monthly: number) => `Con ${seats} asientos, el cobro empieza hoy: ~$${monthly} USD al mes. Puedes sumar o quitar asientos cuando quieras.`,
         stepOfN: (n: number, total: number) => `${n} de ${total}`,
         back: "Atrás",
         kitLive: (kit: string) => `El playbook “${kit}” ya está activo — tus reps reciben coaching con él desde su primera llamada. Sus sugerencias de objeciones te esperan en Playbook → Objeciones.`,
