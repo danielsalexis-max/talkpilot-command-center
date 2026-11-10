@@ -23,6 +23,24 @@ function needsReview(c: Scorecard): boolean {
     return (c.guardrail_breaches ?? []).length > 0 || (c.adherence_score != null && c.adherence_score < 60)
 }
 
+/// D-917: the short badge and tooltip for a call the pipeline chose not to
+/// score. `t` is the active dictionary; both locales carry every key.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function excludedLabel(c: Scorecard, t: any): string {
+    if (c.exclusion_reason === "too_short") return t.calls.excludedTooShort
+    if (c.status === "not_scored") {
+        const type = c.call_type && t.data.callTypes[c.call_type]
+        return type ?? t.calls.notEvaluated
+    }
+    return t.calls.excluded
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function excludedWhy(c: Scorecard, t: any): string | undefined {
+    if (c.exclusion_reason === "too_short") return t.calls.excludedTooShortWhy
+    if (c.exclusion_reason && t.calls.notEvaluatedWhy[c.exclusion_reason]) return t.calls.notEvaluatedWhy[c.exclusion_reason]
+    return undefined
+}
+
 export default function CallsPage() {
     const router = useRouter()
     const { t, intl } = useLocale()
@@ -67,7 +85,7 @@ export default function CallsPage() {
                 // call was auto-excluded needs to be able to see that it was,
                 // and say so — an exclusion nobody can find is a deletion.
                 supabase.from("session_scorecards").select("*")
-                    .eq("org_id", ctx.org_id).in("status", ["scored", "too_short"])
+                    .eq("org_id", ctx.org_id).in("status", ["scored", "too_short", "not_scored"])
                     .gte("started_at", new Date(Date.now() - 90 * 86400e3).toISOString())
                     .order("started_at", { ascending: false }).limit(300),
                 supabase.rpc("get_org_members_with_email", { p_org: ctx.org_id }),
@@ -186,7 +204,7 @@ export default function CallsPage() {
                                     {c.duration_minutes ? t.common.min(c.duration_minutes) : "—"}
                                 </td>
                                 <td className="px-3 py-3 font-mono text-xs text-[var(--color-text-secondary)] hidden lg:table-cell">
-                                    {c.talk_ratio != null ? `${c.talk_ratio}%` : "—"}
+                                    {c.talk_ratio != null ? `${Math.round(c.talk_ratio * 100)}%` : "—"}
                                 </td>
                                 <td className="px-3 py-3"><ScoreRing score={c.overall_score} size="sm" /></td>
                                 <td className="px-3 py-3 hidden sm:table-cell"><ScoreRing score={c.adherence_score} size="sm" /></td>
@@ -197,9 +215,9 @@ export default function CallsPage() {
                                                 {t.calls.nBreaches(c.guardrail_breaches.length)}
                                             </span>}
                                         {c.excluded_at && (
-                                            <span title={c.exclusion_reason === "too_short" ? t.calls.excludedTooShortWhy : undefined}
+                                            <span title={excludedWhy(c, t)}
                                                 className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-hover)] text-[var(--color-muted)] whitespace-nowrap">
-                                                {c.exclusion_reason === "too_short" ? t.calls.excludedTooShort : t.calls.excluded}
+                                                {excludedLabel(c, t)}
                                             </span>
                                         )}
                                         {canExclude && (

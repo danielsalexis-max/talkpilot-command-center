@@ -232,7 +232,9 @@ export default function HomePage() {
         { label: t.common.overall,    field: "overall_score",   hint: t.home.kpiHints.overall },
         { label: t.common.adherence,  field: "adherence_score", hint: t.home.kpiHints.adherence },
         { label: t.common.objections, field: "objection_score", hint: t.home.kpiHints.objections },
-        { label: t.common.accuracy,   field: "accuracy_score",  hint: t.home.kpiHints.accuracy },
+        // Accuracy is hidden until the fact-check verifies real claims (D-917):
+        // in live orgs ~99% of claims came back "unverifiable", so the tile was
+        // noise at best and an accusation at worst.
     ]
 
     const hour = new Date().getHours()
@@ -344,7 +346,7 @@ export default function HomePage() {
                         the apps' "This week" card (D-586). */}
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
                         <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.last30}</h2>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-3">
                             {kpis.map(k => (
                                 <div key={k.field} title={k.hint} className="cursor-help">
                                     <div className="flex items-baseline gap-2">

@@ -25,6 +25,7 @@ export default function ScorecardPage() {
     const [transcriptState, setTranscriptState] = useState<"idle" | "loading" | "loaded">("idle")
     const [role, setRole]             = useState<string | null>(null)
     const [excluding, setExcluding]   = useState(false)
+    const [sentState, setSentState]   = useState<"ok" | "error" | null>(null)
 
     // Matches `set_scorecard_excluded` exactly — a broader gate here would just
     // surface the server's raw not_authorized. A rep cannot exclude their own
@@ -84,14 +85,19 @@ export default function ScorecardPage() {
     async function postComment() {
         if (!comment.trim() || !card) return
         setSubmitting(true)
+        setSentState(null)
         try {
-            await supabase.from("coaching_comments").insert({
-                scorecard_id: card.id,
-                org_id:       card.org_id,
-                author_id:    (await supabase.auth.getUser()).data.user?.id,
-                body:         comment.trim(),
+            // D-919: through the edge function, which stores the note AND emails
+            // it to the rep — a note only the database saw coached nobody.
+            const { data: { session } } = await supabase.auth.getSession()
+            const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/coaching-note-notify`, {
+                method:  "POST",
+                headers: { "Authorization": `Bearer ${session?.access_token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ scorecard_id: card.id, body: comment.trim() }),
             })
-            setComment("")
+            if (res.ok) { setComment(""); setSentState("ok") } else { setSentState("error") }
+        } catch {
+            setSentState("error")
         } finally {
             setSubmitting(false)
         }
@@ -136,8 +142,7 @@ export default function ScorecardPage() {
                         {card.started_at ? new Date(card.started_at).toLocaleString(intl, { dateStyle: "long", timeStyle: "short" }) + " · " : ""}
                         {card.duration_minutes ? t.common.min(card.duration_minutes) : "—"}
                         {card.talk_ratio != null ? ` · ${t.scorecard.repSpoke(Math.round(card.talk_ratio * 100))}` : ""}
-                        {" · "}{card.session_source === "plus_conversations" ? "iOS" : "macOS"}
-                        {card.model_version ? ` · ${card.model_version}` : ""}
+                        {card.call_type && t.data.callTypes[card.call_type] ? ` · ${t.data.callTypes[card.call_type]}` : ""}
                     </p>
                 </div>
                 {canExclude && (
@@ -156,17 +161,19 @@ export default function ScorecardPage() {
                     <p className="text-xs text-[var(--color-text-secondary)] mt-1">
                         {card.exclusion_reason === "too_short"
                             ? t.calls.excludedTooShortWhy
-                            : t.scorecard.excludedByManager}
+                            : (card.exclusion_reason && t.calls.notEvaluatedWhy[card.exclusion_reason])
+                                ? t.calls.notEvaluatedWhy[card.exclusion_reason]
+                                : t.scorecard.excludedByManager}
                     </p>
                 </div>
             )}
 
             {/* Score tiles */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+            {/* Accuracy is hidden until the fact-check verifies real claims (D-917). */}
+            <div className="grid grid-cols-3 gap-3 sm:gap-4">
                 <ScoreCard label={t.common.overall}    score={card.overall_score}   />
                 <ScoreCard label={t.common.adherence}  score={card.adherence_score} />
                 <ScoreCard label={t.common.objections} score={card.objection_score} />
-                <ScoreCard label={t.common.accuracy}   score={card.accuracy_score}  />
             </div>
 
             {/* Guardrail alert */}
@@ -205,6 +212,21 @@ export default function ScorecardPage() {
             {/* Tab content */}
             {activeTab === "overview" && (
                 <div className="space-y-6">
+                    {/* The coaching itself comes first (D-917): this prose is what a
+                        manager and a rep can act on; the colored numbers are not. */}
+                    {card.growth_areas?.length > 0 && (
+                        <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5">
+                            <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">{t.scorecard.growthAreas}</h2>
+                            <ul className="space-y-2.5">
+                                {card.growth_areas.map((g, i) => (
+                                    <li key={i} className="text-[15px] leading-relaxed text-[var(--color-text)] flex items-start gap-2.5">
+                                        <span className="text-[var(--color-accent)] mt-0.5">→</span><span>{g}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
                     {/* Stage adherence */}
                     {stageKeys.length > 0 && (
                         <div>
@@ -216,8 +238,8 @@ export default function ScorecardPage() {
                                         <div key={key} className="bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)] p-4">
                                             <div className="flex items-start justify-between">
                                                 <span className="text-sm font-medium text-[var(--color-text)] capitalize">{key.replace(/_/g, " ")}</span>
-                                                <span className={`text-xs px-2 py-0.5 rounded border ${stage.completed ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
-                                                    {stage.completed ? t.scorecard.complete : t.scorecard.incomplete}
+                                                <span className={`text-xs px-2 py-0.5 rounded border ${stage.not_applicable ? "bg-[var(--color-hover)] text-[var(--color-muted)] border-[var(--color-border)]" : stage.completed ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+                                                    {stage.not_applicable ? t.scorecard.notApplicable : stage.completed ? t.scorecard.complete : t.scorecard.incomplete}
                                                 </span>
                                             </div>
                                             {stage.evidence && <p className="text-xs text-[var(--color-text-secondary)] mt-1 italic">&quot;{stage.evidence}&quot;</p>}
@@ -257,19 +279,6 @@ export default function ScorecardPage() {
                         </div>
                     )}
 
-                    {/* Growth areas */}
-                    {card.growth_areas?.length > 0 && (
-                        <div>
-                            <h2 className="text-sm font-medium text-[var(--color-text)] mb-2">{t.scorecard.growthAreas}</h2>
-                            <ul className="space-y-1">
-                                {card.growth_areas.map((g, i) => (
-                                    <li key={i} className="text-sm text-[var(--color-text-secondary)] flex items-start gap-2">
-                                        <span className="text-[var(--color-accent)] mt-0.5">→</span>{g}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
                 </div>
             )}
 
@@ -335,6 +344,8 @@ export default function ScorecardPage() {
                     >
                         {submitting ? t.scorecard.posting : t.scorecard.postComment}
                     </button>
+                    {sentState === "ok"    && <p className="text-xs text-emerald-700">{t.scorecard.commentSent}</p>}
+                    {sentState === "error" && <p className="text-xs text-red-600">{t.scorecard.commentFailed}</p>}
                 </div>
             )}
         </div>

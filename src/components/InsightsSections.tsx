@@ -119,8 +119,9 @@ export function InsightsSections() {
     return (
         <div className="space-y-6">
 
-            {/* Claim accuracy */}
-            {totalClaims > 0 && (
+            {/* Claim accuracy — hidden until the fact-check verifies real
+                claims (D-917); today almost everything is "unverifiable". */}
+            {false && totalClaims > 0 && (
                 <div>
                     <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">{t.insights.accuracyTitle(totalClaims)}</h2>
                     <div className="flex flex-wrap gap-3">

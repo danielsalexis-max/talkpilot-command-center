@@ -70,7 +70,10 @@ export interface Scorecard {
     growth_areas: string[]
     guardrail_breaches: GuardrailBreach[]
     model_version: string | null
-    status: "pending" | "scored" | "failed" | "too_short"
+    status: "pending" | "scored" | "failed" | "too_short" | "not_scored"
+    // D-917 triage: what kind of call this was, and the sales stage it heard.
+    call_type: string | null
+    detected_stage: string | null
     created_at: string
     scored_at: string | null
     // Out of every average, still visible (D-324). `too_short` is the sentinel
@@ -88,6 +91,8 @@ export interface StageResult {
     completed: boolean
     evidence: string
     missed: string[]
+    // D-917: this stage didn't belong in this conversation; not counted.
+    not_applicable?: boolean
 }
 
 export interface Highlight {
