@@ -134,6 +134,9 @@ function AcceptInviteContent() {
             })
             const body = await res.json().catch(() => ({}))
             if (res.ok) {
+                // D-912: a manager or admin joined without a seat has no app to
+                // download. Straight to the Command Center instead.
+                if (body.uses_seat === false) { window.location.replace("/"); return }
                 setStatus("done")
             } else if (body.error?.code === "invite_email_mismatch") {
                 // Server-side backstop for the same case boot() pre-checks —

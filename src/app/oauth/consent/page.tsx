@@ -86,8 +86,18 @@ function Consent() {
         setDetails(data as Details)
         const { data: p } = await supabase.from("user_profiles")
             .select("tier, pro_source, pro_expires_at").eq("id", user.id).maybeSingle()
-        setIsPro(!!p && p.tier === "pro" && (p.pro_source === "stripe" || !p.pro_expires_at
-            || new Date(p.pro_expires_at).getTime() + 3 * 86400_000 > Date.now()))
+        let pro = !!p && p.tier === "pro" && (p.pro_source === "stripe" || !p.pro_expires_at
+            || new Date(p.pro_expires_at).getTime() + 3 * 86400_000 > Date.now())
+        if (!pro) {
+            // D-912: workspace owners, admins and managers use Claude without a seat.
+            const { data: m } = await supabase.from("org_members")
+                .select("org_id, role").eq("user_id", user.id).eq("status", "active").maybeSingle()
+            if (m && ["owner", "admin", "manager"].includes(m.role)) {
+                const { data: ok } = await supabase.rpc("org_seats_are_entitled", { p_org: m.org_id })
+                pro = ok === true
+            }
+        }
+        setIsPro(pro)
         setPhase("consent")
     }, [authorizationId, t])
 

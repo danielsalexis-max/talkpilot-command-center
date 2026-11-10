@@ -63,6 +63,15 @@ async function isPro(w: Who): Promise<boolean> {
     return new Date(data.pro_expires_at).getTime() + 3 * 86400_000 > Date.now()
 }
 
+/// D-912: owners, admins and managers of a paying workspace use the connector
+/// without a seat. A seat is for the app; the Command Center and Claude are not.
+async function isPaidWorkspaceLead(w: Who): Promise<boolean> {
+    const m = await membership(w)
+    if (!m || !["owner", "admin", "manager"].includes(m.role)) return false
+    const { data } = await w.sb.rpc("org_seats_are_entitled", { p_org: m.org_id })
+    return data === true
+}
+
 async function membership(w: Who): Promise<Membership | null> {
     const { data } = await w.sb.from("org_members")
         .select("org_id, role, team_id").eq("user_id", w.userId).eq("status", "active").maybeSingle()
@@ -148,7 +157,7 @@ function guarded<A>(tool: string, body: (w: Who, args: A) => Promise<ReturnType<
     return async (args: A, ctx: Ctx) => {
         const w = who(ctx)
         if (!w) return fail(NOT_SIGNED_IN)
-        if (!(await isPro(w))) return fail(NEEDS_PRO)
+        if (!(await isPro(w)) && !(await isPaidWorkspaceLead(w))) return fail(NEEDS_PRO)
         try {
             return await body(w, args)
         } catch (e) {
