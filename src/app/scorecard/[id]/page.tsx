@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -10,6 +10,19 @@ import {
 import { ScoreBadge, GradePill, VerdictPill } from "@/components/ScoreRing"
 import { AskPanel } from "@/components/AskPanel"
 import { useLocale, useT } from "@/i18n/LocaleProvider"
+import { firstTurnRef } from "@/lib/weekPlan"
+
+/// D-929: Home links here with `?at=68-74` (the turn refs the scorer writes)
+/// or `?at=end`, to open the call at the moment it talks about.
+type Focus = { from: number; to: number } | { end: true }
+function parseFocus(at: string | null): Focus | null {
+    if (!at) return null
+    if (at === "end") return { end: true }
+    const ref = firstTurnRef(at)
+    if (!ref) return null
+    const [a, b] = ref.split("-").map(Number)
+    return { from: Math.min(a, b ?? a), to: Math.max(a, b ?? a) }
+}
 
 export default function ScorecardPage() {
     const { id } = useParams<{ id: string }>()
@@ -26,6 +39,8 @@ export default function ScorecardPage() {
     const [role, setRole]             = useState<string | null>(null)
     const [excluding, setExcluding]   = useState(false)
     const [sentState, setSentState]   = useState<"ok" | "error" | null>(null)
+    const [focus, setFocus]           = useState<Focus | null>(null)
+    const [focusFallback, setFocusFallback] = useState(false)
 
     // Matches `set_scorecard_excluded` exactly — a broader gate here would just
     // surface the server's raw not_authorized. A rep cannot exclude their own
@@ -64,17 +79,23 @@ export default function ScorecardPage() {
             ])
             setObjections((objRes.data ?? []) as ScorecardObjection[])
             setClaims((claimRes.data ?? []) as ScorecardClaim[])
+            const f = parseFocus(new URLSearchParams(window.location.search).get("at"))
+            if (f) { setFocus(f); setActiveTab("transcript"); loadTranscript(f) }
         } finally {
             setLoading(false)
         }
     }
 
-    async function loadTranscript() {
+    async function loadTranscript(f: Focus | null = null) {
         if (transcriptState !== "idle") return
         setTranscriptState("loading")
         const { data } = await supabase.rpc("get_scorecard_transcript", { p_scorecard_id: id })
-        setTranscript(typeof data === "string" ? data : null)
+        const text = typeof data === "string" ? data : null
+        setTranscript(text)
         setTranscriptState("loaded")
+        // No transcript for this manager (visibility tier): the summary is the
+        // next best place to land, with the moment marked in "Moments".
+        if (f && !text) { setActiveTab("overview"); setFocusFallback(true) }
     }
 
     function openTab(key: typeof activeTab) {
@@ -212,6 +233,9 @@ export default function ScorecardPage() {
             {/* Tab content */}
             {activeTab === "overview" && (
                 <div className="space-y-6">
+                    {focusFallback && (
+                        <p className="text-xs text-[var(--color-text-secondary)] bg-[var(--color-hover)] border border-[var(--color-border)] rounded-lg px-3 py-2">{t.scorecard.momentNoTranscript}</p>
+                    )}
                     {/* The coaching itself comes first (D-917): this prose is what a
                         manager and a rep can act on; the colored numbers are not. */}
                     {card.growth_areas?.length > 0 && (
@@ -267,14 +291,18 @@ export default function ScorecardPage() {
                         <div>
                             <h2 className="text-sm font-medium text-[var(--color-text)] mb-3">{t.scorecard.moments}</h2>
                             <div className="space-y-1.5">
-                                {highlights.map((h, i) => (
-                                    <div key={i} className="flex items-start gap-3 text-sm">
+                                {highlights.map((h, i) => {
+                                    const ref = firstTurnRef(h.ts)
+                                    const hit = focus && "from" in focus && ref != null && Number(ref.split("-")[0]) === focus.from
+                                    return (
+                                    <div key={i} className={`flex items-start gap-3 text-sm ${hit ? "rounded-lg ring-2 ring-[var(--color-accent)] px-2 py-1 -mx-2" : ""}`}>
                                         <span className={`text-lg leading-none mt-0.5 ${h.kind === "best" ? "text-emerald-600" : h.kind === "worst" ? "text-red-600" : "text-amber-500"}`}>
                                             {h.kind === "best" ? "★" : h.kind === "worst" ? "✗" : "⚑"}
                                         </span>
                                         <span className="text-[var(--color-text-secondary)]">{h.label}</span>
                                     </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         </div>
                     )}
@@ -323,7 +351,7 @@ export default function ScorecardPage() {
                             onAsk={(q, h) => askAboutTranscript(transcriptToText(transcript), q, h)}
                         />
                     )}
-                    <TranscriptView state={transcriptState} transcript={transcript} />
+                    <TranscriptView state={transcriptState} transcript={transcript} focus={focus} />
                 </div>
             )}
 
@@ -367,8 +395,12 @@ function transcriptToText(transcript: string): string {
     return transcript
 }
 
-function TranscriptView({ state, transcript }: { state: "idle" | "loading" | "loaded"; transcript: string | null }) {
+function TranscriptView({ state, transcript, focus }: { state: "idle" | "loading" | "loaded"; transcript: string | null; focus: Focus | null }) {
     const t = useT()
+    const target = useRef<HTMLDivElement | null>(null)
+    useEffect(() => {
+        if (state === "loaded" && focus) target.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+    }, [state, focus])
     if (state === "loading") return <p className="text-sm text-[var(--color-text-secondary)]">{t.scorecard.loadingTranscript}</p>
     if (!transcript) {
         return (
@@ -379,7 +411,7 @@ function TranscriptView({ state, transcript }: { state: "idle" | "loading" | "lo
     }
 
     // iOS sessions store a JSON array of {speaker,text}; macOS stores plain text.
-    let turns: Array<{ speaker?: string; text?: string }> | null = null
+    let turns: Array<{ speaker?: string; text?: string; timestamp?: number | string }> | null = null
     try {
         const parsed = JSON.parse(transcript)
         if (Array.isArray(parsed)) turns = parsed
@@ -393,17 +425,45 @@ function TranscriptView({ state, transcript }: { state: "idle" | "loading" | "lo
         )
     }
 
+    // The scorer numbered turns from 0 in this same order, so a turn ref is an
+    // index here. Clamp: a ref past the end lands on the last turn.
+    const last = turns.length - 1
+    const range = !focus ? null
+        : "end" in focus ? { from: Math.max(0, last - 2), to: last }
+        : { from: Math.min(focus.from, last), to: Math.min(focus.to, last) }
+    // Seconds from the first turn, when the client recorded timestamps.
+    const secs = (v: number | string | undefined) => {
+        if (v == null) return null
+        const n = typeof v === "number" ? v : Number(v)
+        return Number.isFinite(n) ? n : (Number.isNaN(Date.parse(String(v))) ? null : Date.parse(String(v)) / 1000)
+    }
+    const t0 = secs(turns[0]?.timestamp)
+    const clock = (v: number | string | undefined) => {
+        const s = secs(v)
+        if (s == null || t0 == null || s < t0) return null
+        const d = Math.round(s - t0)
+        return `${Math.floor(d / 60)}:${String(d % 60).padStart(2, "0")}`
+    }
+
     return (
         <div className="space-y-3">
             {turns.map((turn, i) => {
                 const isSelf = turn.speaker === "self"
+                const inRange = range != null && i >= range.from && i <= range.to
+                const first = range != null && i === range.from
                 return (
-                    <div key={i} className={`flex ${isSelf ? "justify-end" : "justify-start"}`}>
+                    <div key={i} ref={first ? target : undefined}
+                        className={`flex ${isSelf ? "justify-end" : "justify-start"} ${first ? "relative pt-6 scroll-mt-24" : ""}`}>
+                        {first && (
+                            <span className={`absolute top-0 ${isSelf ? "right-0" : "left-0"} text-[10.5px] font-semibold px-1.5 py-0.5 rounded-md bg-[var(--color-accent)] text-white`}>
+                                {t.scorecard.momentHere}{clock(turn.timestamp) ? ` · ${clock(turn.timestamp)}` : ""}
+                            </span>
+                        )}
                         <div className={`max-w-[75%] rounded-2xl px-4 py-2 ${
                             isSelf
                                 ? "bg-[var(--btn-bg)] text-[var(--btn-ink)]"
                                 : "bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)]"
-                        }`}>
+                        } ${inRange ? "ring-2 ring-[var(--color-accent)] ring-offset-2 ring-offset-[var(--color-bg)]" : ""}`}>
                             <div className={`text-[11px] mb-0.5 ${isSelf ? "text-[var(--btn-ink)] opacity-70" : "text-[var(--color-muted)]"}`}>
                                 {isSelf ? t.scorecard.speakerRep : t.scorecard.speakerOther}
                             </div>

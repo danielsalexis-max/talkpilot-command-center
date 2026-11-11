@@ -9,23 +9,16 @@ import { ScoreRing } from "@/components/ScoreRing"
 import { InsightsSections } from "@/components/InsightsSections"
 import { PageSkeleton, HomeSetupCard, CoachReadingBanner, type SetupState } from "@/components/homeStates"
 import { AISetupCard } from "@/components/aiSetupCard"
+import { WeekPlan, type WeekPlanData } from "@/components/weekPlan"
 import { useLocale } from "@/i18n/LocaleProvider"
-import {
-    LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
-} from "recharts"
 import { userError } from "@/lib/userError"
+import {
+    countedCards, pickWindow, skillPerRep, lostObjections, callsWithoutNextStep,
+    type WeekObjectionRow, type PlaybookStages,
+} from "@/lib/weekPlan"
 
 interface OrgInfo { id: string; name: string; visibility: string; seats_purchased: number; plan: string }
-interface MemberInfo { user_id: string; email: string | null; full_name: string | null; status: string }
-interface TrendPoint { week: string; overall: number | null; adherence: number | null }
-
-interface Attention {
-    kind: "breach" | "decline" | "review"
-    title: string
-    sub: string
-    cta: string
-    href: Route
-}
+interface MemberInfo { user_id: string; email: string | null; full_name: string | null; status: string; role?: string }
 
 const avgOf = (cards: Scorecard[], field: keyof Scorecard) => {
     const vals = cards.map(c => c[field] as number | null).filter((v): v is number => v != null)
@@ -50,6 +43,7 @@ export default function HomePage() {
     const [error, setError]       = useState<string | null>(null)
     const [userName, setUserName] = useState<string | null>(null)
     const [isAdmin, setIsAdmin]   = useState(false)
+    const [week, setWeek]         = useState<WeekPlanData | null>(null)
 
     const memberLabel = (m: MemberInfo | undefined) => m?.full_name || m?.email || t.common.rep
 
@@ -90,6 +84,9 @@ export default function HomePage() {
                     // Excluded calls stay visible but out of every average
                     // (D-324) — a two-second test run must not pull a rep down.
                     .is("excluded_at", null)
+                    // Only sales calls (D-917). Null is a call scored before
+                    // triage existed, graded as a sales call like all were.
+                    .or("call_type.is.null,call_type.eq.sales")
                     .gte("started_at", new Date(Date.now() - 30 * 86400e3).toISOString())
                     .order("started_at", { ascending: false }).limit(200),
                 supabase.rpc("get_org_members_with_email", { p_org: orgId }),
@@ -116,6 +113,7 @@ export default function HomePage() {
             setCards((scorecards ?? []) as Scorecard[])
             const activeMems = ((mems ?? []) as MemberInfo[]).filter(m => m.status === "active" || !m.status)
             setMembers(activeMems)
+            setWeek(await loadWeek((scorecards ?? []) as Scorecard[], activeMems))
             setSetup({
                 activePlaybooks: pbCount ?? 0,
                 objections: objCount ?? 0,
@@ -131,6 +129,50 @@ export default function HomePage() {
             setError(userError(e, t))
         } finally {
             setLoading(false)
+        }
+    }
+
+    // D-929: what the manager does this week, from the window's scored sales
+    // calls. A failure here must not take the rest of Home down with it.
+    async function loadWeek(all: Scorecard[], mems: MemberInfo[]): Promise<WeekPlanData | null> {
+        try {
+            const win = pickWindow(countedCards(all))
+            if (win.cards.length === 0) return null
+            const ids = win.cards.map(c => c.id)
+            const pbIds = Array.from(new Set(win.cards.map(c => c.playbook_id).filter((x): x is string => !!x)))
+            const [{ data: objRows }, { data: pbs }] = await Promise.all([
+                supabase.from("scorecard_objections")
+                    .select("scorecard_id, user_id, objection_id, objection_text, grade, transcript_ts")
+                    .in("scorecard_id", ids),
+                pbIds.length
+                    ? supabase.from("org_playbooks").select("id, stages").in("id", pbIds)
+                    : Promise.resolve({ data: [] as PlaybookStages[] }),
+            ])
+            const rows = (objRows ?? []) as WeekObjectionRow[]
+            const libIds = Array.from(new Set(rows.map(r => r.objection_id).filter((x): x is string => !!x)))
+            const library = new Map<string, string>()
+            if (libIds.length) {
+                const { data: lib } = await supabase.from("org_objections").select("id, objection").in("id", libIds)
+                for (const o of (lib ?? []) as { id: string; objection: string }[]) library.set(o.id, o.objection)
+            }
+            const withCalls = Array.from(new Set(win.cards.map(c => c.user_id)))
+            const next = callsWithoutNextStep(win.cards, new Map(((pbs ?? []) as PlaybookStages[]).map(p => [p.id, p])))
+            const label = (m: MemberInfo) => m.full_name || m.email || t.common.rep
+            return {
+                days: win.days,
+                calls: win.cards.length,
+                // Alphabetical, the order of the team list.
+                skills: skillPerRep(win.cards, withCalls)
+                    .sort((a, b) => label(mems.find(m => m.user_id === a.userId) ?? {} as MemberInfo)
+                        .localeCompare(label(mems.find(m => m.user_id === b.userId) ?? {} as MemberInfo))),
+                idleReps: mems.filter(m => m.role === "member" && !withCalls.includes(m.user_id)).map(label),
+                objections: lostObjections(rows, win.cards, library),
+                noNextStep: next.items,
+                nextChecked: next.checked,
+                breach: win.cards.find(c => (c.guardrail_breaches ?? []).length > 0) ?? null,
+            }
+        } catch {
+            return null
         }
     }
 
@@ -158,64 +200,6 @@ export default function HomePage() {
         return a != null && b != null ? a - b : null
     }
 
-    // ── Attention feed ──
-    const attention: Attention[] = []
-    const breachCard = cards.find(c => (c.guardrail_breaches ?? []).length > 0)
-    if (breachCard) {
-        const b = breachCard.guardrail_breaches[0]
-        attention.push({
-            kind: "breach",
-            title: t.home.attnBreachTitle(b.rule),
-            sub: `${memberLabel(byUser.get(breachCard.user_id))} · ${breachCard.session_title || t.common.scoredCall}`,
-            cta: t.home.attnReviewCall, href: `/scorecard/${breachCard.id}` as Route,
-        })
-    }
-    // Biggest adherence decline, recent half vs prior half, min 2 calls each side.
-    let decline: { user: string; drop: number } | null = null
-    for (const m of members) {
-        const a = avgOf(recentHalf.filter(c => c.user_id === m.user_id), "adherence_score")
-        const b = avgOf(priorHalf.filter(c => c.user_id === m.user_id), "adherence_score")
-        const nA = recentHalf.filter(c => c.user_id === m.user_id).length
-        const nB = priorHalf.filter(c => c.user_id === m.user_id).length
-        if (a != null && b != null && nA >= 2 && nB >= 2 && b - a >= 8 && (!decline || b - a > decline.drop)) {
-            decline = { user: m.user_id, drop: b - a }
-        }
-    }
-    if (decline) {
-        attention.push({
-            kind: "decline",
-            title: t.home.attnDeclineTitle(memberLabel(byUser.get(decline.user)), decline.drop),
-            sub: t.home.attnDeclineSub,
-            cta: t.home.attnOpenProfile, href: `/team/${decline.user}` as Route,
-        })
-    }
-    const reviewable = cards.filter(c =>
-        (c.guardrail_breaches ?? []).length > 0 || (c.adherence_score != null && c.adherence_score < 60))
-    if (reviewable.length > 0) {
-        attention.push({
-            kind: "review",
-            title: t.home.attnReviewTitle(reviewable.length),
-            sub: t.home.attnReviewSub,
-            cta: t.home.attnOpenQueue, href: "/calls?filter=review",
-        })
-    }
-
-    // ── Trend (all 30d rows — the old page computed this from a 50-row slice) ──
-    const trend: TrendPoint[] = []
-    for (let w = 3; w >= 0; w--) {
-        const start = Date.now() - (w + 1) * 7 * 86400e3
-        const end   = Date.now() - w * 7 * 86400e3
-        const week  = cards.filter(c => {
-            const time = c.started_at ? new Date(c.started_at).getTime() : null
-            return time != null && time >= start && time < end
-        })
-        trend.push({
-            week: new Date(start).toLocaleDateString(intl, { month: "short", day: "numeric" }),
-            overall: avgOf(week, "overall_score"),
-            adherence: avgOf(week, "adherence_score"),
-        })
-    }
-
     // ── Leaderboard ──
     const leaderboard = members
         .map(m => {
@@ -241,17 +225,6 @@ export default function HomePage() {
     const hour = new Date().getHours()
     const dayPart: "morning" | "afternoon" | "evening" = hour < 12 ? "morning" : hour < 19 ? "afternoon" : "evening"
 
-    const attnStyle: Record<Attention["kind"], string> = {
-        breach:  "border-l-red-500",
-        decline: "border-l-amber-400",
-        review:  "border-l-[var(--color-accent-light)]",
-    }
-    const attnPill: Record<Attention["kind"], { label: string; cls: string }> = {
-        breach:  { label: t.home.pillCritical,     cls: "bg-red-50 text-red-700" },
-        decline: { label: t.home.pillTrendingDown, cls: "bg-amber-50 text-amber-700" },
-        review:  { label: t.home.pillCoaching,     cls: "bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)]" },
-    }
-
     return (
         <div className="space-y-5">
             {/* ── The apps' greeting header (D-586) ── */}
@@ -269,40 +242,6 @@ export default function HomePage() {
                     {t.home.inviteReps}
                 </Link>
             </div>
-
-            {/* ── Hero banner: the one thing to do next. The most urgent
-                 attention item when there is one, otherwise the month so far. ── */}
-            {cards.length > 0 && (() => {
-                const top = attention[0]
-                const avg = avgOf(cards, "overall_score")
-                const kicker = top ? attnPill[top.kind].label : t.home.last30
-                const title  = top ? top.title : t.home.heroTeamTitle(cards.length)
-                const sub    = top ? top.sub   : t.home.heroTeamSub(avg)
-                const href   = top ? top.href  : ("/calls" as Route)
-                const cta    = top ? top.cta   : t.home.heroSeeCalls
-                return (
-                    <Link href={href} className="tp-hero-banner group flex items-center gap-3.5 px-4 sm:px-5 py-3.5">
-                        <span className="relative z-[1] hidden sm:grid w-9 h-9 shrink-0 place-items-center rounded-full bg-white/15 ring-1 ring-white/25">
-                            <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                {top
-                                    ? <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v5m0 3.5v.01M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0z" />
-                                    : <path strokeLinecap="round" strokeLinejoin="round" d="M4 20V10M10 20V4M16 20v-7M22 20H2" />}
-                            </svg>
-                        </span>
-                        <span className="relative z-[1] min-w-0 flex-1">
-                            <span className="flex items-center gap-2 min-w-0">
-                                <span className="shrink-0 text-[10.5px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-md bg-white/15 text-white/90">{kicker}</span>
-                                <span className="truncate font-display text-[15.5px] font-bold" title={title}>{title}</span>
-                            </span>
-                            <span className="block truncate text-[12.5px] text-white/80 mt-0.5">{sub}</span>
-                        </span>
-                        <span className="relative z-[1] hidden md:inline-flex items-center gap-1 shrink-0 px-3 h-8 rounded-[10px] bg-white text-[#0E182B] text-[13px] font-semibold shadow-[0_4px_12px_rgba(0,0,0,0.16)] group-hover:-translate-y-px transition-transform">
-                            {cta.replace(/\s*→\s*$/, "")}
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m9 6 6 6-6 6" /></svg>
-                        </span>
-                    </Link>
-                )
-            })()}
 
             {/* ── First-run: ONE card above the dashboard, not instead of it
                  (D-192 kept). The old shape rendered the checklist AND the
@@ -323,31 +262,23 @@ export default function HomePage() {
                 <AISetupCard surface="home" />
             )}
 
-            {/* ── State 3: the live dashboard ── */}
+            {/* ── D-929: the answer to "what do I do this week?" comes first.
+                 Managers used Home for setup only; the old KPI hero, trend chart
+                 and attention feed told them how the team was doing but not
+                 what to do about it. ── */}
+            {week && <WeekPlan data={week} nameOf={id => memberLabel(byUser.get(id))} />}
+
+            {/* ── The numbers, now below the plan ── */}
             {cards.length > 0 && (<>
 
-            {/* Attention feed */}
-            {attention.length > 1 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {attention.slice(1).map(a => (
-                        <Link key={a.kind} href={a.href}
-                            className={`bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] border-l-[3px] ${attnStyle[a.kind]} p-4 shadow-sm hover:shadow transition-shadow block`}>
-                            <span className={`inline-block font-mono text-[10px] tracking-wide px-2 py-0.5 rounded-full ${attnPill[a.kind].cls}`}>{attnPill[a.kind].label}</span>
-                            <p className="text-[13px] font-semibold text-[var(--color-text)] mt-2 leading-snug">{a.title}</p>
-                            <p className="text-xs text-[var(--color-text-secondary)] mt-1">{a.sub}</p>
-                            <p className="text-xs font-semibold text-[var(--color-accent-deep)] mt-2">{a.cta}</p>
-                        </Link>
-                    ))}
-                </div>
-            )}
+            <h2 className="font-display text-[17px] font-bold text-[var(--color-text)] pt-2">{t.home.week.moreTitle}</h2>
 
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
                 <div className="space-y-4 min-w-0">
                     {/* KPI row — one card, big numbers over small labels, like
                         the apps' "This week" card (D-586). */}
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
-                        <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.last30}</h2>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                             {kpis.map(k => (
                                 <div key={k.field} title={k.hint} className="cursor-help">
                                     <div className="flex items-baseline gap-2">
@@ -360,47 +291,12 @@ export default function HomePage() {
                         </div>
                     </div>
 
-                    {/* Trend */}
-                    {trend.some(p => p.overall != null) && (
-                        <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.trendTitle}</h2>
-                                <div className="flex items-center gap-3 text-[11px] text-[var(--color-text-secondary)]">
-                                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#0C9482]" />{t.common.overall}</span>
-                                    <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#E69F19]" />{t.common.adherence}</span>
-                                </div>
-                            </div>
-                            <div className="text-[var(--color-muted)] mt-3">
-                                <ResponsiveContainer width="100%" height={200}>
-                                    <LineChart data={trend} margin={{ left: -20 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.18} />
-                                        <XAxis dataKey="week" tick={{ fontSize: 11, fill: "currentColor" }} stroke="currentColor" strokeOpacity={0.25} />
-                                        <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "currentColor" }} stroke="currentColor" strokeOpacity={0.25} />
-                                        <Tooltip
-                                            contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8 }}
-                                            labelStyle={{ color: "var(--color-text)", fontSize: 12, fontWeight: 600 }}
-                                            itemStyle={{ fontSize: 12 }}
-                                        />
-                                        <Line type="monotone" dataKey="overall"   stroke="#0C9482" strokeWidth={2.5} dot={{ r: 3 }} connectNulls name={t.common.overall}   />
-                                        <Line type="monotone" dataKey="adherence" stroke="#E69F19" strokeWidth={2}   dot={{ r: 2.5 }} connectNulls name={t.common.adherence} />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    )}
-
                     {/* Recent calls */}
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
                         <div className="flex items-center justify-between mb-3">
                             <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.recentCalls}</h2>
                             <Link href="/calls" className="text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">{t.home.allCalls}</Link>
                         </div>
-                        {cards.length === 0 && (
-                            <div className="py-8 text-center">
-                                <p className="text-sm text-[var(--color-text-secondary)]">{t.home.noScoredSessions}</p>
-                                <p className="text-xs text-[var(--color-muted)] mt-1">{t.home.sessionsAppear}</p>
-                            </div>
-                        )}
                         <div className="divide-y divide-[var(--color-line-soft)]">
                             {cards.slice(0, 6).map(c => (
                                 <Link key={c.id} href={`/scorecard/${c.id}`}
@@ -428,6 +324,29 @@ export default function HomePage() {
 
                 {/* Right rail */}
                 <div className="space-y-4">
+                    <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
+                            <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.leaderboard}</h2>
+                            <Link href="/team" className="text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">{t.home.allReps}</Link>
+                        </div>
+                        {leaderboard.length === 0 && <p className="text-xs text-[var(--color-muted)]">{t.home.scoresAppear}</p>}
+                        <div className="space-y-2.5">
+                            {leaderboard.map((r, i) => (
+                                <Link key={r.m.user_id} href={`/team/${r.m.user_id}`} className="flex items-center gap-2.5 group">
+                                    <span className="font-mono text-[11px] text-[var(--color-muted)] w-3.5">{i + 1}</span>
+                                    <span className="w-7 h-7 rounded-full bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] text-[10px] font-semibold flex items-center justify-center shrink-0">
+                                        {memberLabel(r.m).split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                                    </span>
+                                    <span className="text-[13px] font-medium text-[var(--color-text)] truncate group-hover:text-[var(--color-accent-deep)]">
+                                        {memberLabel(r.m)}
+                                        <span className="block text-[10.5px] font-normal text-[var(--color-muted)]">{t.home.nCalls(r.n)}</span>
+                                    </span>
+                                    <span className="font-mono text-sm ml-auto text-[var(--color-text)]">{r.score}</span>
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
+
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
                         <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.adoption}</h2>
                         <div className="space-y-3 mt-3">
@@ -457,34 +376,12 @@ export default function HomePage() {
                             </div>
                         </div>
                     </div>
-
-                    <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-5 shadow-sm">
-                        <div className="flex items-center justify-between mb-3">
-                            <h2 className="text-sm font-semibold text-[var(--color-text)]">{t.home.leaderboard}</h2>
-                            <Link href="/team" className="text-xs font-semibold text-[var(--color-accent-deep)] hover:underline">{t.home.allReps}</Link>
-                        </div>
-                        {leaderboard.length === 0 && <p className="text-xs text-[var(--color-muted)]">{t.home.scoresAppear}</p>}
-                        <div className="space-y-2.5">
-                            {leaderboard.map((r, i) => (
-                                <Link key={r.m.user_id} href={`/team/${r.m.user_id}`} className="flex items-center gap-2.5 group">
-                                    <span className="font-mono text-[11px] text-[var(--color-muted)] w-3.5">{i + 1}</span>
-                                    <span className="w-7 h-7 rounded-full bg-[var(--color-accent-subtle)] text-[var(--color-accent-deep)] text-[10px] font-semibold flex items-center justify-center shrink-0">
-                                        {memberLabel(r.m).split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase()}
-                                    </span>
-                                    <span className="text-[13px] font-medium text-[var(--color-text)] truncate group-hover:text-[var(--color-accent-deep)]">
-                                        {memberLabel(r.m)}
-                                        <span className="block text-[10.5px] font-normal text-[var(--color-muted)]">{t.home.nCalls(r.n)}</span>
-                                    </span>
-                                    <span className="font-mono text-sm ml-auto text-[var(--color-text)]">{r.score}</span>
-                                </Link>
-                            ))}
-                        </div>
-                    </div>
                 </div>
             </div>
 
-            {/* Deeper cuts — folded in from the old Insights page (D-175) */}
-            <InsightsSections />
+            {/* Weekly digests, folded in from the old Insights page (D-175).
+                Its objection list is replaced by the plan's (D-929). */}
+            <InsightsSections showObjections={false} />
             </>)}
         </div>
     )

@@ -2501,6 +2501,30 @@ export function PracticeTab({ orgId }: { orgId: string }) {
     const [assigning, setAssigning]     = useState(false)
     const [msg, setMsg]                 = useState<string | null>(null)
     const [isErr, setIsErr]             = useState(false)
+    const [prefilled, setPrefilled]     = useState(false)
+    const assignPanel                   = useRef<HTMLElement | null>(null)
+
+    // D-929: Home's "Assign practice" opens this page with the rep and a note
+    // from the call already filled in. Read once from the URL (no
+    // useSearchParams, which would need a Suspense boundary on the page).
+    useEffect(() => {
+        const q = new URLSearchParams(window.location.search)
+        const assignee = q.get("assignee"), pre = q.get("note"), scen = q.get("scenario")
+        if (!assignee && !pre) return
+        if (assignee) { setAssigneeKind("member"); setAssigneeId(assignee) }
+        if (pre) setNote(pre.slice(0, 300))
+        if (scen && STOCK_PRACTICE_SCENARIOS.some(s => s.id === scen)) setScenarioId(scen)
+        else {
+            // The one sales scene is the closest fit for a sales call.
+            const sales = STOCK_PRACTICE_SCENARIOS.find(s => s.id === "skeptical-prospect")
+            if (sales) setScenarioId(sales.id)
+        }
+        setPrefilled(true)
+    }, [])
+
+    useEffect(() => {
+        if (prefilled && !loading) assignPanel.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, [prefilled, loading])
 
     const load = useCallback(async () => {
         const [assignRes, memberRes, teamRes] = await Promise.all([
@@ -2549,7 +2573,7 @@ export function PracticeTab({ orgId }: { orgId: string }) {
         if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true) }
         else {
             setMsg(t.tabs.practice.assigned(scenario.title)); setIsErr(false)
-            setNote(""); setDueDate(""); setAssigneeId("")
+            setNote(""); setDueDate(""); setAssigneeId(""); setPrefilled(false)
             await load()
         }
     }
@@ -2635,9 +2659,12 @@ export function PracticeTab({ orgId }: { orgId: string }) {
                 </div>
 
                 {/* ── Assign panel ── */}
-                <aside className={CARD + " lg:sticky lg:top-6"}>
+                <aside ref={assignPanel} className={CARD + " lg:sticky lg:top-6 scroll-mt-6"}>
                     <h3 className="font-display text-[15px] font-bold text-[var(--color-text)]">{P.assignTitle}</h3>
                     <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">{P.assignSub}</p>
+                    {prefilled && (
+                        <p className="text-xs font-medium text-[var(--color-accent-deep)] bg-[var(--color-accent-subtle)] rounded-lg px-2.5 py-2 mt-3">{P.prefilled}</p>
+                    )}
 
                     {chosen && chosenL && (
                         <div className="flex items-center gap-3 mt-4 p-2 rounded-xl bg-[var(--color-accent-subtle)]">

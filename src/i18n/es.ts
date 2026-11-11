@@ -706,6 +706,38 @@ export const es: Dict = {
         allReps: "Todos los reps →",
         scoresAppear: "Los puntajes aparecen cuando se califican las llamadas.",
         nCalls: (n: number) => `${n} ${n === 1 ? "llamada" : "llamadas"}`,
+        // D-929: Inicio responde "¿qué hago esta semana?".
+        week: {
+            title: "¿Qué hago esta semana?",
+            basis7: (n: number) => `Según ${n} llamada${n === 1 ? "" : "s"} de ventas evaluada${n === 1 ? "" : "s"} en los últimos 7 días.`,
+            basis30: (n: number) => `Esta semana no hay llamadas de ventas evaluadas, así que usamos los últimos 30 días (${n} llamada${n === 1 ? "" : "s"}).`,
+            breachTitle: (rule: string) => `Se rompió una regla: ${rule}`,
+            reviewCall: "Revisar la llamada",
+            skillsTitle: "Una habilidad para cada vendedor",
+            skillsSub: "Sale de la llamada más floja de cada vendedor en este periodo.",
+            fromCall: (title: string, date: string) => `De "${title}", ${date}`,
+            seeMoment: "Ver el momento",
+            openCall: "Abrir la llamada",
+            assignPractice: "Asignar práctica",
+            noGrowth: "Estas llamadas no dejan nada por trabajar.",
+            noCallsReps: (names: string) => `Sin llamadas de ventas evaluadas en este periodo: ${names}`,
+            objTitle: "Las objeciones que más pierde tu equipo",
+            objSub: "Objeciones que se quedaron sin respuesta o se respondieron fuera del guion.",
+            objLost: (lost: number, total: number) => total === 1 ? "Sin buena respuesta la única vez que salió" : `Sin buena respuesta ${lost} de ${total} veces`,
+            objLibrary: "En tu biblioteca",
+            objNone: "En este periodo no se perdió ninguna objeción.",
+            seeLatest: "Ver la más reciente",
+            objPracticeNote: (text: string) => `Practica tu respuesta a: "${text}"`,
+            nextTitle: "Llamadas sin siguiente paso",
+            nextSub: "Llamadas donde no se cumplió el paso de cierre del playbook.",
+            nextMissing: (items: string) => `Faltó: ${items}`,
+            nextStage: (stage: string) => `Paso: ${stage}`,
+            nextNone: (n: number) => n === 1 ? "La llamada que revisamos terminó con un siguiente paso." : `Las ${n} llamadas que revisamos terminaron con un siguiente paso.`,
+            nextNoneChecked: "Ninguna de estas llamadas tenía un paso de cierre del playbook para revisar.",
+            seeEnding: "Ver cómo terminó",
+            nextPracticeNote: "Termina cada llamada con un siguiente paso concreto: la fecha y quién hace qué.",
+            moreTitle: "Números del equipo, últimos 30 días",
+        },
     },
 
     homeStates: {
@@ -977,6 +1009,9 @@ export const es: Dict = {
         missing: "Faltó:",
         moments: "Momentos",
         growthAreas: "Áreas de mejora",
+        // D-929: los enlaces de Inicio abren la llamada en el momento.
+        momentHere: "Este es el momento",
+        momentNoTranscript: "Este espacio no comparte transcripciones completas, así que ves el resumen de la llamada.",
         noObjections: "Sin objeciones registradas (o tu nivel de visibilidad restringe el acceso).",
         repQuote: "Rep:",
         noClaims: "Sin afirmaciones registradas (o tu nivel de visibilidad restringe el acceso).",
@@ -1360,6 +1395,8 @@ export const es: Dict = {
             teamPrefix: (name: string) => `Equipo: ${name}`,
             aTeamFallback: "Un equipo",
             due: (date: string) => `Vence ${date}`,
+            // D-929: abierta desde una llamada en Inicio.
+            prefilled: "Lo llenamos con lo de la llamada. Elige un escenario y asígnalo.",
         },
 
         members: {

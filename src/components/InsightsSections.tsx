@@ -24,7 +24,7 @@ interface DigestRow {
 /// Formerly the standalone Insights page (D-162); folded into Home (D-175) —
 /// accuracy slippage and objection patterns are exactly what the attention
 /// surface is for, and a separate nav item made owners hunt for them.
-export function InsightsSections() {
+export function InsightsSections({ showObjections = true }: { showObjections?: boolean } = {}) {
     const { t, intl } = useLocale()
     const [objectionPatterns, setObjectionPatterns] = useState<ObjectionPattern[]>([])
     const [claimSummary, setClaimSummary]           = useState<ClaimSummary[]>([])
@@ -139,7 +139,7 @@ export function InsightsSections() {
             )}
 
             {/* Objection patterns */}
-            {objectionPatterns.length > 0 && (
+            {showObjections && objectionPatterns.length > 0 && (
                 <div>
                     <h2 className="text-sm font-semibold text-[var(--color-text)] mb-3">{t.insights.objectionPatterns}</h2>
                     <div className="bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] divide-y divide-[var(--color-border)] shadow-sm">
