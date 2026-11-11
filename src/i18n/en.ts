@@ -802,6 +802,7 @@ export const en = {
             non_sales: "This wasn't a sales call, so it gets no score and doesn't count in the averages.",
             poor_transcript: "The transcript came out too garbled to judge anyone fairly, so it wasn't scored.",
             no_rep_audio: "The rep's side of the call wasn't picked up, so there was nothing to evaluate.",
+            rep_barely_spoke: "Someone else led most of this call, so the rep wasn't scored.",
         } as Record<string, string>,
         excludeAction: "Don't count this",
         includeAgain: "Count it again",

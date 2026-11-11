@@ -761,6 +761,7 @@ export const es: Dict = {
             non_sales: "No fue una llamada de ventas, así que no recibe puntaje y no cuenta en los promedios.",
             poor_transcript: "La transcripción salió demasiado revuelta para juzgar a alguien con justicia, así que no se calificó.",
             no_rep_audio: "No se captó la voz del rep en esta llamada, así que no había nada que evaluar.",
+            rep_barely_spoke: "Otra persona llevó la mayor parte de esta llamada, así que no se calificó al rep.",
         } as Record<string, string>,
         excludeAction: "No contar esta",
         includeAgain: "Volver a contarla",
