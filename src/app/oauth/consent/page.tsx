@@ -13,6 +13,7 @@ import { Suspense, useCallback, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useT } from "@/i18n/LocaleProvider"
+import { userError } from "@/lib/userError"
 
 type Details = {
     authorization_id: string
@@ -55,7 +56,8 @@ export default function ConsentPage() {
 }
 
 function Consent() {
-    const t = useT().oauthConsent
+    const tAll = useT()
+    const t = tAll.oauthConsent
     const params = useSearchParams()
     const authorizationId = params.get("authorization_id")
 
@@ -76,7 +78,7 @@ function Consent() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { setPhase("signin"); return }
         const { data, error: e } = await consentCall("details", authorizationId)
-        if (e || !data) { setPhase("error"); setError(e?.message ?? t.expired); return }
+        if (e || !data) { setPhase("error"); setError(userError(e, tAll, t.expired)); return }
         if ("redirect_url" in data && !("client" in data)) {
             // Already approved earlier: go straight back to the AI app.
             setPhase("redirecting")
@@ -126,7 +128,7 @@ function Consent() {
         setBusy(true); setError(null)
         const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
         setBusy(false)
-        if (err) setError(err.message)
+        if (err) setError(userError(err, tAll))
     }
 
     async function sendCode() {
@@ -156,7 +158,7 @@ function Consent() {
         setBusy(true); setError(null)
         const { data, error: err } = await consentCall(allow ? "approve" : "deny", authorizationId)
         const redirectUrl = data?.redirect_url as string | undefined
-        if (err || !redirectUrl) { setBusy(false); setError(err?.message ?? t.expired); return }
+        if (err || !redirectUrl) { setBusy(false); setError(userError(err, tAll, t.expired)); return }
         setPhase("redirecting")
         window.location.assign(redirectUrl)
     }

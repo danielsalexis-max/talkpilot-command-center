@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useLocale } from "@/i18n/LocaleProvider"
+import { userError } from "@/lib/userError"
 
 /// Create teams and put people in them.
 ///
@@ -51,7 +52,7 @@ export function TeamsSection({ orgId, onChanged }: { orgId: string; onChanged?: 
         setBusy(true); setError(null)
         const { error } = await supabase.from("org_teams").insert({ org_id: orgId, name })
         setBusy(false)
-        if (error) { setError(error.message); return }
+        if (error) { setError(userError(error, t)); return }
         setNewName("")
         await load(); onChanged?.()
     }
@@ -72,7 +73,7 @@ export function TeamsSection({ orgId, onChanged }: { orgId: string; onChanged?: 
         await supabase.from("org_playbook_assignments").delete().eq("team_id", id)
         const { error } = await supabase.from("org_teams").delete().eq("id", id)
         setBusy(false)
-        if (error) { setError(error.message); return }
+        if (error) { setError(userError(error, t)); return }
         await load(); onChanged?.()
     }
 
@@ -81,7 +82,7 @@ export function TeamsSection({ orgId, onChanged }: { orgId: string; onChanged?: 
         const { error } = await supabase.from("org_members")
             .update({ team_id: teamId }).eq("org_id", orgId).eq("user_id", userId)
         setBusy(false)
-        if (error) { setError(error.message); return }
+        if (error) { setError(userError(error, t)); return }
         await load(); onChanged?.()
     }
 

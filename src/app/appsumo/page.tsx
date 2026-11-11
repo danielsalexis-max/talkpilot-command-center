@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useT } from "@/i18n/LocaleProvider"
 import { GetTheApp } from "@/components/GetTheApp"
+import { userError } from "@/lib/userError"
 
 /// D-474/D-475: AppSumo activation. Served at https://talkpilot-appsumo.vercel.app/
 /// (its own host, so its sign-in never touches the Command Center's — see
@@ -164,7 +165,7 @@ function AppSumoContent() {
         try {
             if (mode === "signin") {
                 const { error } = await supabase.auth.signInWithPassword({ email, password })
-                if (error) { setMessage(error.message); return }
+                if (error) { setMessage(userError(error, t)); return }
                 setCurrentEmail(email)
                 await activate()
             } else {
@@ -172,7 +173,7 @@ function AppSumoContent() {
                     email, password,
                     options: { emailRedirectTo: `${window.location.origin}${window.location.pathname}` },
                 })
-                if (error) { setMessage(error.message); return }
+                if (error) { setMessage(userError(error, t)); return }
                 if (data.session) { setCurrentEmail(email); await activate() }
                 else setStatus("confirm_email")
             }

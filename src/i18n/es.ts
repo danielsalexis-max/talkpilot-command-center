@@ -14,6 +14,23 @@ export const es: Dict = {
     langName: "Español",
     ogLocale: "es_419",
 
+    errors: {
+        generic: "Algo salió mal. Inténtalo de nuevo.",
+        network: "No podemos conectar con TalkPilot. Revisa tu conexión a internet e inténtalo de nuevo.",
+        sessionExpired: "Tu sesión expiró. Vuelve a iniciar sesión.",
+        invalidLogin: "El correo y la contraseña no coinciden.",
+        emailNotConfirmed: "Primero confirma tu correo. Busca el enlace en tu bandeja de entrada.",
+        alreadyRegistered: "Ya hay una cuenta con este correo. Inicia sesión.",
+        weakPassword: (min: number | null) => min ? `Usa una contraseña más larga: al menos ${min} caracteres.` : "Usa una contraseña más larga.",
+        samePassword: "Elige una contraseña distinta a la actual.",
+        invalidEmail: "Ese correo no parece correcto.",
+        linkExpired: "Este enlace o código expiró. Pide uno nuevo.",
+        tooMany: "Demasiados intentos. Espera un minuto e inténtalo de nuevo.",
+        notAllowed: "No tienes permiso para hacer eso.",
+        seatLimit: "Todos tus asientos están en uso. Agrega asientos o libera uno primero.",
+        tooLarge: "Ese archivo es demasiado grande.",
+    },
+
     meta: {
         title: "TalkPilot Teams — Command Center",
         titleTemplate: "%s · TalkPilot Teams",

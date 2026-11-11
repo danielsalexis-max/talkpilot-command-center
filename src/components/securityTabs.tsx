@@ -6,6 +6,7 @@ import type { OrgInfo } from "@/components/orgTabs"
 import { useT } from "@/i18n/LocaleProvider"
 import { intlLocale, clientLocale } from "@/i18n"
 import { EmailLink } from "@/components/EmailLink"
+import { userError } from "@/lib/userError"
 
 /// Security & access, and the audit trail (D-176). These are the surfaces a
 /// procurement or security review asks to see. MFA and SCIM work on any plan;
@@ -59,7 +60,7 @@ function MfaCard({ orgId }: { orgId?: string }) {
         setBusy(true); setMsg(null)
         const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" })
         setBusy(false)
-        if (error) { setMsg(error.message); setIsErr(true); return }
+        if (error) { setMsg(userError(error, t)); setIsErr(true); return }
         setQr(data.totp.qr_code); setSecret(data.totp.secret); setFactorId(data.id)
     }
 
@@ -67,7 +68,7 @@ function MfaCard({ orgId }: { orgId?: string }) {
         if (!factorId || code.trim().length < 6) return
         setBusy(true); setMsg(null)
         const { data: ch, error: chErr } = await supabase.auth.mfa.challenge({ factorId })
-        if (chErr) { setBusy(false); setMsg(chErr.message); setIsErr(true); return }
+        if (chErr) { setBusy(false); setMsg(userError(chErr, t)); setIsErr(true); return }
         const { error } = await supabase.auth.mfa.verify({ factorId, challengeId: ch.id, code: code.trim() })
         setBusy(false)
         if (error) { setMsg(t.security.mfaBadCode); setIsErr(true); return }
@@ -81,7 +82,7 @@ function MfaCard({ orgId }: { orgId?: string }) {
         setBusy(true)
         const { error } = await supabase.auth.mfa.unenroll({ factorId: id })
         setBusy(false)
-        if (error) { setMsg(error.message); setIsErr(true); return }
+        if (error) { setMsg(userError(error, t)); setIsErr(true); return }
         setMsg(t.security.mfaOff); setIsErr(false)
         if (orgId) await audit(orgId, "mfa.disabled", {})
         await load()
@@ -325,7 +326,7 @@ function ExportCard({ org }: { org: OrgInfo }) {
             })
             if (!res.ok) {
                 const e = await res.json().catch(() => ({}))
-                setMsg(e?.error?.message ?? t.security.exportFailed); setIsErr(true); return
+                setMsg(userError(e, t, t.security.exportFailed)); setIsErr(true); return
             }
             const blob = await res.blob()
             const url = URL.createObjectURL(blob)

@@ -27,6 +27,7 @@ import { EmailLink } from "@/components/EmailLink"
 import { AISetupCard } from "@/components/aiSetupCard"
 import { useLocale, useT } from "@/i18n/LocaleProvider"
 import { clientLocale, type Dict } from "@/i18n"
+import { userError } from "@/lib/userError"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -240,14 +241,7 @@ function UploadZone({
 /// messages — pass those through; translate anything that smells like the
 /// database, and keep the raw text in the console for debugging.
 function humanError(raw: string | null | undefined, doing: string, t: Dict): string {
-    const r = (raw ?? "").trim()
-    const dbSmell = /violates|constraint|relation |column |duplicate key|syntax error|permission denied|row-level security|foreign key|null value in/i
-    if (!r) return t.tabs.cantDo(doing)
-    if (dbSmell.test(r)) {
-        console.error(`[${doing}]`, r)
-        return t.tabs.cantDo(doing)
-    }
-    return r
+    return userError(raw, t, t.tabs.cantDo(doing))
 }
 
 /// Provenance chip for an objection row. NULL source (manual adds, and every
@@ -723,7 +717,7 @@ export function KnowledgeTab({ orgId, focus }: { orgId: string; focus?: "website
         try {
             const r = await ingestKnowledgeInlineVerbose(orgId, title.trim(), kind, content.trim())
             if (r.error) {
-                setMsg(t.tabs.knowledge.errorPrefix(r.error)); setIsErr(true)
+                setMsg(t.tabs.knowledge.errorPrefix(userError(r.error, t))); setIsErr(true)
             } else {
                 // Say what the ingest actually did. "Document ready" told the
                 // owner nothing about whether it can be retrieved in a call,
@@ -771,7 +765,7 @@ export function KnowledgeTab({ orgId, focus }: { orgId: string; focus?: "website
                 // rebuilt the document from the original file in storage — the
                 // edit was discarded every time and the UI still said "saved".
                 const r = await replaceKnowledgeText(orgId, editing.id, body.trim())
-                if (r.error) { setMsg(t.tabs.knowledge.errorPrefix(r.error)); setIsErr(true); return }
+                if (r.error) { setMsg(t.tabs.knowledge.errorPrefix(userError(r.error, t))); setIsErr(true); return }
             }
             setMsg(t.tabs.knowledge.editSaved); setIsErr(false)
             setEditing(null)
@@ -814,7 +808,7 @@ export function KnowledgeTab({ orgId, focus }: { orgId: string; focus?: "website
             const r = await reindexKnowledgeVerbose(orgId, id)
             // Report the chunk count when the function gives one — "repaired"
             // with no number is the same unverifiable claim as the old copy.
-            setMsg(r.error ? t.tabs.knowledge.reindexFailed(r.error)
+            setMsg(r.error ? t.tabs.knowledge.reindexFailed(userError(r.error, t))
                  : r.chunkCount !== null ? t.tabs.knowledge.reindexedN(r.chunkCount)
                  : t.tabs.knowledge.reindexed)
             setIsErr(!!r.error)
@@ -830,7 +824,7 @@ export function KnowledgeTab({ orgId, focus }: { orgId: string; focus?: "website
         setAmendBusy(true); setMsg(null); setIsErr(false)
         try {
             const r = await amendKnowledge(orgId, instruction)
-            if (r.error) { setMsg(t.tabs.knowledge.errorPrefix(r.error)); setIsErr(true); return }
+            if (r.error) { setMsg(t.tabs.knowledge.errorPrefix(userError(r.error, t))); setIsErr(true); return }
             setAmendSkipped(r.skipped.map(x => ({ title: x.title, find: x.find })))
             if (r.proposals.length === 0) {
                 setMsg(r.note === "no_documents" ? t.tabs.knowledge.amendNoDocs : t.tabs.knowledge.amendNoMatch)
@@ -859,7 +853,7 @@ export function KnowledgeTab({ orgId, focus }: { orgId: string; focus?: "website
             for (const proposal of picked) {
                 const r = await replaceKnowledgeText(orgId, proposal.knowledge_id, applyProposal(proposal))
                 if (r.error) {
-                    setMsg(t.tabs.knowledge.amendFailed(`${proposal.title} — ${r.error}`))
+                    setMsg(t.tabs.knowledge.amendFailed(`${proposal.title} — ${userError(r.error, t)}`))
                     setIsErr(true)
                     break
                 }
@@ -1471,7 +1465,7 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
             source: sourceDoc ? `document:${sourceDoc}` : "document",
         }))
         const { data: inserted, error } = await supabase.from("org_objections").insert(rows).select("id")
-        if (error) { setImporting(false); setExtractMsg(t.tabs.objections.importErrorPrefix(error.message)); setExtractErr(true); return }
+        if (error) { setImporting(false); setExtractMsg(t.tabs.objections.importErrorPrefix(userError(error, t))); setExtractErr(true); return }
         // Embed before reporting success — an unembedded objection can never match.
         const r = await embedObjections(orgId, (inserted ?? []).map(x => x.id as string))
         setImporting(false)
@@ -1531,7 +1525,7 @@ export function ObjectionsTab({ orgId, org, onSaved }: { orgId: string; org: Org
         setObjAmendBusy(true); setObjAmendMsg(null); setObjAmendErr(false)
         const r = await amendBrain(orgId, "objections", instruction)
         setObjAmendBusy(false)
-        if (r.error) { setObjAmendMsg(r.error); setObjAmendErr(true); return }
+        if (r.error) { setObjAmendMsg(userError(r.error, t)); setObjAmendErr(true); return }
         const props = r.proposals as ObjectionAmendProposal[]
         if (props.length === 0) { setObjAmendMsg(t.tabs.brainAmend.none); setObjAmendErr(false); return }
         setObjAmendProps(props)
@@ -1923,7 +1917,7 @@ export function PlaybooksTab({ orgId, stage: openStage, onNavigate }: {
         setPbAmendBusy(true); setPbAmendMsg(null); setPbAmendErr(false)
         const r = await amendBrain(orgId, "playbooks", instruction)
         setPbAmendBusy(false)
-        if (r.error) { setPbAmendMsg(r.error); setPbAmendErr(true); return }
+        if (r.error) { setPbAmendMsg(userError(r.error, t)); setPbAmendErr(true); return }
         const props = r.proposals as StageAmendProposal[]
         if (props.length === 0) { setPbAmendMsg(t.tabs.brainAmend.none); setPbAmendErr(false); return }
         setPbAmendProps(props)

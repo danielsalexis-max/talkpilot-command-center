@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useT } from "@/i18n/LocaleProvider"
+import { userError } from "@/lib/userError"
 
 /// Landing page for Supabase password-recovery links (D-163). The recovery
 /// token in the URL gives this page a temporary session; setting a new
@@ -32,7 +33,7 @@ export default function ResetPasswordPage() {
         setBusy(true)
         const { error: err } = await supabase.auth.updateUser({ password })
         setBusy(false)
-        if (err) { setError(err.message); return }
+        if (err) { setError(userError(err, t)); return }
         router.replace("/")
     }
 

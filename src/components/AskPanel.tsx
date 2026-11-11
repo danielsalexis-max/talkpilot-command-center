@@ -3,6 +3,7 @@
 import { useState } from "react"
 import type { ChatTurn } from "@/lib/supabase"
 import { useT } from "@/i18n/LocaleProvider"
+import { userError } from "@/lib/userError"
 
 /** Shared "ask AI" chat panel. `onAsk` receives the question + prior turns and
  *  returns the assistant's answer. Context/grounding lives in the caller. */
@@ -32,7 +33,7 @@ export function AskPanel({
             const answer = await onAsk(question, history)
             setThread(t => [...t, { role: "assistant", content: answer }])
         } catch (e) {
-            setError((e as Error).message || t.askPanel.genericError)
+            setError(userError(e, t, t.askPanel.genericError))
             setThread(t => t.slice(0, -1))
             setInput(question)
         } finally {

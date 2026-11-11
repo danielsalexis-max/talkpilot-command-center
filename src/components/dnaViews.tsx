@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useLocale } from "@/i18n/LocaleProvider"
 import type { ChatTurn } from "@/lib/supabase"
+import { userError } from "@/lib/userError"
 
 // ─── Shared shapes (mirrors of the ones in orgTabs.tsx) ─────────────────────
 
@@ -717,7 +718,7 @@ export function DnaAsk({ placeholder, suggestions, onAsk }: {
             const a = await onAsk(question, history)
             setThread(th => [...th, { role: "assistant", content: a }])
         } catch (e) {
-            setError((e as Error).message || t.askPanel.genericError)
+            setError(userError(e, t, t.askPanel.genericError))
             setThread(th => th.slice(0, -1)); setInput(question)
         } finally { setBusy(false) }
     }
@@ -856,7 +857,7 @@ export function DnaCopyThisWeek({ from, to, onGenerate }: {
     const [copied, setCopied] = useState(false)
     async function go() {
         setBusy(true); setError("")
-        try { setText(await onGenerate()) } catch (e) { setError((e as Error).message) } finally { setBusy(false) }
+        try { setText(await onGenerate()) } catch (e) { setError(userError(e, t)) } finally { setBusy(false) }
     }
     const items = text.split("\n").map(l => l.trim()).filter(l => l.startsWith("-") || l.startsWith("•")).map(l => l.replace(/^[-•]\s*/, ""))
     return (

@@ -13,6 +13,7 @@ import { useLocale } from "@/i18n/LocaleProvider"
 import {
     LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts"
+import { userError } from "@/lib/userError"
 
 interface OrgInfo { id: string; name: string; visibility: string; seats_purchased: number; plan: string }
 interface MemberInfo { user_id: string; email: string | null; full_name: string | null; status: string }
@@ -127,7 +128,7 @@ export default function HomePage() {
                 scoredCalls: (scorecards ?? []).length,
             })
         } catch (e) {
-            setError((e as Error).message)
+            setError(userError(e, t))
         } finally {
             setLoading(false)
         }

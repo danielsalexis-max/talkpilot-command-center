@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { isPersonalEmail } from "@/lib/workEmail"
 import { useT } from "@/i18n/LocaleProvider"
+import { userError } from "@/lib/userError"
 
 export default function LoginPage() {
     const router = useRouter()
@@ -36,7 +37,7 @@ export default function LoginPage() {
         try {
             if (mode === "signin") {
                 const { error: authErr } = await supabase.auth.signInWithPassword({ email, password })
-                if (authErr) { setError(authErr.message); return }
+                if (authErr) { setError(userError(authErr, t)); return }
 
                 // A verified TOTP factor means this session is only AAL1 until
                 // the code is entered. Stop here rather than letting them in.
@@ -59,7 +60,7 @@ export default function LoginPage() {
                     return
                 }
                 const { error: authErr } = await supabase.auth.signUp({ email, password })
-                if (authErr) { setError(authErr.message); return }
+                if (authErr) { setError(userError(authErr, t)); return }
                 setInfo(t.login.accountCreated)
                 setMode("signin"); setPassword(""); setConfirm("")
             }
@@ -102,7 +103,7 @@ export default function LoginPage() {
         setLoading(true); setError(null)
         try {
             const { data: ch, error: chErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId })
-            if (chErr) { setError(chErr.message); return }
+            if (chErr) { setError(userError(chErr, t)); return }
             const { error: vErr } = await supabase.auth.mfa.verify({
                 factorId: mfaFactorId, challengeId: ch.id, code: mfaCode.trim(),
             })
@@ -130,7 +131,7 @@ export default function LoginPage() {
         const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
             redirectTo: `${window.location.origin}/reset-password`,
         })
-        if (err) setError(err.message)
+        if (err) setError(userError(err, t))
         else setInfo(t.login.resetLinkSent)
     }
 

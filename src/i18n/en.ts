@@ -13,6 +13,25 @@ export const en = {
     /// BCP-47-ish tag for Open Graph's `og:locale` (underscored form).
     ogLocale: "en_US",
 
+    // Errors from the server or sign-in arrive in English; `userError()`
+    // (src/lib/userError.ts) maps the ones we recognize to these lines.
+    errors: {
+        generic: "Something went wrong. Try again.",
+        network: "Can't reach TalkPilot. Check your internet connection and try again.",
+        sessionExpired: "Your session expired. Sign in again.",
+        invalidLogin: "That email and password don't match.",
+        emailNotConfirmed: "Confirm your email first. Check your inbox for the link.",
+        alreadyRegistered: "There's already an account with this email. Sign in instead.",
+        weakPassword: (min: number | null) => min ? `Use a longer password: at least ${min} characters.` : "Use a longer password.",
+        samePassword: "Choose a password different from your current one.",
+        invalidEmail: "That email doesn't look right.",
+        linkExpired: "This link or code expired. Ask for a new one.",
+        tooMany: "Too many tries. Wait a minute and try again.",
+        notAllowed: "You don't have permission to do that.",
+        seatLimit: "All your seats are in use. Add seats or free one first.",
+        tooLarge: "That file is too large.",
+    },
+
     // Document metadata: browser tab title and the copy that shows when a link
     // to the Command Center is unfurled in Slack/WhatsApp/etc.
     meta: {

@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase"
 import { useT } from "@/i18n/LocaleProvider"
 import { GetTheApp } from "@/components/GetTheApp"
 import type { Dict } from "@/i18n"
+import { userError } from "@/lib/userError"
 
 const INPUT = "w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-accent)] transition-colors"
 const BTN   = "w-full py-2.5 bg-[var(--btn-bg)] hover:bg-[var(--btn-hover)] text-[var(--btn-ink)] text-sm font-medium rounded-lg transition-colors disabled:opacity-60"
@@ -148,11 +149,11 @@ function AcceptInviteContent() {
                 setStatus("error")
                 setMessage(body.error?.code === "invite_revoked"
                     ? t.acceptInvite.revokedLink
-                    : body.error?.message ?? body.error ?? t.acceptInvite.acceptFailed)
+                    : userError(body, t, t.acceptInvite.acceptFailed))
             }
         } catch (e) {
             setStatus("error")
-            setMessage((e as Error).message)
+            setMessage(userError(e, t, t.acceptInvite.acceptFailed))
         }
     }
 
@@ -197,11 +198,11 @@ function AcceptInviteContent() {
         try {
             if (mode === "signin") {
                 const { error } = await supabase.auth.signInWithPassword({ email, password })
-                if (error) { setMessage(error.message); return }
+                if (error) { setMessage(userError(error, t)); return }
                 await acceptInvite()
             } else {
                 const { data, error } = await supabase.auth.signUp({ email, password })
-                if (error) { setMessage(error.message); return }
+                if (error) { setMessage(userError(error, t)); return }
                 if (data.session) {
                     await acceptInvite()
                 } else {

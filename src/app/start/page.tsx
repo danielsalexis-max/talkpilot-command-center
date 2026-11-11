@@ -15,6 +15,7 @@ import { ingestKnowledgeInlineVerbose } from "@/lib/orgBrain"
 import { track, identifyTeamsUser, groupOrg, initAdPixels, trackAdConversion, hjStateChange } from "@/lib/teamsAnalytics"
 import { useT, useLocale } from "@/i18n/LocaleProvider"
 import type { Dict } from "@/i18n"
+import { userError } from "@/lib/userError"
 
 /// /start — self-serve Teams onboarding (D-163; one question per screen since
 /// D-610, in the Khu B2C onboarding's language: one big question, large option
@@ -673,7 +674,7 @@ export default function StartPage() {
             if (member) { router.replace("/"); return }
             setScreen("team")
         } catch (e) {
-            setError((e as Error).message)
+            setError(userError(e, t))
         } finally {
             setBusy(false)
         }
@@ -850,7 +851,7 @@ export default function StartPage() {
         } catch (e) {
             const msg = (e as Error).message
             if (msg.includes("already part")) { router.replace("/"); return }
-            setError(msg)
+            setError(userError(e, t))
         } finally {
             setBusy(false)
         }
@@ -868,7 +869,7 @@ export default function StartPage() {
             if (res?.url) { window.location.href = res.url as string; return }
             setError(t.start.checkoutFailed)
         } catch (e) {
-            setError((e as Error).message)
+            setError(userError(e, t))
         } finally {
             setCheckoutBusy(false)
         }

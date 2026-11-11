@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useLocale } from "@/i18n/LocaleProvider"
+import { userError } from "@/lib/userError"
 import { starterKitsFor, applyStarterKit, VERTICALS, type StarterKit, type Vertical } from "@/lib/starterKit"
 
 /// Preset playbooks, inside the Playbooks tab.
@@ -50,7 +51,7 @@ export function StarterKitPicker({
         setBusy(kit.key); setMsg(null)
         const err = await applyStarterKit(orgId, kit)
         setBusy(null)
-        if (err) { setMsg(err); setIsErr(true); return }
+        if (err) { setMsg(userError(err, t)); setIsErr(true); return }
         setMsg(t.tabs.playbooks.presetApplied(kit.title)); setIsErr(false)
         onApplied()
     }
