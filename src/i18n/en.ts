@@ -284,8 +284,8 @@ export const en = {
             options: { justme: "Just me, for now", s2_5: "2–5 people", s6_20: "6–20 people", s21p: "21 or more" },
         },
         win: {
-            title: "What would make this pilot a win?",
-            sub: "Pick all that apply — we'll keep score against them during your 30 days.",
+            title: "What would make TalkPilot a win for your team?",
+            sub: "Pick all that apply, so we know what success looks like for you.",
             options: {
                 close: "Close rate up 10%+",
                 usage: "Reps using it on 50%+ of their calls",

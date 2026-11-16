@@ -273,8 +273,8 @@ export const es: Dict = {
             options: { justme: "Solo yo, por ahora", s2_5: "2–5 personas", s6_20: "6–20 personas", s21p: "21 o más" },
         },
         win: {
-            title: "¿Qué haría de este piloto un éxito?",
-            sub: "Elige todos los que apliquen — llevaremos la cuenta contra eso durante tus 30 días.",
+            title: "¿Qué haría que TalkPilot sea un éxito para tu equipo?",
+            sub: "Elige todos los que apliquen para que sepamos qué es un buen resultado para ti.",
             options: {
                 close: "Subir el cierre 10%+",
                 usage: "Que los reps lo usen en el 50%+ de sus llamadas",
