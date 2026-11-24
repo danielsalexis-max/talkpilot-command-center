@@ -1,0 +1,1000 @@
+openapi: 3.1.0
+# Canonical copy. The Command Center serves a copy at teams.talkpilot.co/openapi/talkpilot-teams-v1.yaml
+# (command-center/public/openapi/); change both in the same change (D-1063).
+info:
+  title: TalkPilot Teams API
+  version: "1.0.0"
+  summary: Read calls, transcripts and scores, change playbooks and scoring, and receive webhooks.
+  description: |
+    System-to-system API for TalkPilot Teams Enterprise workspaces.
+
+    * **Auth:** `Authorization: Bearer tpk_live_...`. Keys are created by an owner or admin in the
+      Command Center (Settings › API & webhooks), carry scopes, and belong to the workspace, not a person.
+      Reads made with a key are never shown to reps as someone opening their call.
+    * **Format:** JSON (UTF-8), date-times in UTC ISO 8601, ids are UUIDs.
+    * **Pagination:** `limit` (default 50, max 200) and an opaque `cursor`; responses carry `next_cursor`
+      (null on the last page).
+    * **Errors:** standard HTTP status with `{"error": {"code", "message", "request_id"}}`.
+    * **Rate limit:** 120 requests per minute per key. Every response has `RateLimit-Limit`,
+      `RateLimit-Remaining` and `RateLimit-Reset`; a 429 adds `Retry-After` (seconds).
+    * **Idempotency:** every write accepts `Idempotency-Key` (up to 255 characters, kept 24 h). The same
+      key with the same request returns the first answer (`Idempotent-Replayed: true`); with a different
+      request it is a 409.
+    * **Versioning:** breaking changes only in a new version (`/v2`), with at least 90 days notice and a
+      changelog entry.
+  contact:
+    name: TalkPilot
+    email: hello@talkpilot.co
+servers:
+  - url: https://hmmhrddmfbhdkaiesgrd.supabase.co/functions/v1/api-v1
+    description: Production
+security:
+  - apiKey: []
+tags:
+  - name: Sessions
+  - name: Transcripts
+  - name: Scoring
+  - name: Configuration
+  - name: Exports
+  - name: Webhooks
+paths:
+  /v1/me:
+    get:
+      summary: The key making the call
+      operationId: getMe
+      responses:
+        "200":
+          description: Workspace and key
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workspace_id: { type: string, format: uuid }
+                  api_key:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      name: { type: string }
+                      scopes: { type: array, items: { $ref: "#/components/schemas/Scope" } }
+                  transcripts_visible: { type: boolean }
+                  rate_limit_per_minute: { type: integer }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/sessions:
+    get:
+      tags: [Sessions]
+      summary: List sessions
+      description: |
+        Every session of the workspace, in every status. Totals per member and period match the
+        Command Center's Calls view. Default order: `started_at` newest first. With `updated_since`
+        the order is `updated_at` oldest first, for incremental sync: store the last `updated_at`
+        you saw and pass it next time.
+      operationId: listSessions
+      x-scope: read:sessions
+      parameters:
+        - { name: since, in: query, schema: { type: string, format: date-time }, description: "started_at >= since" }
+        - { name: until, in: query, schema: { type: string, format: date-time }, description: "started_at < until" }
+        - { name: updated_since, in: query, schema: { type: string, format: date-time } }
+        - { name: member_id, in: query, schema: { type: string, format: uuid } }
+        - name: status
+          in: query
+          description: One or more, comma separated.
+          schema: { type: string, example: "not_scored,too_short" }
+        - { name: call_type, in: query, schema: { $ref: "#/components/schemas/CallType" } }
+        - { name: playbook_id, in: query, schema: { type: string, format: uuid } }
+        - name: expand
+          in: query
+          description: "`score` adds steps, missed rules and highlights with seconds; caps `limit` at 50."
+          schema: { type: string, enum: [score] }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of sessions
+          headers: { $ref: "#/components/headers/RateLimit" }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Session" } }
+                  next_cursor: { type: [string, "null"] }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/sessions/{session_id}:
+    get:
+      tags: [Sessions]
+      summary: Get one session with its full score
+      operationId: getSession
+      x-scope: read:sessions
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      responses:
+        "200":
+          description: The session
+          content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/sessions/{session_id}/transcript:
+    get:
+      tags: [Transcripts]
+      summary: Get a session's transcript
+      description: |
+        Needs `read:transcripts` and the workspace's transcript visibility set to "Full transcripts"
+        (otherwise 403 `transcripts_not_visible`). Available as soon as the call is saved.
+      operationId: getTranscript
+      x-scope: read:transcripts
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      responses:
+        "200":
+          description: Segments
+          content: { application/json: { schema: { $ref: "#/components/schemas/Transcript" } } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/transcripts:batch:
+    post:
+      tags: [Transcripts]
+      summary: Get up to 50 transcripts at once
+      operationId: batchTranscripts
+      x-scope: read:transcripts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_ids]
+              properties:
+                session_ids: { type: array, maxItems: 50, items: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Transcripts found, and the ids that were not
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Transcript" } }
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        session_id: { type: string, format: uuid }
+                        code: { type: string, example: not_found }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/sessions/{session_id}/score:
+    post:
+      tags: [Scoring]
+      summary: Score or re-score a session
+      description: |
+        Starts scoring in the background and answers 202 with a `job_id`. The result arrives as
+        `session.scored` (or `session.not_scored` when the call is under the floors: shorter than
+        5 minutes, or the rep said under 10% of the words). Works on scored calls too: the earlier
+        score is kept (`GET /v1/sessions/{id}/score-history`). Re-scoring skips the call-type check,
+        so a call skipped as onboarding or internal is graded. A manager's exclusion of a scored call
+        stays in place.
+      operationId: scoreSession
+      x-scope: write:scoring
+      parameters: [{ $ref: "#/components/parameters/SessionId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                playbook_id:
+                  type: [string, "null"]
+                  format: uuid
+                  description: An active playbook of this workspace. Omit to let TalkPilot pick (the rep's pick, else the playbook for the detected stage).
+      responses:
+        "202":
+          description: Scoring started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id: { type: string, format: uuid }
+                  session_id: { type: string, format: uuid }
+                  status: { type: string, enum: [running] }
+                  playbook_id: { type: [string, "null"], format: uuid }
+        "409": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/sessions/{session_id}/score-history:
+    get:
+      tags: [Scoring]
+      summary: Earlier scores of a session
+      operationId: scoreHistory
+      x-scope: read:sessions
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      responses:
+        "200":
+          description: Newest replaced score first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        history_id: { type: string, format: uuid }
+                        replaced_at: { type: string, format: date-time }
+                        status: { $ref: "#/components/schemas/Status" }
+                        status_reason: { $ref: "#/components/schemas/StatusReason" }
+                        playbook_id: { type: [string, "null"], format: uuid }
+                        score: { $ref: "#/components/schemas/Score" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/sessions/{session_id}/exclude:
+    post:
+      tags: [Scoring]
+      summary: Leave a session out of the team's averages
+      description: Same as "Don't count this" in the Command Center. The session and its score stay.
+      operationId: excludeSession
+      x-scope: write:sessions
+      parameters: [{ $ref: "#/components/parameters/SessionId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { reason: { type: string, maxLength: 500 } } }
+      responses:
+        "200": { description: The session, now excluded, content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/sessions/{session_id}/include:
+    post:
+      tags: [Scoring]
+      summary: Count a session again
+      description: "Same as \"Count it again\". A `not_scored` or `failed` session is re-scored (`rescore_started: true`)."
+      operationId: includeSession
+      x-scope: write:sessions
+      parameters: [{ $ref: "#/components/parameters/SessionId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200":
+          description: The session
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Session"
+                  - type: object
+                    properties: { rescore_started: { type: boolean } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/members:
+    get:
+      tags: [Configuration]
+      summary: Members, their playbook policy and default playbook
+      operationId: listMembers
+      x-scope: read:config
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [active, invited, suspended, removed] } }
+      responses:
+        "200":
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { type: array, items: { $ref: "#/components/schemas/Member" } } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/members/{member_id}/default-playbook:
+    put:
+      tags: [Configuration]
+      summary: Set (or clear) the playbook a member's calls start on
+      operationId: setDefaultPlaybook
+      x-scope: write:playbooks
+      parameters:
+        - { name: member_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [playbook_id]
+              properties: { playbook_id: { type: [string, "null"], format: uuid } }
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  member_id: { type: string, format: uuid }
+                  default_playbook_id: { type: [string, "null"], format: uuid }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/playbooks:
+    get:
+      tags: [Configuration]
+      summary: Playbooks with their assignments
+      operationId: listPlaybooks
+      x-scope: read:config
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [active, draft, archived] } }
+      responses:
+        "200":
+          description: Playbooks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { type: array, items: { $ref: "#/components/schemas/Playbook" } } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/playbooks/{playbook_id}:
+    get:
+      tags: [Configuration]
+      summary: One playbook
+      operationId: getPlaybook
+      x-scope: read:config
+      parameters: [{ $ref: "#/components/parameters/PlaybookId" }]
+      responses:
+        "200": { description: The playbook, content: { application/json: { schema: { $ref: "#/components/schemas/Playbook" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/playbooks/{playbook_id}/assignments:
+    get:
+      tags: [Configuration]
+      summary: Who a playbook applies to
+      operationId: getAssignments
+      x-scope: read:config
+      parameters: [{ $ref: "#/components/parameters/PlaybookId" }]
+      responses:
+        "200": { $ref: "#/components/responses/Assignments" }
+        default: { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Configuration]
+      summary: Replace who a playbook applies to
+      description: The list replaces the playbook's assignments; `[]` removes them all. Person beats team beats workspace.
+      operationId: putAssignments
+      x-scope: write:playbooks
+      parameters: [{ $ref: "#/components/parameters/PlaybookId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignments]
+              properties:
+                assignments: { type: array, items: { $ref: "#/components/schemas/Assignment" } }
+      responses:
+        "200": { $ref: "#/components/responses/Assignments" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/playbooks/{playbook_id}/activate:
+    post:
+      tags: [Configuration]
+      summary: Turn a playbook on
+      description: |
+        Same rule as the Command Center: only one active playbook may have no assignments (the
+        workspace default). Activating an unassigned playbook moves any other unassigned active one
+        back to draft; their ids are in `demoted_playbook_ids`.
+      operationId: activatePlaybook
+      x-scope: write:playbooks
+      parameters: [{ $ref: "#/components/parameters/PlaybookId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200": { description: The playbook, content: { application/json: { schema: { $ref: "#/components/schemas/Playbook" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/playbooks/{playbook_id}/deactivate:
+    post:
+      tags: [Configuration]
+      summary: Turn a playbook off (back to draft)
+      operationId: deactivatePlaybook
+      x-scope: write:playbooks
+      parameters: [{ $ref: "#/components/parameters/PlaybookId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200": { description: The playbook, content: { application/json: { schema: { $ref: "#/components/schemas/Playbook" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/vocabulary:
+    get:
+      tags: [Configuration]
+      summary: The workspace's custom vocabulary
+      operationId: getVocabulary
+      x-scope: read:config
+      responses:
+        "200": { $ref: "#/components/responses/Vocabulary" }
+        default: { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Configuration]
+      summary: Replace the workspace's custom vocabulary
+      description: Product names, competitors and jargon the transcription should hear right. Up to 100 terms of up to 100 characters; the list replaces the current one.
+      operationId: putVocabulary
+      x-scope: write:playbooks
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [terms]
+              properties: { terms: { type: array, maxItems: 100, items: { type: string, maxLength: 100 } } }
+      responses:
+        "200": { $ref: "#/components/responses/Vocabulary" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/audit-log:
+    get:
+      tags: [Configuration]
+      summary: Configuration changes, with who made them
+      operationId: auditLog
+      x-scope: read:config
+      parameters:
+        - { name: since, in: query, schema: { type: string, format: date-time } }
+        - { name: until, in: query, schema: { type: string, format: date-time } }
+        - { name: action, in: query, schema: { type: string, example: "playbook.*" }, description: "Exact action, or a prefix ending in .*" }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } }
+                  next_cursor: { type: [string, "null"] }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/exports:
+    post:
+      tags: [Exports]
+      summary: Start a full workspace export
+      description: Same content as the Command Center's export, with transcripts when visibility allows. One export at a time.
+      operationId: createExport
+      x-scope: read:sessions
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "202":
+          description: Export started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  export_id: { type: string, format: uuid }
+                  status: { type: string, enum: [queued] }
+                  created_at: { type: string, format: date-time }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/exports/{export_id}:
+    get:
+      tags: [Exports]
+      summary: Export status and download link
+      description: When `status` is `succeeded`, `download_url` is a signed link valid for 1 hour (ask again for a new one). Files are kept 7 days.
+      operationId: getExport
+      x-scope: read:sessions
+      parameters:
+        - { name: export_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: The export, content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/jobs/{job_id}:
+    get:
+      tags: [Scoring]
+      summary: A score or export job
+      operationId: getJob
+      parameters:
+        - { name: job_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: The job, content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/webhooks:
+    get:
+      tags: [Webhooks]
+      summary: List webhooks
+      operationId: listWebhooks
+      x-scope: admin:webhooks
+      responses:
+        "200":
+          description: Webhooks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { type: array, items: { $ref: "#/components/schemas/Webhook" } } }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [Webhooks]
+      summary: Add a webhook
+      description: The answer carries the signing `secret` once. Up to 10 webhooks per workspace.
+      operationId: createWebhook
+      x-scope: admin:webhooks
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/WebhookInput" } } }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Webhook"
+                  - type: object
+                    properties: { secret: { type: string, example: "whsec_..." } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/webhooks/{webhook_id}:
+    get:
+      tags: [Webhooks]
+      summary: One webhook
+      operationId: getWebhook
+      x-scope: admin:webhooks
+      parameters: [{ $ref: "#/components/parameters/WebhookId" }]
+      responses:
+        "200": { description: The webhook, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Webhooks]
+      summary: Change URL, events, note, or pause it
+      operationId: updateWebhook
+      x-scope: admin:webhooks
+      parameters: [{ $ref: "#/components/parameters/WebhookId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string, format: uri }
+                events: { type: array, items: { $ref: "#/components/schemas/EventType" } }
+                description: { type: [string, "null"] }
+                active: { type: boolean }
+      responses:
+        "200": { description: The webhook, content: { application/json: { schema: { $ref: "#/components/schemas/Webhook" } } } }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [Webhooks]
+      summary: Delete a webhook and its delivery log
+      operationId: deleteWebhook
+      x-scope: admin:webhooks
+      parameters: [{ $ref: "#/components/parameters/WebhookId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "204": { description: Deleted }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/webhooks/{webhook_id}/rotate-secret:
+    post:
+      tags: [Webhooks]
+      summary: New signing secret; the old one keeps signing for 24 hours
+      operationId: rotateWebhookSecret
+      x-scope: admin:webhooks
+      parameters: [{ $ref: "#/components/parameters/WebhookId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200":
+          description: The new secret (shown once)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhook_id: { type: string, format: uuid }
+                  secret: { type: string }
+                  previous_secret_expires_at: { type: string, format: date-time }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/webhooks/{webhook_id}/test:
+    post:
+      tags: [Webhooks]
+      summary: Send a test event
+      description: "Sends the webhook's first subscribed event type, built from the workspace's most recent session, with `\"test\": true`."
+      operationId: testWebhook
+      x-scope: admin:webhooks
+      parameters: [{ $ref: "#/components/parameters/WebhookId" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { event_id: { type: string }, webhook_id: { type: string, format: uuid } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/webhooks/{webhook_id}/deliveries:
+    get:
+      tags: [Webhooks]
+      summary: Delivery log
+      operationId: listDeliveries
+      x-scope: admin:webhooks
+      parameters:
+        - $ref: "#/components/parameters/WebhookId"
+        - { name: status, in: query, schema: { type: string, enum: [pending, succeeded, failed] } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: Newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Delivery" } }
+                  next_cursor: { type: [string, "null"] }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/webhooks/{webhook_id}/deliveries/{delivery_id}/resend:
+    post:
+      tags: [Webhooks]
+      summary: Send a delivery again (same event id and body)
+      operationId: resendDelivery
+      x-scope: admin:webhooks
+      parameters:
+        - $ref: "#/components/parameters/WebhookId"
+        - { name: delivery_id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  delivery_id: { type: string, format: uuid }
+                  resent_from: { type: string, format: uuid }
+        default: { $ref: "#/components/responses/Error" }
+webhooks:
+  sessionEvent:
+    post:
+      summary: A session event
+      description: |
+        Headers: `TalkPilot-Event-Id`, `TalkPilot-Event-Type`, `TalkPilot-Delivery-Id` and
+        `TalkPilot-Signature: t=<unix seconds>,v1=<hex>[,v1=<hex>]`, where each `v1` is
+        HMAC-SHA256(secret, `t + "." + raw body`). During a secret rotation both secrets sign.
+        Reject a `t` more than 5 minutes from your clock. Answer 2xx within 10 seconds; otherwise
+        we retry at 1 min, 5 min, 30 min, 2 h, 6 h, 12 h and 12 h (about 33 h in all). The same
+        event can arrive more than once and out of order: dedupe on `id`, and let the session's
+        `updated_at` decide which version is current.
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/Event" } } }
+      responses:
+        "200": { description: Any 2xx confirms the delivery }
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: tpk_live_<48 hex>
+  parameters:
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+    Cursor: { name: cursor, in: query, schema: { type: string }, description: The `next_cursor` of the previous page, as returned. }
+    SessionId: { name: session_id, in: path, required: true, schema: { type: string, format: uuid } }
+    PlaybookId: { name: playbook_id, in: path, required: true, schema: { type: string, format: uuid } }
+    WebhookId: { name: webhook_id, in: path, required: true, schema: { type: string, format: uuid } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 255 } }
+  headers:
+    RateLimit:
+      description: "RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset (seconds) on every response"
+      schema: { type: string }
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message, request_id]
+                properties:
+                  code:
+                    type: string
+                    description: |
+                      invalid_request (400), unauthorized (401), insufficient_scope, api_not_enabled,
+                      transcripts_not_visible (403), not_found (404), method_not_allowed (405),
+                      too_many_keys, score_in_progress, export_in_progress, idempotency_key_reused,
+                      idempotency_in_progress, playbook_archived, webhook_inactive (409),
+                      payload_too_large (413), validation_failed, playbook_not_active (422),
+                      rate_limited (429), internal_error (500), unavailable (503)
+                  message: { type: string }
+                  request_id: { type: string, example: req_8b0c5f0e2a9d4f0c9c1d7e21 }
+    Assignments:
+      description: Assignments
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              playbook_id: { type: string, format: uuid }
+              data: { type: array, items: { $ref: "#/components/schemas/Assignment" } }
+    Vocabulary:
+      description: Terms, oldest first
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              terms: { type: array, items: { type: string } }
+  schemas:
+    Scope:
+      type: string
+      enum: [read:sessions, read:transcripts, read:config, write:scoring, write:playbooks, write:sessions, admin:webhooks]
+    Status:
+      type: string
+      enum: [processing, scored, not_scored, too_short, failed]
+      description: "`processing`: the call is saved and scoring has not answered yet (usually under 2 minutes)."
+    StatusReason:
+      type: [string, "null"]
+      enum: [no_playbook, below_min_duration, not_sales, no_audio, rep_barely_spoke, processing_error, internal, null]
+      description: |
+        Null when `scored` or `processing`. `below_min_duration`: under 5 minutes of talk.
+        `not_sales`: triage found a service, onboarding or other non-sales call. `internal`: a meeting
+        with colleagues. `no_audio`: the rep's voice was not captured, the call was on hold most of the time, or the transcript was unusable.
+        `rep_barely_spoke`: the rep said under 10% of the words. `processing_error`: scoring failed;
+        `POST /score` retries it. `no_playbook` is reserved: today a call with no
+        playbook is still scored (adherence is null).
+    CallType:
+      type: string
+      enum: [sales, service, internal, practice, test, other, unknown]
+      description: "Detected by TalkPilot. `service` covers onboarding and customer success. `unknown`: not classified (older calls that were not scored)."
+    Session:
+      type: object
+      required: [session_id, member_id, started_at, duration_seconds, status, call_type, capture_source, audio_channels, updated_at]
+      properties:
+        session_id: { type: string, format: uuid }
+        member_id: { type: string, format: uuid, description: The member who ran the call. }
+        title: { type: [string, "null"] }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: [string, "null"], format: date-time }
+        duration_seconds: { type: integer }
+        status: { $ref: "#/components/schemas/Status" }
+        status_reason: { $ref: "#/components/schemas/StatusReason" }
+        call_type: { $ref: "#/components/schemas/CallType" }
+        detected_stage: { type: [string, "null"], example: demo }
+        playbook_id: { type: [string, "null"], format: uuid, description: The playbook the score was graded against. }
+        capture_source:
+          type: string
+          enum: [desktop_manual, desktop_notification, calendar, mobile_manual, meet_bot, unknown]
+          description: The apps report `desktop_notification` and `calendar` once they send it; until then desktop calls read `desktop_manual`.
+        platform: { type: [string, "null"], enum: [macos, windows, ios, android, null] }
+        audio_channels:
+          type: object
+          properties:
+            mic: { type: boolean, description: The rep's microphone was captured. }
+            system: { type: boolean, description: The call's audio (the other side) was captured. }
+        audio_channels_source:
+          type: string
+          enum: [measured, inferred]
+          description: "`inferred`: worked out from who was transcribed, until the apps report each channel."
+        talk_ratio:
+          type: [object, "null"]
+          properties:
+            member: { type: number, description: Share of the words the rep said (0-1). }
+            others: { type: number }
+        score: { $ref: "#/components/schemas/Score" }
+        meeting:
+          type: [object, "null"]
+          properties:
+            url: { type: [string, "null"] }
+            calendar_event_id: { type: [string, "null"] }
+            platform: { type: [string, "null"], enum: [google_meet, zoom, microsoft_teams, webex, other, null] }
+            participants:
+              type: array
+              items:
+                type: object
+                properties:
+                  email: { type: string }
+                  name: { type: [string, "null"] }
+        excluded_at: { type: [string, "null"], format: date-time }
+        excluded_reason: { type: [string, "null"] }
+        excluded_by: { type: [string, "null"], enum: [system, member, null] }
+        transcript_url: { type: string, description: "On `GET /v1/sessions/{id}` and `session.scored`." }
+        updated_at: { type: string, format: date-time }
+    Score:
+      type: [object, "null"]
+      description: Null unless `status` is `scored`. `steps`, `missed_rules` and `highlights` come on the detail endpoint, `session.scored` and `expand=score`.
+      properties:
+        overall: { type: [integer, "null"], minimum: 0, maximum: 100 }
+        adherence: { type: [integer, "null"], description: Null when no playbook applied. }
+        objection_handling: { type: [integer, "null"] }
+        accuracy: { type: [integer, "null"], description: Null when no checkable claim was made. }
+        scored_at: { type: string, format: date-time }
+        model_version: { type: [string, "null"] }
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              name: { type: [string, "null"] }
+              completed: { type: boolean }
+              missed: { type: array, items: { type: string } }
+              evidence: { type: [string, "null"] }
+              evidence_refs: { type: array, items: { $ref: "#/components/schemas/TimeRef" } }
+        missed_rules:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/TimeRef"
+              - type: object
+                properties:
+                  rule: { type: [string, "null"] }
+                  severity: { type: [string, "null"] }
+                  quote: { type: [string, "null"] }
+        highlights:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/TimeRef"
+              - type: object
+                properties:
+                  kind: { type: [string, "null"], enum: [best, worst, flag, null] }
+                  label: { type: [string, "null"] }
+        growth_areas: { type: array, items: { type: string } }
+    TimeRef:
+      type: object
+      description: Seconds from the start of the transcript. Null when the workspace hides transcripts (seconds are computed from it).
+      properties:
+        start_seconds: { type: [number, "null"] }
+        end_seconds: { type: [number, "null"] }
+        lines: { type: [string, "null"], description: Transcript segment indexes, e.g. "76-104". }
+    Transcript:
+      type: object
+      properties:
+        session_id: { type: string, format: uuid }
+        member_id: { type: [string, "null"], format: uuid }
+        available: { type: boolean }
+        language: { type: [string, "null"] }
+        segments:
+          type: array
+          items:
+            type: object
+            properties:
+              index: { type: integer }
+              start_seconds: { type: [number, "null"] }
+              end_seconds: { type: [number, "null"], description: Where the next segment starts; the last one is estimated from its length. }
+              speaker_id: { type: string, description: "`member` for the rep; `speaker_<n>` for others as told apart by transcription, or `other`." }
+              speaker_name: { type: [string, "null"], description: The rep's name; null for others (names of the other side are not known yet). }
+              speaker_role: { type: string, enum: [member, other] }
+              text: { type: string }
+    Member:
+      type: object
+      properties:
+        member_id: { type: string, format: uuid }
+        email: { type: [string, "null"] }
+        name: { type: [string, "null"] }
+        role: { type: string, enum: [owner, admin, manager, member] }
+        status: { type: string }
+        team_id: { type: [string, "null"], format: uuid }
+        joined_at: { type: [string, "null"], format: date-time }
+        uses_seat: { type: boolean }
+        playbook_policy: { type: string, enum: [enforced, rep_choice] }
+        default_playbook_id: { type: [string, "null"], format: uuid }
+        assigned_playbook_id: { type: [string, "null"], format: uuid, description: What the member's calls start on today. }
+        assignments: { type: array, items: { type: string, format: uuid }, description: Playbooks assigned to this person directly. }
+    Playbook:
+      type: object
+      properties:
+        playbook_id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [active, draft, archived] }
+        version: { type: integer }
+        call_type: { type: [string, "null"] }
+        sales_stage: { type: [string, "null"] }
+        methodology: { type: [string, "null"] }
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: [string, "null"] }
+              name: { type: [string, "null"] }
+              description: { type: [string, "null"] }
+              position: { type: integer }
+              required_items: { type: array, items: {} }
+        guardrails: {}
+        assignments: { type: array, items: { $ref: "#/components/schemas/Assignment" } }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Assignment:
+      type: object
+      required: [scope]
+      properties:
+        scope: { type: string, enum: [workspace, team, member] }
+        team_id: { type: [string, "null"], format: uuid }
+        member_id: { type: [string, "null"], format: uuid }
+    AuditEntry:
+      type: object
+      properties:
+        id: { type: string }
+        action: { type: string, example: playbook.activated }
+        actor:
+          type: object
+          properties:
+            type: { type: string, enum: [member, api_key, mcp, system] }
+            member_id: { type: string, format: uuid }
+            api_key_id: { type: string, format: uuid }
+            email: { type: [string, "null"] }
+            name: { type: [string, "null"] }
+        target: { type: [string, "null"] }
+        details: { type: object }
+        created_at: { type: string, format: date-time }
+    Job:
+      type: object
+      properties:
+        job_id: { type: string, format: uuid }
+        export_id: { type: string, format: uuid }
+        kind: { type: string, enum: [score, export] }
+        status: { type: string, enum: [queued, running, succeeded, failed] }
+        session_id: { type: string, format: uuid }
+        params: { type: object }
+        result: { type: [object, "null"] }
+        error: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        started_at: { type: [string, "null"], format: date-time }
+        finished_at: { type: [string, "null"], format: date-time }
+        download_url: { type: [string, "null"] }
+        download_url_expires_in: { type: [integer, "null"] }
+        file_expires_at: { type: [string, "null"], format: date-time }
+    EventType:
+      type: string
+      enum: [session.started, session.completed, session.scored, session.not_scored, session.failed, session.audio_warning]
+    WebhookInput:
+      type: object
+      required: [url, events]
+      properties:
+        url: { type: string, format: uri, description: A public https:// address. }
+        events: { type: array, items: { $ref: "#/components/schemas/EventType" } }
+        description: { type: [string, "null"] }
+    Webhook:
+      type: object
+      properties:
+        webhook_id: { type: string, format: uuid }
+        url: { type: string }
+        description: { type: [string, "null"] }
+        events: { type: array, items: { $ref: "#/components/schemas/EventType" } }
+        active: { type: boolean }
+        previous_secret_expires_at: { type: [string, "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Delivery:
+      type: object
+      properties:
+        delivery_id: { type: string, format: uuid }
+        event_id: { type: string }
+        event_type: { $ref: "#/components/schemas/EventType" }
+        session_id: { type: [string, "null"], format: uuid }
+        test: { type: boolean }
+        status: { type: string, enum: [pending, succeeded, failed] }
+        attempt_count: { type: integer }
+        last_status_code: { type: [integer, "null"] }
+        last_error: { type: [string, "null"] }
+        next_attempt_at: { type: [string, "null"], format: date-time }
+        attempts:
+          type: array
+          items:
+            type: object
+            properties:
+              at: { type: string, format: date-time }
+              status_code: { type: [integer, "null"] }
+              error: { type: [string, "null"] }
+              duration_ms: { type: integer }
+        created_at: { type: string, format: date-time }
+        delivered_at: { type: [string, "null"], format: date-time }
+    Event:
+      type: object
+      required: [id, type, created_at, workspace_id, data]
+      properties:
+        id: { type: string, example: evt_9b2e1f0c4d8a4e7f9a1b2c3d4e5f6a7b }
+        type: { $ref: "#/components/schemas/EventType" }
+        created_at: { type: string, format: date-time }
+        workspace_id: { type: string, format: uuid }
+        test: { type: boolean }
+        data:
+          type: object
+          properties:
+            session:
+              description: |
+                The Session as it is when the event is first sent. `session.completed`: status is usually
+                `processing`. `session.scored`: full score with seconds, and `transcript_url`.
+                `session.started` and `session.audio_warning` arrive while the call runs, before it is saved:
+                `{session_id, member_id, status: "processing"}`.
+              oneOf:
+                - $ref: "#/components/schemas/Session"
+                - type: "null"
+            session_id: { type: string, description: session.started }
+            member_id: { type: string, description: session.started }
+            capture_source: { type: [string, "null"], description: session.started }
+            playbook_id: { type: [string, "null"], description: session.started }
+            channel: { type: string, enum: [mic, system], description: session.audio_warning }
+            started_at_seconds: { type: number, description: session.audio_warning, seconds into the call }
+            likely_cause: { type: [string, "null"], description: session.audio_warning }

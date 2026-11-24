@@ -103,6 +103,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         || pathname.startsWith("/connected")
         || pathname.startsWith("/appsumo")
         || pathname.startsWith("/oauth")
+        || pathname.startsWith("/developers")   // D-1063: public API reference
 
     // A brand-new account has nowhere to be yet: it used to land on the full
     // dashboard — nav, Calls, Settings, all empty — with a small "no workspace"

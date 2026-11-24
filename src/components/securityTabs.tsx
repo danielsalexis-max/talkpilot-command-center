@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import type { OrgInfo } from "@/components/orgTabs"
-import { useT } from "@/i18n/LocaleProvider"
+import { useT, useLocale } from "@/i18n/LocaleProvider"
+import { apiWebhooksCopy } from "@/lib/apiWebhooksCopy"
 import { intlLocale, clientLocale } from "@/i18n"
 import { EmailLink } from "@/components/EmailLink"
 import { userError } from "@/lib/userError"
@@ -390,6 +391,11 @@ interface AuditRow { id: string; action: string; actor_id: string | null; meta: 
 
 export function AuditTab({ orgId }: { orgId: string }) {
     const t = useT()
+    const { locale } = useLocale()
+    // D-1063: a change made through the API has no person behind it; show the key.
+    const actorOf = (r: AuditRow) => r.actor_id ? (dir.get(r.actor_id) ?? t.audit.actorGone)
+        : r.meta?.via === "api" ? apiWebhooksCopy(locale).auditActor(String(r.meta.api_key_name ?? ""))
+        : t.audit.actorSystem
     const [rows, setRows] = useState<AuditRow[]>([])
     const [dir, setDir] = useState<Map<string, string>>(new Map())
     const [q, setQ] = useState("")
@@ -462,7 +468,7 @@ export function AuditTab({ orgId }: { orgId: string }) {
                             <div className="min-w-0">
                                 <p className="text-sm font-medium text-[var(--color-text)]">{t.audit.actions[r.action] ?? r.action}</p>
                                 <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                                    {r.actor_id ? (dir.get(r.actor_id) ?? t.audit.actorGone) : t.audit.actorSystem}
+                                    {actorOf(r)}
                                     {r.meta && Object.keys(r.meta).length > 0 && (
                                         <> · <span className="font-mono text-[10.5px]">
                                             {Object.entries(r.meta).slice(0, 3).map(([k, v]) => `${k}=${String(v)}`).join(" ")}
