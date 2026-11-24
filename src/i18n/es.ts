@@ -798,7 +798,7 @@ export const es: Dict = {
         } as Record<string, string>,
         incompleteAudio: "Audio incompleto",
         onHold: "En pausa",
-        micLostFor: (n: number) => `No captamos tu micrófono durante ${n} min`,
+        micLostFor: (n: number) => `No captamos el micrófono del rep durante ${n} min`,
         systemLostFor: (n: number) => `No captamos a la otra persona durante ${n} min`,
         excludeAction: "No contar esta",
         includeAgain: "Volver a contarla",

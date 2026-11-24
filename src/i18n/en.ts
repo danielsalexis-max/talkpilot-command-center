@@ -840,7 +840,7 @@ export const en = {
         // A4 audio health (D-1060..D-1062): part of the call's audio was lost.
         incompleteAudio: "Incomplete audio",
         onHold: "On hold",
-        micLostFor: (n: number) => `Your mic wasn't captured for ${n} min`,
+        micLostFor: (n: number) => `The rep's mic wasn't captured for ${n} min`,
         systemLostFor: (n: number) => `The other side wasn't captured for ${n} min`,
         excludeAction: "Don't count this",
         includeAgain: "Count it again",
