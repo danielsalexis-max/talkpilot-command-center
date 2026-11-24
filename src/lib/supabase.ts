@@ -87,6 +87,19 @@ export interface Scorecard {
     user_name?: string
 }
 
+/// A4 audio health (D-1060..D-1062): `plus_conversations.audio_channels`, written
+/// by the apps when the call is saved. `system` fields are null on phones. The
+/// column may be missing or null; readers must treat both as "unknown".
+export interface AudioChannels {
+    v: number
+    mic: boolean | null
+    system: boolean | null
+    mic_lost_seconds: number | null
+    system_lost_seconds: number | null
+    held_seconds: number | null
+    live_seconds: number | null
+}
+
 export interface StageResult {
     completed: boolean
     evidence: string

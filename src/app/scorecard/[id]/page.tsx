@@ -5,7 +5,7 @@ import { useParams } from "next/navigation"
 import Link from "next/link"
 import {
     supabase, askAboutTranscript, type Scorecard, type ScorecardObjection,
-    type ScorecardClaim
+    type ScorecardClaim, type AudioChannels
 } from "@/lib/supabase"
 import { ScoreBadge, GradePill, VerdictPill } from "@/components/ScoreRing"
 import { AskPanel } from "@/components/AskPanel"
@@ -41,6 +41,7 @@ export default function ScorecardPage() {
     const [sentState, setSentState]   = useState<"ok" | "error" | null>(null)
     const [focus, setFocus]           = useState<Focus | null>(null)
     const [focusFallback, setFocusFallback] = useState(false)
+    const [audio, setAudio]           = useState<AudioChannels | null>(null)
 
     // Matches `set_scorecard_excluded` exactly — a broader gate here would just
     // surface the server's raw not_authorized. A rep cannot exclude their own
@@ -70,6 +71,7 @@ export default function ScorecardPage() {
                 .eq("id", id)
                 .single()
             setCard(sc as Scorecard)
+            if (sc?.session_source === "plus_conversations" && sc.session_id) loadAudio(sc.session_id)
             const { data: ctx } = await supabase.rpc("get_org_context")
             setRole((ctx?.member_role as string | null) ?? null)
 
@@ -83,6 +85,23 @@ export default function ScorecardPage() {
             if (f) { setFocus(f); setActiveTab("transcript"); loadTranscript(f) }
         } finally {
             setLoading(false)
+        }
+    }
+
+    /// A4 audio health. Best effort and never blocks the page: before the
+    /// migration lands the column doesn't exist (PostgREST errors), and a
+    /// manager below full tier can't read the row. Both just mean "unknown".
+    async function loadAudio(sessionId: string) {
+        try {
+            const { data, error } = await supabase
+                .from("plus_conversations")
+                .select("audio_channels")
+                .eq("id", sessionId)
+                .maybeSingle()
+            const ac = !error && data ? (data as { audio_channels?: unknown }).audio_channels : null
+            setAudio(ac && typeof ac === "object" ? ac as AudioChannels : null)
+        } catch {
+            setAudio(null)
         }
     }
 
@@ -139,6 +158,15 @@ export default function ScorecardPage() {
     const breaches  = card.guardrail_breaches ?? []
     const highlights = card.highlights ?? []
 
+    // A4: incomplete audio when the scorer said so, or the app's own record
+    // shows a side lost for most of the call.
+    const incompleteAudio = card.exclusion_reason === "no_rep_audio" || audio?.mic === false || audio?.system === false
+    const lostMin = (s: number | null | undefined) =>
+        typeof s === "number" && s > 0 ? Math.max(1, Math.round(s / 60)) : null
+    const micLostMin = lostMin(audio?.mic_lost_seconds)
+    const systemLostMin = lostMin(audio?.system_lost_seconds)
+    const onHold = card.exclusion_reason === "on_hold"
+
     return (
         <div className="space-y-6">
             {/* Breadcrumb */}
@@ -165,6 +193,30 @@ export default function ScorecardPage() {
                         {card.talk_ratio != null ? ` · ${t.scorecard.repSpoke(Math.round(card.talk_ratio * 100))}` : ""}
                         {card.call_type && t.data.callTypes[card.call_type] ? ` · ${t.data.callTypes[card.call_type]}` : ""}
                     </p>
+                    {incompleteAudio && (
+                        <div className="mt-2">
+                            <span className="text-xs px-2 py-0.5 rounded-full border border-amber-200 text-amber-700 bg-amber-50 whitespace-nowrap">
+                                {t.calls.incompleteAudio}
+                            </span>
+                            {micLostMin != null && (
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-1">{t.calls.micLostFor(micLostMin)}</p>
+                            )}
+                            {systemLostMin != null && (
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-1">{t.calls.systemLostFor(systemLostMin)}</p>
+                            )}
+                        </div>
+                    )}
+                    {onHold && (
+                        <div className="mt-2">
+                            <span className="text-xs px-2 py-0.5 rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)] bg-[var(--color-hover)] whitespace-nowrap">
+                                {t.calls.onHold}
+                            </span>
+                            {/* The "not counted" notice below already says why when excluded. */}
+                            {!card.excluded_at && (
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-1">{t.calls.notEvaluatedWhy.on_hold}</p>
+                            )}
+                        </div>
+                    )}
                 </div>
                 {canExclude && (
                     <button

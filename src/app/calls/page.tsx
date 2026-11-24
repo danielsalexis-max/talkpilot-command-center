@@ -28,6 +28,8 @@ function needsReview(c: Scorecard): boolean {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function excludedLabel(c: Scorecard, t: any): string {
     if (c.exclusion_reason === "too_short") return t.calls.excludedTooShort
+    if (c.exclusion_reason === "no_rep_audio") return t.calls.incompleteAudio
+    if (c.exclusion_reason === "on_hold") return t.calls.onHold
     if (c.status === "not_scored") {
         const type = c.call_type && t.data.callTypes[c.call_type]
         return type ?? t.calls.notEvaluated

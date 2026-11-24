@@ -835,7 +835,13 @@ export const en = {
             poor_transcript: "The transcript came out too garbled to judge anyone fairly, so it wasn't scored.",
             no_rep_audio: "The rep's side of the call wasn't picked up, so there was nothing to evaluate.",
             rep_barely_spoke: "Someone else led most of this call, so the rep wasn't scored.",
+            on_hold: "The session was on hold for most of the call.",
         } as Record<string, string>,
+        // A4 audio health (D-1060..D-1062): part of the call's audio was lost.
+        incompleteAudio: "Incomplete audio",
+        onHold: "On hold",
+        micLostFor: (n: number) => `Your mic wasn't captured for ${n} min`,
+        systemLostFor: (n: number) => `The other side wasn't captured for ${n} min`,
         excludeAction: "Don't count this",
         includeAgain: "Count it again",
         title: "Calls",
