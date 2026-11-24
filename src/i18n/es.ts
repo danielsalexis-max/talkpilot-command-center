@@ -994,8 +994,6 @@ export const es: Dict = {
             "playbook.unassigned": "Asignación de playbook quitada",
             "playbook.sales_stage_set": "Playbook movido a una etapa de venta",
             "sales_stages.updated": "Etapas de venta modificadas",
-            "vocabulary.added": "Palabras a reconocer agregadas",
-            "vocabulary.removed": "Palabra quitada de las palabras a reconocer",
             "objection.created": "Objeción agregada",
             "objection.updated": "Objeción editada",
             "objection.batch_saved": "Objeciones guardadas",
@@ -1186,18 +1184,6 @@ export const es: Dict = {
             fieldGuidance: "Guía aprobada",
             fieldStageName: "Nombre de la etapa",
             fieldStageDesc: "Descripción de la etapa",
-        },
-        // A5 (REQ-18): palabras del espacio para la transcripción.
-        vocabulary: {
-            title: "Palabras a reconocer",
-            sub: "Nombres y términos que la transcripción escribe mal: tu producto, tus clientes, tu gente, tu jerga. La app de cada rep los escucha desde su próxima llamada.",
-            placeholder: "Agrega palabras, separadas por comas",
-            add: "Agregar",
-            empty: "Todavía no hay palabras.",
-            remove: (term: string) => `Quitar ${term}`,
-            added: (n: number) => n === 1 ? "Agregada." : `Se agregaron ${n} palabras.`,
-            tooMany: (max: number) => `Hasta ${max} palabras. Quita algunas primero.`,
-            count: (n: number, max: number) => `${n} de ${max}`,
         },
         knowledge: {
             pageTitle: "Conocimiento",

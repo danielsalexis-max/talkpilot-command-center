@@ -1036,8 +1036,6 @@ export const en = {
             "playbook.unassigned": "Playbook assignment removed",
             "playbook.sales_stage_set": "Playbook moved to a sales stage",
             "sales_stages.updated": "Sales stages changed",
-            "vocabulary.added": "Words added to recognize",
-            "vocabulary.removed": "Word removed from recognize list",
             "objection.created": "Objection added",
             "objection.updated": "Objection edited",
             "objection.batch_saved": "Objections saved",
@@ -1238,18 +1236,6 @@ export const en = {
             fieldGuidance: "Approved guidance",
             fieldStageName: "Stage name",
             fieldStageDesc: "Stage description",
-        },
-        // A5 (REQ-18): workspace words for transcription.
-        vocabulary: {
-            title: "Words to recognize",
-            sub: "Names and terms transcription gets wrong: your product, your clients, your people, your jargon. Every rep's app listens for them on the next call.",
-            placeholder: "Add words, separated by commas",
-            add: "Add",
-            empty: "No words yet.",
-            remove: (term: string) => `Remove ${term}`,
-            added: (n: number) => n === 1 ? "Added." : `Added ${n} words.`,
-            tooMany: (max: number) => `Up to ${max} words. Remove some first.`,
-            count: (n: number, max: number) => `${n} of ${max}`,
         },
         knowledge: {
             pageTitle: "Knowledge",

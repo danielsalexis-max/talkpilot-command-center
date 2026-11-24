@@ -29,7 +29,6 @@ import { useLocale, useT } from "@/i18n/LocaleProvider"
 import { clientLocale, type Dict } from "@/i18n"
 import { userError } from "@/lib/userError"
 import { writeAudit, setPlaybookStatus, playbookStatusAction } from "@/lib/orgWrites"
-import { VocabularyCard } from "@/components/vocabularyCard"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1070,8 +1069,6 @@ export function KnowledgeTab({ orgId, focus }: { orgId: string; focus?: "website
                     {!loading && docs.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">{t.tabs.knowledge.noDocs}</p>}
                 </div>
             </div>
-
-            <VocabularyCard orgId={orgId} />
 
             {editing && (
                 <KnowledgeEditor
