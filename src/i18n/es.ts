@@ -976,7 +976,6 @@ export const es: Dict = {
             "playbook.deactivated": "Playbook desactivado",
             "playbook.assignments_set": "Asignaciones del playbook modificadas",
             "member.default_playbook_set": "Playbook predeterminado de un miembro",
-            "vocabulary.replaced": "Vocabulario modificado",
         } as Record<string, string>,
     },
     settingsPage: {

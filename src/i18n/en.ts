@@ -1017,7 +1017,6 @@ export const en = {
             "playbook.deactivated": "Playbook turned off",
             "playbook.assignments_set": "Playbook assignments changed",
             "member.default_playbook_set": "Default playbook set for a member",
-            "vocabulary.replaced": "Vocabulary changed",
         } as Record<string, string>,
     },
     settingsPage: {

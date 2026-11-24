@@ -384,33 +384,6 @@ paths:
       responses:
         "200": { description: The playbook, content: { application/json: { schema: { $ref: "#/components/schemas/Playbook" } } } }
         default: { $ref: "#/components/responses/Error" }
-  /v1/vocabulary:
-    get:
-      tags: [Configuration]
-      summary: The workspace's custom vocabulary
-      operationId: getVocabulary
-      x-scope: read:config
-      responses:
-        "200": { $ref: "#/components/responses/Vocabulary" }
-        default: { $ref: "#/components/responses/Error" }
-    put:
-      tags: [Configuration]
-      summary: Replace the workspace's custom vocabulary
-      description: Product names, competitors and jargon the transcription should hear right. Up to 100 terms of up to 100 characters; the list replaces the current one.
-      operationId: putVocabulary
-      x-scope: write:playbooks
-      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [terms]
-              properties: { terms: { type: array, maxItems: 100, items: { type: string, maxLength: 100 } } }
-      responses:
-        "200": { $ref: "#/components/responses/Vocabulary" }
-        default: { $ref: "#/components/responses/Error" }
   /v1/audit-log:
     get:
       tags: [Configuration]
@@ -696,14 +669,6 @@ components:
             properties:
               playbook_id: { type: string, format: uuid }
               data: { type: array, items: { $ref: "#/components/schemas/Assignment" } }
-    Vocabulary:
-      description: Terms, oldest first
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              terms: { type: array, items: { type: string } }
   schemas:
     Scope:
       type: string
