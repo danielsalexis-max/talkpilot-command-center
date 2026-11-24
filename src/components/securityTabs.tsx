@@ -386,6 +386,28 @@ export function SecurityTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
 
 interface AuditRow { id: string; action: string; actor_id: string | null; meta: Record<string, unknown> | null; created_at: string }
 
+/// Keys that are plumbing, not something an admin reads (A7).
+const AUDIT_HIDDEN = new Set(["via", "client_id", "user_id", "team_id", "by_playbook", "rescore"])
+
+/// A7: one readable line from an audit row's meta: the name of the thing
+/// changed, then "before → after", then whatever else is left, short.
+function auditDetail(meta: Record<string, unknown> | null): string {
+    if (!meta) return ""
+    const str = (v: unknown) => Array.isArray(v) ? v.map(String).join(", ") : v == null ? "—" : String(v)
+    const parts: string[] = []
+    const used = new Set<string>()
+    for (const k of ["name", "label", "term", "terms", "title", "titles"]) {
+        if (meta[k] != null && meta[k] !== "") { parts.push(str(meta[k])); used.add(k) }
+    }
+    if ("from" in meta || "to" in meta) {
+        parts.push(`${str(meta.from)} → ${str(meta.to)}`); used.add("from"); used.add("to")
+    }
+    const rest = Object.entries(meta)
+        .filter(([k, v]) => !used.has(k) && !AUDIT_HIDDEN.has(k) && v != null && v !== "" && !(Array.isArray(v) && v.length === 0))
+        .slice(0, 3).map(([k, v]) => `${k}=${str(v)}`)
+    return [...parts, ...rest].join(" · ").slice(0, 240)
+}
+
 
 
 export function AuditTab({ orgId }: { orgId: string }) {
@@ -463,11 +485,10 @@ export function AuditTab({ orgId }: { orgId: string }) {
                                 <p className="text-sm font-medium text-[var(--color-text)]">{t.audit.actions[r.action] ?? r.action}</p>
                                 <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
                                     {r.actor_id ? (dir.get(r.actor_id) ?? t.audit.actorGone) : t.audit.actorSystem}
-                                    {r.meta && Object.keys(r.meta).length > 0 && (
-                                        <> · <span className="font-mono text-[10.5px]">
-                                            {Object.entries(r.meta).slice(0, 3).map(([k, v]) => `${k}=${String(v)}`).join(" ")}
-                                        </span></>
+                                    {r.meta?.via === "mcp" && (
+                                        <> · <span className="text-[var(--color-accent-deep)]">{t.audit.viaAi}</span></>
                                     )}
+                                    {auditDetail(r.meta) && <> · <span>{auditDetail(r.meta)}</span></>}
                                 </p>
                             </div>
                             <span className="text-[11px] text-[var(--color-muted)] shrink-0 tabular-nums">

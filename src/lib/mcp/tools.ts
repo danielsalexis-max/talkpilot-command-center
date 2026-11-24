@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { supabaseAs, SUPABASE_URL } from "./auth"
 import { decodeBytea, formatTranscript, minutesBetween, parseJsonOrBase64, safeSearch } from "./data"
 import { rollUpGuardrails } from "@/lib/guardrails"
+import { setPlaybookStatus } from "@/lib/orgWrites"
 import { SALES_STAGES } from "@/lib/salesStages"
 import { GROUP_ORDER, GROUP_SLOTS, MAX_TEMPLATE_CHARS, TEMPLATE_TOKENS, isSingleLine, type TemplateGroup, type TemplateSlot } from "@/lib/templateSlots"
 
@@ -33,7 +34,7 @@ function who(ctx: Ctx): Who | null {
     const userId = a?.extra?.userId
     if (!a?.token || typeof userId !== "string") return null
     const email = typeof a.extra?.email === "string" ? a.extra.email : null
-    return { sb: supabaseAs(a.token), token: a.token, userId, email, clientId: a.clientId }
+    return { sb: supabaseAs(a.token, a.clientId), token: a.token, userId, email, clientId: a.clientId }
 }
 
 /// D-803: the most common setup failure is a connector signed in with the
@@ -118,6 +119,32 @@ function errorText(json: Record<string, unknown>, fallback: string): string {
 }
 
 const STAGE_ENUM = z.enum(SALES_STAGES)
+
+/// A8: every status a team call can be in (A3's model; `pending` while
+/// score-session runs).
+const CALL_STATUSES = ["scored", "not_scored", "too_short", "failed", "pending"] as const
+const CALL_STATUS = z.enum(CALL_STATUSES)
+type CallStatus = typeof CALL_STATUSES[number]
+
+const ISO_DATE = z.string().refine(v => !Number.isNaN(Date.parse(v)), "Use an ISO date or date-time, e.g. 2026-11-24 or 2026-11-24T15:00:00Z")
+
+/// Keyset cursor for list_team_calls: the sort mode ("s" = by start time,
+/// newest first; "u" = by last change, oldest first), the last row's sort
+/// value and its id. Opaque to the caller.
+type CallCursor = { m: "s" | "u"; v: string; id: string }
+function encodeCursor(c: CallCursor): string {
+    return Buffer.from(JSON.stringify(c), "utf8").toString("base64url")
+}
+function decodeCursor(s: string): CallCursor | null {
+    try {
+        const c = JSON.parse(Buffer.from(s, "base64url").toString("utf8"))
+        if ((c?.m !== "s" && c?.m !== "u") || typeof c.v !== "string" || Number.isNaN(Date.parse(c.v))) return null
+        if (typeof c.id !== "string" || !/^[0-9a-f-]{36}$/i.test(c.id)) return null
+        return c as CallCursor
+    } catch {
+        return null
+    }
+}
 
 /// The two titles the company profile doc can carry; a second run finds and
 /// replaces whichever one exists instead of adding a copy.
@@ -500,26 +527,70 @@ export function registerTalkPilotTools(server: McpServer) {
 
     server.registerTool("list_team_calls", {
         title: "List my team's calls (Teams)",
-        description: "TalkPilot Teams managers and admins: scored calls from the reps they manage, newest first, with scores, highlights and growth areas. Filter by member_id from list_team_members. Use get_team_call for one call's transcript.",
+        description: "TalkPilot Teams managers and admins: calls from the reps they manage, with status, scores, highlights and growth areas. " +
+            "Leave `status` out for the original behaviour: scored calls only, calls excluded from the averages hidden, newest first. " +
+            "Pass `status: \"all\"` (or a list such as [\"not_scored\", \"failed\"]) to get every call, each with `status` (scored, not_scored, too_short, failed, pending), " +
+            "`exclusion_reason` and `excluded`; excluded calls are then included unless include_excluded is false. " +
+            "Filter by member_id (from list_team_members), since / until (call start, ISO UTC) or updated_since (anything that changed since, for polling: results then come oldest change first). " +
+            "Up to 200 per page; pass next_cursor back as `cursor` with the same filters for the next page. Use get_team_call for one call's transcript.",
         inputSchema: z.object({
             member_id: z.string().uuid().optional(),
-            since: z.string().optional().describe("ISO date"),
-            limit: z.number().int().min(1).max(50).optional().describe("Default 20"),
+            status: z.union([z.literal("all"), z.array(CALL_STATUS).min(1)]).optional()
+                .describe("\"all\" or a list of statuses. Leave out for scored calls only (the original behaviour)."),
+            include_excluded: z.boolean().optional()
+                .describe("Include calls left out of the team averages. Default: true when `status` is given, false when it is not."),
+            since: ISO_DATE.optional().describe("Calls that started at or after this ISO date/time (UTC)"),
+            until: ISO_DATE.optional().describe("Calls that started before this ISO date/time (UTC)"),
+            updated_since: ISO_DATE.optional().describe("Calls created, scored, re-scored, excluded or included at or after this time. Sorts oldest change first."),
+            limit: z.number().int().min(1).max(200).optional().describe("Default 20, max 200"),
+            cursor: z.string().max(500).optional().describe("next_cursor from the previous page"),
         }),
         annotations: READ,
-    }, guarded("list_team_calls", async (w, a: { member_id?: string; since?: string; limit?: number }) => {
+    }, guarded("list_team_calls", async (w, a: {
+        member_id?: string; status?: "all" | CallStatus[]; include_excluded?: boolean
+        since?: string; until?: string; updated_since?: string; limit?: number; cursor?: string
+    }) => {
         const m = await requireTeams(w, "manager")
         if (typeof m === "string") return fail(m)
+        const mode: "s" | "u" = a.updated_since ? "u" : "s"
+        const cur = a.cursor ? decodeCursor(a.cursor) : null
+        if (a.cursor && (!cur || cur.m !== mode)) return fail("That cursor does not belong to this query. Repeat the same filters, or leave cursor out to start again.")
+        const limit = a.limit ?? 20
+        const legacy = a.status === undefined
         let q = w.sb.from("session_scorecards")
-            .select("id, user_id, session_title, started_at, duration_minutes, overall_score, adherence_score, objection_score, accuracy_score, talk_ratio, highlights, growth_areas")
-            .eq("org_id", m.org_id).eq("status", "scored").is("excluded_at", null).neq("user_id", w.userId)
-            .order("started_at", { ascending: false }).limit(a.limit ?? 20)
+            .select("id, user_id, session_title, started_at, duration_minutes, status, exclusion_reason, excluded_at, scored_at, updated_at, playbook_id, call_type, detected_stage, overall_score, adherence_score, objection_score, accuracy_score, talk_ratio, highlights, growth_areas")
+            .eq("org_id", m.org_id).neq("user_id", w.userId)
+        if (legacy) q = q.eq("status", "scored")
+        else if (a.status !== "all") q = q.in("status", a.status as CallStatus[])
+        if (!(a.include_excluded ?? !legacy)) q = q.is("excluded_at", null)
         if (a.member_id) q = q.eq("user_id", a.member_id)
         if (a.since) q = q.gte("started_at", a.since)
-        const { data, error } = await q
+        if (a.until) q = q.lt("started_at", a.until)
+        if (mode === "u") {
+            q = q.gte("updated_at", a.updated_since!)
+            if (cur) q = q.or(`updated_at.gt."${cur.v}",and(updated_at.eq."${cur.v}",id.gt.${cur.id})`)
+            q = q.order("updated_at", { ascending: true }).order("id", { ascending: true })
+        } else {
+            if (cur) q = q.or(`started_at.lt."${cur.v}",and(started_at.eq."${cur.v}",id.lt.${cur.id})`)
+            q = q.order("started_at", { ascending: false }).order("id", { ascending: false })
+        }
+        const { data, error } = await q.limit(limit + 1)
         if (error) return fail(error.message)
+        const rows = (data ?? []) as Record<string, unknown>[]
+        const page = rows.slice(0, limit)
+        const last = page[page.length - 1]
+        const next = rows.length > limit && last
+            ? encodeCursor({ m: mode, v: String(mode === "u" ? last.updated_at : last.started_at), id: String(last.id) })
+            : null
         await log(w, "list_team_calls", { org: m.org_id, subject: a.member_id ?? null })
-        return ok({ calls: (data ?? []).map(c => ({ team_call_id: c.id, member_id: c.user_id, ...c, id: undefined, user_id: undefined })) })
+        return ok({
+            calls: page.map(c => {
+                const { id, user_id, excluded_at, ...rest } = c
+                return { team_call_id: id, member_id: user_id, ...rest, excluded: excluded_at != null, excluded_at }
+            }),
+            next_cursor: next,
+            has_more: next != null,
+        })
     }))
 
     server.registerTool("get_team_call", {
@@ -565,6 +636,180 @@ export function registerTalkPilotTools(server: McpServer) {
         await log(w, "get_team_call", { org: m.org_id, subject: card.user_id as string, target: a.team_call_id })
         return ok(out)
     }))
+
+    // ── D-1049 (REQ-09/10): playbook activation and call include/exclude ──
+    // Same writes the Command Center makes. Activation changes what every rep
+    // the playbook applies to sees on their next call, so both playbook tools
+    // only describe the effect until they are called again with confirm: true.
+
+    /// Who a playbook reaches, in words a model can repeat to the admin.
+    async function playbookReach(w: Who, orgId: string, playbookId: string) {
+        const [{ data: rows }, { data: teams }, { data: members }] = await Promise.all([
+            w.sb.from("org_playbook_assignments").select("team_id, user_id").eq("playbook_id", playbookId),
+            w.sb.from("org_teams").select("id, name").eq("org_id", orgId),
+            w.sb.rpc("get_org_members_with_email", { p_org: orgId }),
+        ])
+        const a = (rows ?? []) as { team_id: string | null; user_id: string | null }[]
+        const teamName = new Map(((teams ?? []) as { id: string; name: string }[]).map(t => [t.id, t.name]))
+        const person = new Map(((members ?? []) as { user_id: string; email: string | null; full_name: string | null }[])
+            .map(x => [x.user_id, x.full_name || x.email || x.user_id]))
+        if (a.length === 0) return { applies_to: "everyone not covered by a more specific assignment (it is the workspace default while active)", assigned: false }
+        if (a.some(r => !r.team_id && !r.user_id)) return { applies_to: "everyone in the workspace", assigned: true }
+        return {
+            applies_to: [
+                ...a.filter(r => r.team_id).map(r => `team ${teamName.get(r.team_id!) ?? r.team_id}`),
+                ...a.filter(r => r.user_id).map(r => person.get(r.user_id!) ?? r.user_id!),
+            ].join(", "),
+            assigned: true,
+        }
+    }
+
+    async function loadPlaybook(w: Who, orgId: string, id: string) {
+        const { data } = await w.sb.from("org_playbooks").select("id, name, status, sales_stage")
+            .eq("id", id).eq("org_id", orgId).maybeSingle()
+        return data as { id: string; name: string; status: string; sales_stage: string | null } | null
+    }
+
+    server.registerTool("activate_playbook", {
+        title: "Turn a playbook on (Teams admins)",
+        description: "TalkPilot Teams owners and admins: make a playbook active, so reps it applies to start on it from their next call. " +
+            "Call it first without confirm: it changes nothing and says who the playbook reaches and which playbook stops being the workspace default, if any. " +
+            "Tell the admin, and call again with confirm: true only after they agree. Written to the workspace audit log.",
+        inputSchema: z.object({
+            playbook_id: z.string().uuid().describe("From get_playbooks"),
+            confirm: z.boolean().optional().describe("true to make the change. Leave out to preview it."),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    }, guarded("activate_playbook", async (w, a: { playbook_id: string; confirm?: boolean }) => {
+        const m = await requireTeams(w, "admin")
+        if (typeof m === "string") return fail(m)
+        const pb = await loadPlaybook(w, m.org_id, a.playbook_id)
+        if (!pb) return fail("No playbook with that id in this workspace. Use get_playbooks.")
+        if (pb.status === "active") return ok({ playbook: pb, changed: false, note: "Already active." })
+        const reach = await playbookReach(w, m.org_id, pb.id)
+        let wouldDemote: { id: string; name: string }[] = []
+        if (!reach.assigned) {
+            const [{ data: actives }, { data: assigned }] = await Promise.all([
+                w.sb.from("org_playbooks").select("id, name").eq("org_id", m.org_id).eq("status", "active"),
+                w.sb.from("org_playbook_assignments").select("playbook_id").eq("org_id", m.org_id),
+            ])
+            const taken = new Set(((assigned ?? []) as { playbook_id: string }[]).map(x => x.playbook_id))
+            wouldDemote = ((actives ?? []) as { id: string; name: string }[]).filter(x => x.id !== pb.id && !taken.has(x.id))
+        }
+        if (!a.confirm) {
+            await log(w, "activate_playbook", { org: m.org_id, target: pb.id })
+            return ok({
+                needs_confirmation: true,
+                playbook: pb,
+                will_apply_to: reach.applies_to,
+                will_move_to_draft: wouldDemote,
+                next: "Nothing changed yet. Tell the admin who this reaches (and what goes back to draft), then call activate_playbook again with confirm: true if they agree.",
+            })
+        }
+        const r = await setPlaybookStatus(w.sb, m.org_id, pb.id, "active")
+        if (r.error) return fail(r.error)
+        await log(w, "activate_playbook", { org: m.org_id, target: pb.id })
+        await audit(w, m.org_id, "playbook.activated", pb.id, { name: pb.name, from: pb.status, demoted: r.demoted })
+        for (const id of r.demoted) await audit(w, m.org_id, "playbook.deactivated", id, { reason: "replaced_as_default", by_playbook: pb.id })
+        return ok({ playbook: { ...pb, status: "active" }, changed: true, applies_to: reach.applies_to, moved_to_draft: r.demoted, note: "Reps it applies to get it on their next call." })
+    }))
+
+    server.registerTool("deactivate_playbook", {
+        title: "Turn a playbook off (Teams admins)",
+        description: "TalkPilot Teams owners and admins: take a playbook out of use (back to draft, or archived). Reps it applies to stop getting it on their next call; if it was the only active playbook they had, they get none. " +
+            "Call it first without confirm: it changes nothing and says who would lose it. Tell the admin, and call again with confirm: true only after they agree. Written to the workspace audit log.",
+        inputSchema: z.object({
+            playbook_id: z.string().uuid().describe("From get_playbooks"),
+            archive: z.boolean().optional().describe("true to archive it instead of moving it back to draft"),
+            confirm: z.boolean().optional().describe("true to make the change. Leave out to preview it."),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    }, guarded("deactivate_playbook", async (w, a: { playbook_id: string; archive?: boolean; confirm?: boolean }) => {
+        const m = await requireTeams(w, "admin")
+        if (typeof m === "string") return fail(m)
+        const pb = await loadPlaybook(w, m.org_id, a.playbook_id)
+        if (!pb) return fail("No playbook with that id in this workspace. Use get_playbooks.")
+        const to = a.archive ? "archived" : "draft"
+        if (pb.status === to) return ok({ playbook: pb, changed: false, note: `Already ${to}.` })
+        const reach = await playbookReach(w, m.org_id, pb.id)
+        const { count: otherActive } = await w.sb.from("org_playbooks").select("id", { count: "exact", head: true })
+            .eq("org_id", m.org_id).eq("status", "active").neq("id", pb.id)
+        if (!a.confirm) {
+            await log(w, "deactivate_playbook", { org: m.org_id, target: pb.id })
+            return ok({
+                needs_confirmation: true,
+                playbook: pb,
+                becomes: to,
+                stops_applying_to: pb.status === "active" ? reach.applies_to : "nobody (it is not active now)",
+                other_active_playbooks: otherActive ?? 0,
+                warning: pb.status === "active" && (otherActive ?? 0) === 0
+                    ? "This is the workspace's only active playbook. Reps will have no playbook on their next call and those calls may not be scored."
+                    : null,
+                next: "Nothing changed yet. Tell the admin who loses this playbook, then call deactivate_playbook again with confirm: true if they agree.",
+            })
+        }
+        const r = await setPlaybookStatus(w.sb, m.org_id, pb.id, to)
+        if (r.error) return fail(r.error)
+        await log(w, "deactivate_playbook", { org: m.org_id, target: pb.id })
+        await audit(w, m.org_id, to === "archived" ? "playbook.archived" : "playbook.deactivated", pb.id, { name: pb.name, from: pb.status })
+        return ok({ playbook: { ...pb, status: to }, changed: true, note: "Reps it applied to stop getting it on their next call." })
+    }))
+
+    /// Runs the Command Center's include/exclude RPC. The RPC itself checks the
+    /// role (owner/admin/manager) and writes the audit row; the connector's
+    /// request header makes that row say via = mcp.
+    async function setCallExcluded(w: Who, tool: string, id: string, excluded: boolean, reason?: string) {
+        const m = await requireTeams(w, "manager")
+        if (typeof m === "string") return fail(m)
+        const { data: before } = await w.sb.from("session_scorecards").select("id, user_id, status, excluded_at, exclusion_reason, session_title")
+            .eq("id", id).eq("org_id", m.org_id).maybeSingle()
+        if (!before) return fail("No team call with that id that this account can see. Use list_team_calls with status: \"all\".")
+        const { error } = await w.sb.rpc("set_scorecard_excluded", {
+            p_scorecard: id, p_excluded: excluded, p_reason: excluded ? (reason?.trim() || null) : null,
+        })
+        if (error) {
+            if (/not_authorized/.test(error.message)) return fail("Only owners, admins and managers can include or exclude calls.")
+            if (/rescore_not_configured/.test(error.message)) return fail("The call was not changed: re-scoring is not set up on the server. Tell TalkPilot support.")
+            return fail(error.message)
+        }
+        await log(w, tool, { org: m.org_id, subject: before.user_id as string, target: id })
+        // D-1053 + D-1055: a never-scored, failed or stalled (pending 15+ min) call is
+        // re-scored by the RPC; a fresh pending one is still being graded.
+        const rescoring = !excluded && ["not_scored", "failed", "pending"].includes(before.status as string)
+        return ok({
+            team_call_id: id,
+            title: before.session_title,
+            status: before.status,
+            excluded,
+            rescore_requested: rescoring,
+            note: excluded
+                ? "Left out of the team's averages. It is not deleted; include_call puts it back."
+                : rescoring
+                    ? "Counted again, and sent for scoring. It usually takes a minute; check it with list_team_calls (status \"all\") or get_team_call. It can still end as too_short if the rep barely spoke."
+                    : "Counted in the team's averages again.",
+        })
+    }
+
+    server.registerTool("exclude_call", {
+        title: "Leave a call out of the team's averages (Teams)",
+        description: "TalkPilot Teams owners, admins and managers: leave one team call out of the averages (a test call, the wrong person, not a sales call). The call and its scores are kept; include_call undoes it. Written to the workspace audit log.",
+        inputSchema: z.object({
+            team_call_id: z.string().uuid().describe("From list_team_calls"),
+            reason: z.string().max(300).optional().describe("Why, in a few words"),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    }, guarded("exclude_call", async (w, a: { team_call_id: string; reason?: string }) =>
+        setCallExcluded(w, "exclude_call", a.team_call_id, true, a.reason)))
+
+    server.registerTool("include_call", {
+        title: "Count a call again, re-scoring it if needed (Teams)",
+        description: "TalkPilot Teams owners, admins and managers: put a call back in the team's averages. If it was never scored (status not_scored or failed), this also sends it for scoring, the same as the Include button in the Command Center. Written to the workspace audit log.",
+        inputSchema: z.object({
+            team_call_id: z.string().uuid().describe("From list_team_calls"),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    }, guarded("include_call", async (w, a: { team_call_id: string }) =>
+        setCallExcluded(w, "include_call", a.team_call_id, false)))
 
     server.registerTool("get_playbooks", {
         title: "Get the team playbooks (Teams)",

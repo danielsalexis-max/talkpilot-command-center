@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
 import { useLocale } from "@/i18n/LocaleProvider"
+import { writeAudit } from "@/lib/orgWrites"
 
 /// Who a playbook applies to.
 ///
@@ -87,6 +88,14 @@ export function PlaybookAssignment({
                 // so it is a success, not an error to show the manager.
                 if (error && (error as { code?: string }).code !== "23505") throw error
             }
+            // A7 (REQ-19): who a playbook applies to is a change a sales-ops
+            // review asks about. The label is stored so the log stays readable
+            // after a team or person is gone.
+            const label = kind === "org" ? null
+                : (kind === "team" ? teams : members).find(x => x.id === id)?.label ?? null
+            await writeAudit(supabase, orgId, isOn ? "playbook.unassigned" : "playbook.assigned", playbookId, {
+                scope: kind === "org" ? "everyone" : kind, ...(id ? { [kind === "team" ? "team_id" : "user_id"]: id } : {}), ...(label ? { label } : {}),
+            })
             await load()
             onChanged?.()
         } catch (e) {

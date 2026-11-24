@@ -28,6 +28,8 @@ import { AISetupCard } from "@/components/aiSetupCard"
 import { useLocale, useT } from "@/i18n/LocaleProvider"
 import { clientLocale, type Dict } from "@/i18n"
 import { userError } from "@/lib/userError"
+import { writeAudit, setPlaybookStatus, playbookStatusAction } from "@/lib/orgWrites"
+import { VocabularyCard } from "@/components/vocabularyCard"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -390,7 +392,18 @@ export function SettingsTab({ org, onSaved, extra }: { org: OrgInfo; onSaved: ()
         const { error } = await supabase.from("organizations").update({ name, visibility, settings }).eq("id", org.id)
         setSaving(false)
         if (error) { setMsg(humanError(error.message, t.tabs.doingSaveSettings, t)); setIsErr(true) }
-        else { setMsg(t.common.saved); setIsErr(false); onSaved() }
+        else {
+            // A7 (REQ-19): the settings a security or sales-ops review asks about.
+            const prevPolicy = (org.settings?.playbook_policy as string | undefined) ?? "enforced"
+            const prevNotice = (org.settings?.recording_notice as string | undefined) ?? "off"
+            if (visibility !== org.visibility)
+                await writeAudit(supabase, org.id, "settings.visibility_changed", null, { from: org.visibility, to: visibility })
+            if (playbookPolicy !== prevPolicy)
+                await writeAudit(supabase, org.id, "settings.playbook_policy_changed", null, { from: prevPolicy, to: playbookPolicy })
+            if (recordingNotice !== prevNotice)
+                await writeAudit(supabase, org.id, "settings.recording_notice_changed", null, { from: prevNotice, to: recordingNotice })
+            setMsg(t.common.saved); setIsErr(false); onSaved()
+        }
     }
 
     // One card per concern (D-615): the old single card with border-t
@@ -1057,6 +1070,8 @@ export function KnowledgeTab({ orgId, focus }: { orgId: string; focus?: "website
                     {!loading && docs.length === 0 && <p className="text-sm text-[var(--color-text-secondary)]">{t.tabs.knowledge.noDocs}</p>}
                 </div>
             </div>
+
+            <VocabularyCard orgId={orgId} />
 
             {editing && (
                 <KnowledgeEditor
@@ -1939,7 +1954,10 @@ export function PlaybooksTab({ orgId, stage: openStage, onNavigate }: {
                 return { ...st, ...(e.set_name ? { name: e.set_name } : {}), ...(e.set_description ? { description: e.set_description } : {}) }
             })
             const { error } = await supabase.from("org_playbooks").update({ stages }).eq("id", pbId)
-            if (!error) ok += edits.length
+            if (!error) {
+                ok += edits.length
+                await writeAudit(supabase, orgId, "playbook.step_edited", pbId, { name: pb.name, steps: edits.map(e => e.stage_index + 1), source: "amend" })
+            }
         }
         const rest = pbAmendProps.filter(p => !keys.includes(`${p.playbook_id}:${p.stage_index}`))
         setPbAmendProps(rest.length ? rest : null)
@@ -2094,6 +2112,15 @@ export function PlaybooksTab({ orgId, stage: openStage, onNavigate }: {
         setSaving(false)
         if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true) }
         else {
+            if (editingId) {
+                const before = playbooks.find(p => p.id === editingId)
+                await writeAudit(supabase, orgId, "playbook.edited", editingId, {
+                    name: pbName.trim(), version: (before?.version ?? 0) + 1, steps: stagesJson.length,
+                    ...(before && (before.sales_stage ?? null) !== (salesStage || null) ? { sales_stage: salesStage || null } : {}),
+                })
+            } else {
+                await writeAudit(supabase, orgId, "playbook.created", null, { name: pbName.trim(), status: "draft", steps: stagesJson.length })
+            }
             setMsg(editingId ? t.tabs.playbooks.updated : t.tabs.playbooks.created); setIsErr(false)
             setPbName(""); setMethodology("custom"); setSalesStage("")
             setStages([{ name: "", description: "", requiredItems: "", guardrails: [] }])
@@ -2102,31 +2129,14 @@ export function PlaybooksTab({ orgId, stage: openStage, onNavigate }: {
     }
 
     async function setStatus(id: string, status: "draft" | "active" | "archived") {
-        if (status === "active") {
-            // Several playbooks may be active at once now that they are scoped
-            // (D-192) — a sales playbook and a support playbook are both live,
-            // for different people. What must stay unique is the ORG DEFAULT:
-            // the active playbook with no assignments, which `get_org_context`
-            // falls back to for anyone unmatched. So activating an unassigned
-            // playbook demotes other unassigned ones, and nothing else.
-            const { data: mine } = await supabase
-                .from("org_playbook_assignments").select("playbook_id").eq("playbook_id", id).limit(1)
-            const becomingDefault = (mine ?? []).length === 0
-            if (becomingDefault) {
-                const { data: actives } = await supabase
-                    .from("org_playbooks").select("id").eq("org_id", orgId).eq("status", "active")
-                const { data: assigned } = await supabase
-                    .from("org_playbook_assignments").select("playbook_id").eq("org_id", orgId)
-                const assignedIds = new Set((assigned ?? []).map(a => a.playbook_id as string))
-                const otherDefaults = (actives ?? [])
-                    .map(a => a.id as string)
-                    .filter(pid => pid !== id && !assignedIds.has(pid))
-                if (otherDefaults.length > 0) {
-                    await supabase.from("org_playbooks").update({ status: "draft" }).in("id", otherDefaults)
-                }
-            }
-        }
-        await supabase.from("org_playbooks").update({ status }).eq("id", id)
+        // Shared with the MCP's activate/deactivate_playbook (D-1049): activating
+        // an unassigned playbook demotes the other unassigned ones, because the
+        // workspace default must stay unique (D-192).
+        const before = playbooks.find(p => p.id === id)
+        const r = await setPlaybookStatus(supabase, orgId, id, status)
+        if (r.error) { setMsg(humanError(r.error, t.tabs.doingSaveThat, t)); setIsErr(true); return }
+        await writeAudit(supabase, orgId, playbookStatusAction(status), id, { name: before?.name ?? null, from: before?.status ?? null })
+        for (const d of r.demoted) await writeAudit(supabase, orgId, "playbook.deactivated", d, { reason: "replaced_as_default", by_playbook: id })
         // Every action answers "what happens now?" (D-175).
         setIsErr(false)
         setMsg(status === "active" ? t.tabs.playbooks.statusLive
@@ -2147,6 +2157,7 @@ export function PlaybooksTab({ orgId, stage: openStage, onNavigate }: {
         const { data, error } = await supabase.from("org_playbooks").delete().eq("id", id).select("id")
         if (error) { setMsg(humanError(error.message, t.tabs.doingDelete, t)); setIsErr(true); return }
         if (!data?.length) { setMsg(t.tabs.deleteBlocked); setIsErr(true); return }
+        await writeAudit(supabase, orgId, "playbook.deleted", id, { name: playbooks.find(p => p.id === id)?.name ?? null })
         setPlaybooks(prev => prev.filter(p => p.id !== id))
     }
 
@@ -2174,6 +2185,7 @@ export function PlaybooksTab({ orgId, stage: openStage, onNavigate }: {
     async function assignStage(id: string, st: SalesStage) {
         const { error } = await supabase.from("org_playbooks").update({ sales_stage: st }).eq("id", id)
         if (error) { setMsg(humanError(error.message, t.tabs.doingSaveThat, t)); setIsErr(true); return }
+        await writeAudit(supabase, orgId, "playbook.sales_stage_set", id, { name: playbooks.find(p => p.id === id)?.name ?? null, sales_stage: st })
         await load()
     }
 
@@ -2828,6 +2840,40 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     const [inviting, setInviting]       = useState(false)
     const [msg, setMsg]                 = useState<string | null>(null)
     const [isErr, setIsErr]             = useState(false)
+    // A1 (D-1048): the playbook a member starts on when they hold several.
+    const [roster, setRoster]           = useState<Map<string, { team_id: string | null; default_playbook_id: string | null }>>(new Map())
+    const [livePbs, setLivePbs]         = useState<{ id: string; name: string }[]>([])
+    const [allPbNames, setAllPbNames]   = useState<Map<string, string>>(new Map())
+    const [pbAssign, setPbAssign]       = useState<{ playbook_id: string; team_id: string | null; user_id: string | null }[]>([])
+
+    /// The active playbooks that reach this member, in get_org_context's
+    /// terms: assigned to them, to their team, to everyone, or active with no
+    /// assignment at all (the workspace default).
+    function heldPlaybooks(userId: string) {
+        const team = roster.get(userId)?.team_id ?? null
+        return livePbs.filter(p => {
+            const rows = pbAssign.filter(a => a.playbook_id === p.id)
+            return rows.length === 0 || rows.some(a =>
+                (!a.team_id && !a.user_id) || a.user_id === userId || (team != null && a.team_id === team))
+        })
+    }
+
+    async function changeDefaultPlaybook(userId: string, playbookId: string | null) {
+        const before = roster.get(userId)?.default_playbook_id ?? null
+        setRoster(prev => new Map(prev).set(userId, { team_id: prev.get(userId)?.team_id ?? null, default_playbook_id: playbookId }))
+        const { error } = await supabase.from("org_members")
+            .update({ default_playbook_id: playbookId }).eq("org_id", orgId).eq("user_id", userId)
+        if (error) {
+            setMsg(humanError(error.message, t.tabs.doingSaveSettings, t)); setIsErr(true)
+            await load()
+            return
+        }
+        await writeAudit(supabase, orgId, "member.default_playbook_set", userId, {
+            user_id: userId, from: before, to: playbookId,
+            name: playbookId ? allPbNames.get(playbookId) ?? null : null,
+        })
+        setMsg(t.common.saved); setIsErr(false)
+    }
 
     // What "inherit" actually means for this workspace, so the option can say it
     // instead of making the admin go read the Settings tab.
@@ -2838,6 +2884,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
     async function changePlaybookPolicy(userId: string, policy: string | null) {
         // Optimistic: the select has already moved, and a failed write puts the
         // truth back via load() rather than leaving the row lying.
+        const before = members.find(m => m.user_id === userId)?.playbook_policy
         setMembers(prev => prev.map(m => m.user_id === userId ? { ...m, playbook_policy: policy } : m))
         const { error } = await supabase.rpc("set_member_playbook_policy", {
             p_org: orgId, p_user: userId, p_policy: policy,
@@ -2846,6 +2893,7 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
             setMsg(humanError(error.message, t.tabs.doingSaveSettings, t)); setIsErr(true)
             await load()
         } else {
+            await writeAudit(supabase, orgId, "member.playbook_policy_changed", userId, { user_id: userId, from: before ?? null, to: policy })
             setMsg(t.common.saved); setIsErr(false)
         }
     }
@@ -2873,6 +2921,19 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
             supabase.rpc("org_member_platforms", { p_org: orgId }),
             supabase.from("org_teams").select("id, name").eq("org_id", orgId).order("name"),
         ])
+        // Separate from the batch above so a database without the A1 column
+        // (migration not applied yet) only hides the default-playbook control.
+        const [rosterRes, pbsRes, assignRes] = await Promise.all([
+            supabase.from("org_members").select("user_id, team_id, default_playbook_id").eq("org_id", orgId),
+            supabase.from("org_playbooks").select("id, name, status").eq("org_id", orgId),
+            supabase.from("org_playbook_assignments").select("playbook_id, team_id, user_id").eq("org_id", orgId),
+        ])
+        setRoster(new Map(((rosterRes.data ?? []) as { user_id: string; team_id: string | null; default_playbook_id: string | null }[])
+            .map(r => [r.user_id, { team_id: r.team_id, default_playbook_id: r.default_playbook_id }])))
+        const pbs = (pbsRes.data ?? []) as { id: string; name: string; status: string }[]
+        setLivePbs(rosterRes.error ? [] : pbs.filter(p => p.status === "active").map(p => ({ id: p.id, name: p.name })))
+        setAllPbNames(new Map(pbs.map(p => [p.id, p.name])))
+        setPbAssign((assignRes.data ?? []) as { playbook_id: string; team_id: string | null; user_id: string | null }[])
         setMembers((memberRes.data ?? []) as MemberRow[])
         const byUser = new Map<string, PlatformTag[]>()
         for (const row of (platformRes.data ?? []) as PlatformTag[]) {
@@ -3082,6 +3143,26 @@ export function MembersTab({ orgId, org }: { orgId: string; org: OrgInfo }) {
                                 <p className="text-sm text-[var(--color-text)] font-medium">{m.email ?? m.user_id.slice(0, 8) + "…"}</p>
                                 <p className="text-xs text-[var(--color-muted)]">{t.tabs.members.joined(new Date(m.joined_at).toLocaleDateString(intl))}</p>
                                 <PlatformTags tags={platforms.get(m.user_id) ?? []} />
+                                {(() => {
+                                    const held = heldPlaybooks(m.user_id)
+                                    if (held.length < 2) return null
+                                    const current = roster.get(m.user_id)?.default_playbook_id ?? ""
+                                    const stale = current && !held.some(p => p.id === current)
+                                    return (
+                                        <label className="flex items-center gap-1.5 mt-1.5 text-xs text-[var(--color-text-secondary)]" title={t.tabs.members.defaultPlaybookHelp}>
+                                            {t.tabs.members.defaultPlaybook}
+                                            <select
+                                                value={current}
+                                                onChange={e => changeDefaultPlaybook(m.user_id, e.target.value || null)}
+                                                className="max-w-56 text-xs bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-2 py-1 text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-accent)]"
+                                            >
+                                                <option value="">{t.tabs.members.defaultPlaybookAuto}</option>
+                                                {held.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                                {stale && <option value={current}>{t.tabs.members.defaultPlaybookInactive(allPbNames.get(current) ?? "…")}</option>}
+                                            </select>
+                                        </label>
+                                    )
+                                })()}
                             </div>
                             <div className="flex items-center gap-2">
                                 <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] whitespace-nowrap" title={t.tabs.members.usesSeatHelp}>
