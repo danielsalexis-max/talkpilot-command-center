@@ -38,6 +38,8 @@ export default function ScorecardPage() {
     const [transcriptState, setTranscriptState] = useState<"idle" | "loading" | "loaded">("idle")
     const [role, setRole]             = useState<string | null>(null)
     const [excluding, setExcluding]   = useState(false)
+    const [deleting, setDeleting]     = useState(false)
+    const [deleteError, setDeleteError] = useState<string | null>(null)
     const [sentState, setSentState]   = useState<"ok" | "error" | null>(null)
     const [focus, setFocus]           = useState<Focus | null>(null)
     const [focusFallback, setFocusFallback] = useState(false)
@@ -57,6 +59,23 @@ export default function ScorecardPage() {
         })
         setExcluding(false)
         if (!error) await load()
+    }
+
+    // D-1067: deleting the company copy is an owner/admin decision (`delete_team_call`
+    // checks the same). The rep keeps their own copy in their personal history.
+    const canDelete = role === "owner" || role === "admin"
+
+    async function deleteFromWorkspace() {
+        if (!card || !window.confirm(t.calls.deleteConfirm)) return
+        setDeleting(true)
+        setDeleteError(null)
+        const { error } = await supabase.rpc("delete_team_call", { p_scorecard: card.id })
+        if (error) {
+            setDeleting(false)
+            setDeleteError(/call_being_scored/.test(error.message) ? t.calls.deleteBeingScored : t.calls.deleteFailed)
+            return
+        }
+        window.location.replace("/calls")
     }
 
     useEffect(() => { if (id) load() }, [id])
@@ -218,12 +237,24 @@ export default function ScorecardPage() {
                         </div>
                     )}
                 </div>
-                {canExclude && (
-                    <button
-                        onClick={() => toggleExcluded(!card.excluded_at)}
-                        disabled={excluding}
-                        className="px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border border-[var(--color-border)] rounded-lg transition-colors disabled:opacity-40 whitespace-nowrap flex-shrink-0"
-                    >{card.excluded_at ? t.calls.includeAgain : t.calls.excludeAction}</button>
+                {(canExclude || canDelete) && (
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                        {canExclude && (
+                            <button
+                                onClick={() => toggleExcluded(!card.excluded_at)}
+                                disabled={excluding || deleting}
+                                className="px-3 py-1.5 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] border border-[var(--color-border)] rounded-lg transition-colors disabled:opacity-40 whitespace-nowrap"
+                            >{card.excluded_at ? t.calls.includeAgain : t.calls.excludeAction}</button>
+                        )}
+                        {canDelete && (
+                            <button
+                                onClick={deleteFromWorkspace}
+                                disabled={deleting || excluding}
+                                className="px-3 py-1.5 text-xs text-red-600 hover:text-red-700 border border-red-200 rounded-lg transition-colors disabled:opacity-40 whitespace-nowrap"
+                            >{t.calls.deleteFromWorkspace}</button>
+                        )}
+                        {deleteError && <p className="text-xs text-red-600 max-w-[16rem] text-right">{deleteError}</p>}
+                    </div>
                 )}
             </div>
 

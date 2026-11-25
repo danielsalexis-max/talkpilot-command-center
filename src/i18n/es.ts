@@ -802,6 +802,11 @@ export const es: Dict = {
         systemLostFor: (n: number) => `No captamos a la otra persona durante ${n} min`,
         excludeAction: "No contar esta",
         includeAgain: "Volver a contarla",
+        // D-1067: solo owners y admins. El rep conserva su propia copia.
+        deleteFromWorkspace: "Borrar del espacio de trabajo",
+        deleteConfirm: "¿Borrar esta llamada del espacio de trabajo?\n\nSu scorecard y sus notas de coaching se borran para siempre, y nadie del espacio de trabajo podrá volver a abrirla. No se puede deshacer.\n\nEl rep conserva su propia copia en su Historial de TalkPilot.",
+        deleteFailed: "No pudimos borrar esta llamada. Inténtalo de nuevo.",
+        deleteBeingScored: "Esta llamada todavía se está calificando. Inténtalo de nuevo en unos minutos.",
         title: "Llamadas",
         sub: "Cada llamada evaluada de la organización, últimos 90 días — cada una abre un scorecard completo.",
         searchPlaceholder: "Buscar llamadas o reps…",
@@ -969,7 +974,7 @@ export const es: Dict = {
             "scim.token_revoked": "Token SCIM revocado",
             "mfa.enabled": "Dos pasos activado",
             "mfa.disabled": "Dos pasos desactivado",
-            "retention.purged": "Purga de retención",
+            "retention.purged": "Datos borrados por la regla de retención",
             "member.invite_queued": "Invitación en espera de la facturación",
             "member.seat_changed": "Asiento modificado",
             "member.playbook_policy_changed": "Regla de playbook del miembro modificada",
@@ -1011,6 +1016,7 @@ export const es: Dict = {
             "scorecard.failed": "No se pudo calificar la llamada",
             "scorecard.excluded": "Llamada excluida de los promedios",
             "scorecard.reincluded": "Llamada incluida de nuevo",
+            "call.deleted": "Llamada borrada del espacio de trabajo",
             "crm.synced": "Llamada enviada al CRM",
             // D-1063: API de Enterprise. Los cambios hechos con una llave muestran el nombre de la llave.
             "api_key.created": "Llave de API creada",

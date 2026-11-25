@@ -844,6 +844,11 @@ export const en = {
         systemLostFor: (n: number) => `The other side wasn't captured for ${n} min`,
         excludeAction: "Don't count this",
         includeAgain: "Count it again",
+        // D-1067: owners and admins only. The rep keeps their own copy.
+        deleteFromWorkspace: "Delete from workspace",
+        deleteConfirm: "Delete this call from the workspace?\n\nIts scorecard and coaching notes are deleted for good, and no one in the workspace can open it again. This can't be undone.\n\nThe rep keeps their own copy in their TalkPilot history.",
+        deleteFailed: "Couldn't delete this call. Try again.",
+        deleteBeingScored: "This call is still being scored. Try again in a few minutes.",
         title: "Calls",
         sub: "Every scored call across the org, last 90 days — each one opens a full scorecard.",
         searchPlaceholder: "Search calls or reps…",
@@ -1011,7 +1016,7 @@ export const en = {
             "scim.token_revoked": "SCIM token revoked",
             "mfa.enabled": "Two-factor enabled",
             "mfa.disabled": "Two-factor disabled",
-            "retention.purged": "Retention purge",
+            "retention.purged": "Data deleted by the retention rule",
             "member.invite_queued": "Invite waiting for billing",
             "member.seat_changed": "Seat changed",
             "member.playbook_policy_changed": "Member's playbook rule changed",
@@ -1053,6 +1058,7 @@ export const en = {
             "scorecard.failed": "Call could not be scored",
             "scorecard.excluded": "Call left out of averages",
             "scorecard.reincluded": "Call counted again",
+            "call.deleted": "Call deleted from the workspace",
             "crm.synced": "Call sent to the CRM",
             // D-1063: Enterprise API. Changes made with a key show the key's name as the actor.
             "api_key.created": "API key created",
