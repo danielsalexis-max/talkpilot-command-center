@@ -16,9 +16,18 @@ export const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 /// `<origin>/.well-known/oauth-authorization-server/auth/v1`).
 export const AUTH_ISSUER = `${SUPABASE_URL}/auth/v1`
 
-export function supabaseAs(token: string): SupabaseClient {
+/// `clientId` marks the request as coming from the MCP connector. The
+/// database stamps `meta.via = "mcp"` (and the client id) on any audit row
+/// written during it, including rows a security-definer RPC writes itself,
+/// such as `set_scorecard_excluded` (A7/A8).
+export function supabaseAs(token: string, clientId?: string): SupabaseClient {
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+    if (clientId) {
+        headers["x-talkpilot-via"] = "mcp"
+        headers["x-talkpilot-client"] = clientId.slice(0, 100)
+    }
     return createClient(SUPABASE_URL, SUPABASE_ANON, {
-        global: { headers: { Authorization: `Bearer ${token}` } },
+        global: { headers },
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     })
 }
